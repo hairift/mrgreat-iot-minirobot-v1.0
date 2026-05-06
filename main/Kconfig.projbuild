@@ -1,0 +1,871 @@
+menu "Asisten Xiaozhi"
+
+config OTA_URL
+    string "URL OTA Default"
+    default "https://api.tenclass.net/xiaozhi/ota/"
+    help
+        Aplikasi akan mengakses URL ini untuk memeriksa firmware baru dan alamat server.
+
+menu "Campus RAG"
+
+config CAMPUS_RAG_ENABLE
+    bool "Aktifkan Campus RAG Server eksternal"
+    default y
+    help
+        Jika URL server diisi, self.campus.query akan mencoba server RAG lebih dulu.
+        Jika server tidak tersedia, firmware otomatis kembali ke data kampus lokal.
+
+config CAMPUS_RAG_SERVER_URL
+    string "URL Campus RAG Server"
+    default ""
+    help
+        Contoh: http://192.168.1.10:8787
+        Kosongkan untuk memakai fallback data kampus lokal saja.
+
+config CAMPUS_RAG_TIMEOUT_MS
+    int "Timeout Campus RAG Server dalam milidetik"
+    default 1800
+    range 500 8000
+    help
+        Timeout pendek menjaga jawaban tetap cepat jika server eksternal mati.
+
+endmenu
+
+choice
+    prompt "Aset Flash"
+    default FLASH_DEFAULT_ASSETS if !USE_EMOTE_MESSAGE_STYLE
+    default FLASH_EXPRESSION_ASSETS if USE_EMOTE_MESSAGE_STYLE
+    help
+        Pilih aset yang akan di-flash.
+
+    config FLASH_NONE_ASSETS
+        bool "Jangan flash aset"
+    config FLASH_DEFAULT_ASSETS
+        bool "Flash Aset Default"
+        depends on !USE_EMOTE_MESSAGE_STYLE
+    config FLASH_CUSTOM_ASSETS
+        bool "Flash Aset Kustom"
+    config FLASH_EXPRESSION_ASSETS
+        bool "Flash Aset Emote"
+        depends on USE_EMOTE_MESSAGE_STYLE
+endchoice
+
+config CUSTOM_ASSETS_FILE
+    depends on FLASH_CUSTOM_ASSETS
+    string "File Aset Kustom"
+    default "assets.bin"
+    help
+        File aset kustom yang akan di-flash.
+        Dapat berupa file lokal relatif terhadap direktori proyek atau URL remote.
+
+choice
+    prompt "Bahasa Default"
+    default LANGUAGE_ID_ID
+    help
+        Pilih bahasa tampilan dan audio lokal perangkat.
+        Dukungan firmware ESP32 dibatasi ke Indonesia dan Inggris.
+        Kemampuan multi-bahasa pada server tetap tidak berubah.
+
+    config LANGUAGE_EN_US
+        bool "Inggris"
+    config LANGUAGE_ID_ID
+        bool "Indonesia"
+endchoice
+
+choice BOARD_TYPE
+    prompt "Tipe Board"
+    default BOARD_TYPE_BREAD_COMPACT_WIFI
+    help
+        Tipe board. Tipe development board
+    config BOARD_TYPE_BREAD_COMPACT_WIFI
+        bool "Bread Compact WiFi (Papan Breadboard)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
+        bool "Bread Compact WiFi + LCD (Papan Breadboard)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_BREAD_COMPACT_WIFI_CAM
+        bool "Bread Compact WiFi + LCD + Kamera (Papan Breadboard)"
+        depends on IDF_TARGET_ESP32S3     
+    config BOARD_TYPE_BREAD_COMPACT_ML307
+        bool "Bread Compact ML307/EC801E (Papan Breadboard 4G)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_BREAD_COMPACT_NT26
+        bool "Bread Compact NT26 (Papan Breadboard 4G)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_BREAD_COMPACT_ESP32
+        bool "Bread Compact ESP32 DevKit (Papan Breadboard)"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_BREAD_COMPACT_ESP32_LCD
+        bool "Bread Compact ESP32 DevKit + LCD (Papan Breadboard)"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_XMINI_C3_V3
+        bool "Xmini C3 V3"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_XMINI_C3_4G
+        bool "Xmini C3 4G"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_XMINI_C3
+        bool "Xmini C3"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_ESP_KORVO2_V3
+        bool "Espressif Korvo2 V3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_KORVO2_V3_RNDIS
+        bool "Espressif Korvo2 V3 RNDIS"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_SPARKBOT
+        bool "Espressif SparkBot"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_SENSAIRSHUTTLE
+        bool "Espressif ESP-SensairShuttle"
+        depends on IDF_TARGET_ESP32C5
+    config BOARD_TYPE_ESP_SPOT_S3
+        bool "Espressif Spot-S3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_SPOT_C5
+        bool "Espressif Spot-C5"
+        depends on IDF_TARGET_ESP32C5
+    config BOARD_TYPE_ESP_HI
+        bool "Espressif ESP-HI"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_ESP_BOX_3
+        bool "Espressif ESP-BOX-3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_BOX
+        bool "Espressif ESP-BOX"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_BOX_LITE
+        bool "Espressif ESP-BOX-Lite"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_P4_FUNCTION_EV_BOARD
+        bool "Espressif ESP-P4-Function-EV-Board"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_ESP_VOCAT
+        bool "Espressif ESP-VoCat"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_KEVIN_BOX_2
+        bool "Kevin Box 2"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_KEVIN_C3
+        bool "Kevin C3"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_KEVIN_SP_V3_DEV
+        bool "Kevin SP V3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_KEVIN_SP_V4_DEV
+        bool "Kevin SP V4"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_KEVIN_YUYING_313LCD
+        bool "Yuying Tech 3.13LCD"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_CGC
+        bool "CGC"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_CGC_144
+        bool "CGC 144"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_LICHUANG_DEV_S3
+        bool "Lichuang Shizhanpai ESP32-S3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LICHUANG_DEV_C3
+        bool "Lichuang Shizhanpai ESP32-C3"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_EDA_TV_PRO
+        bool "EDA Course Case EDA-TV-Pro"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_EDA_ROBOT_PRO
+        bool "EDA Course Case EDA-Robot-Pro"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_EDA_SUPER_BEAR
+        bool "EDA Course Case EDA-Super-Bear"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_DF_K10
+        bool "DFRobot Xingkongban K10"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_DF_S3_AI_CAM
+        bool "DFRobot ESP32-S3 AI Camera Module"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MAGICLICK_S3_2P4
+        bool "Magic Button Magiclick_2.4"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MAGICLICK_S3_2P5
+        bool "Magic Button Magiclick_2.5"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MAGICLICK_C3
+        bool "Magic Button Magiclick_C3"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_MAGICLICK_C3_V2
+        bool "Magic Button Magiclick_C3_v2"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_M5STACK_CORE_S3
+        bool "M5Stack CoreS3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_CORE_TAB5
+        bool "M5Stack Tab5"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_M5STACK_ATOM_S3_ECHO_BASE
+        bool "M5Stack AtomS3 + Echo Base"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_ATOM_S3R_ECHO_BASE
+        bool "M5Stack AtomS3R + Echo Base"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_ATOM_S3R_CAM_M12_ECHO_BASE
+        bool "M5Stack AtomS3R CAM/M12 + Echo Base"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_ATOM_ECHOS3R
+        bool "M5Stack AtomEchoS3R"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_CARDPUTER_ADV
+        bool "M5Stack Cardputer Adv"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_M5STACK_ATOM_MATRIX_ECHO_BASE
+        bool "M5Stack AtomMatrix + Echo Base"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_WAVESHARE_ESP32_TOUCH_LCD_3_5
+        bool "Waveshare ESP32-Touch-LCD-3.5"
+        depends on IDF_TARGET_ESP32
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_AUDIO_BOARD
+        bool "Waveshare ESP32-S3-Audio-Board"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_8
+        bool "Waveshare ESP32-S3-Touch-AMOLED-1.8"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_2_06
+        bool "Waveshare ESP32-S3-Touch-AMOLED-2.06"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_AMOLED_2_06
+        bool "Waveshare ESP32-C6-Touch-AMOLED-2.06"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75
+        bool "Waveshare ESP32-S3-Touch-AMOLED-1.75"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75C
+        bool "Waveshare ESP32-S3-Touch-AMOLED-1.75C"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_83
+        bool "Waveshare ESP32-S3-Touch-LCD-1.83"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_4B
+        bool "Waveshare ESP32-S3-Touch-LCD-4B"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_4_3C
+        bool "Waveshare ESP32-S3-Touch-LCD-4.3C"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_85C
+        bool "Waveshare ESP32-S3-Touch-LCD-1.85C"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_85
+        bool "Waveshare ESP32-S3-Touch-LCD-1.85"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_46
+        bool "Waveshare ESP32-S3-Touch-LCD-1.46"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_LCD_1_69
+        bool "Waveshare ESP32-C6-LCD-1.69"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_LCD_1_83
+        bool "Waveshare ESP32-C6-Touch-LCD-1.83"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_AMOLED_1_43
+        bool "Waveshare ESP32-C6-Touch-AMOLOED-1.43"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_AMOLED_1_32
+        bool "Waveshare ESP32-C6-Touch-AMOLOED-1.32"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_AMOLED_1_8
+        bool "Waveshare ESP32-C6-Touch-AMOLED-1.8"
+        depends on IDF_TARGET_ESP32C6
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_32
+        bool "Waveshare ESP32-S3-Touch-AMOLOED-1.32"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_3_49
+        bool "Waveshare ESP32-S3-Touch-LCD-3.49"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_3_5
+        bool "Waveshare ESP32-S3-Touch-LCD-3.5"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_ePaper_1_54_v1
+        bool "Waveshare ESP32-S3-ePaper-1.54_v1"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_ePaper_1_54_v2
+        bool "Waveshare ESP32-S3-ePaper-1.54_v2"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_ePaper_3_97
+        bool "Waveshare ESP32-S3-ePaper-3.97"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_RLCD_4_2
+        bool "Waveshare ESP32-S3-RLCD-4.2"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_3_5B
+        bool "Waveshare ESP32-S3-Touch-LCD-3.5B"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_NANO
+        bool "Waveshare ESP32-P4-NANO"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4B
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4_3
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7B
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-7B"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_3_4C
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-3.4C"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4C
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-4C"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-7"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_8
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-8"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1
+        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_TUDOUZI
+        bool "Tudouzi"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_CIRCLE_S3
+        bool "LILYGO T-Circle-S3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_CAMERAPLUS_S3_V1_0_V1_1
+        bool "LILYGO T-CameraPlus-S3_V1_0_V1_1"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_CAMERAPLUS_S3_V1_2
+        bool "LILYGO T-CameraPlus-S3_V1_2"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_DISPLAY_S3_PRO_MVSRLORA
+        bool "LILYGO T-Display-S3-Pro-MVSRLora"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_DISPLAY_S3_PRO_MVSRLORA_NO_BATTERY
+        bool "LILYGO T-Display-S3-Pro-MVSRLora_No_Battery"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LILYGO_T_DISPLAY_P4
+        bool "LILYGO T-Display-P4"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_MOVECALL_MOJI_ESP32S3
+        bool "Movecall Moji XiaoZhi AI Derivative"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MOVECALL_MOJI2_ESP32C5
+        bool "Movecall Moji2.0 XiaoZhi AI Derivative"
+        depends on IDF_TARGET_ESP32C5
+    config BOARD_TYPE_MOVECALL_CUICAN_ESP32S3
+        bool "Movecall CuiCan Cuican AI Pendant"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3
+        bool "Zhengdian Yuanzi DNESP32S3 Board"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3_BOX
+        bool "Zhengdian Yuanzi DNESP32S3-BOX"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3_BOX0
+        bool "Zhengdian Yuanzi DNESP32S3-BOX0"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3_BOX2_WIFI
+        bool "Zhengdian Yuanzi DNESP32S3-BOX2-WIFI"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3_BOX2_4G
+        bool "Zhengdian Yuanzi DNESP32S3-BOX2-4G"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3M_WIFI
+        bool "Zhengdian Yuanzi DNESP32S3M-WIFI"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ATK_DNESP32S3M_4G
+        bool "Zhengdian Yuanzi DNESP32S3M-4G"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_DU_CHATX
+        bool "Dudu Board CHATX(wifi)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_TAIJI_PI_S3
+        bool "Taiji Xiaopai ESP32S3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_0_85TFT_WIFI
+        bool "Wuming Tech Xingzhi 0.85(WIFI)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_0_85TFT_ML307
+        bool "Wuming Tech Xingzhi 0.85(ML307)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_0_96OLED_WIFI
+        bool "Wuming Tech Xingzhi 0.96(WIFI)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_0_96OLED_ML307
+        bool "Wuming Tech Xingzhi 0.96(ML307)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_1_54TFT_WIFI
+        bool "Wuming Tech Xingzhi 1.54(WIFI)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_CUBE_1_54TFT_ML307
+        bool "Wuming Tech Xingzhi 1.54(ML307)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_METAL_1_54_WIFI
+        bool "Wuming Tech Xingzhi 1.54 METAL(wifi)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_XINGZHI_ABS_2_0
+        bool "Wuming Tech Xingzhi ABS 2.0"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_SEEED_STUDIO_SENSECAP_WATCHER
+        bool "Seeed Studio SenseCAP Watcher"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_DOIT_S3_AIBOX
+        bool "Sibo Zhilian AI Companion Box"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MIXGO_NOVA
+        bool "Yuankong Qingchun"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_GENJUTECH_S3_1_54TFT
+        bool "Genju Tech 1.54(s3)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_S3_LCD_EV_Board
+        bool "Espressif ESP S3 LCD EV Board"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP_S3_LCD_EV_Board_2
+        bool "Espressif ESP S3 LCD EV Board 2"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZHENGCHEN_1_54TFT_WIFI
+        bool "Zhengchen Tech 1.54(WIFI)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZHENGCHEN_1_54TFT_ML307
+        bool "Zhengchen Tech 1.54(ML307)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZHENGCHEN_CAM
+        bool "Zhengchen Tech AI Camera"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZHENGCHEN_CAM_ML307
+        bool "Zhengchen Tech AI Camera(ML307)"
+	depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_MINSI_K08_DUAL
+        bool "Minsi Tech K08(DUAL)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA
+        bool "Spotpear ESP32-S3-1.54-MUMA"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_SPOTPEAR_ESP32_S3_1_28_BOX
+        bool "Spotpear ESP32-S3-1.28-BOX"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_OTTO_ROBOT
+        bool "ottoRobot"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ELECTRON_BOT
+        bool "electronBot"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_JIUCHUAN
+        bool "Jiuchuan Smart"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LABPLUS_MPYTHON_V3
+        bool "labplus mpython_v3 board"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_LABPLUS_LEDONG_V2
+        bool "labplus ledong_v2 board"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_SURFER_C3_1_14TFT
+        bool "Surfer-C3-1.14TFT"
+        depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_YUNLIAO_S3
+        bool "Xiaozhi Yunliao-S3"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_WIRELESS_TAG_WTP4C5MP07S
+        bool "Wireless-Tag WTP4C5MP07S"
+        depends on IDF_TARGET_ESP32P4
+    config BOARD_TYPE_AIPI_LITE
+        bool "AIPI-Lite"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_HU_087
+        bool "HU-087"
+        depends on IDF_TARGET_ESP32S3
+endchoice
+
+choice
+    depends on BOARD_TYPE_LILYGO_T_DISPLAY_P4
+    prompt "Pilih tipe layar"
+    default SCREEN_TYPE_HI8561
+        config SCREEN_TYPE_HI8561
+            bool "HI8561"
+        config SCREEN_TYPE_RM69A10
+            bool "RM69A10"
+endchoice
+
+choice
+    depends on BOARD_TYPE_LILYGO_T_DISPLAY_P4
+    prompt "Pilih format warna layar"
+    default SCREEN_PIXEL_FORMAT_RGB565
+        config SCREEN_PIXEL_FORMAT_RGB565
+            bool "RGB565"
+        config SCREEN_PIXEL_FORMAT_RGB888
+            bool "RGB888"
+endchoice
+
+choice ESP_S3_LCD_EV_Board_Version_TYPE
+    depends on BOARD_TYPE_ESP_S3_LCD_EV_Board
+    prompt "Tipe EV_BOARD"
+    default ESP_S3_LCD_EV_Board_1p4
+    config ESP_S3_LCD_EV_Board_1p4
+        bool "ESP32_S3_LCD_EV_Board-MB_V1.4"
+    config ESP_S3_LCD_EV_Board_1p5
+        bool "ESP32_S3_LCD_EV_Board-MB_V1.5"
+endchoice
+
+choice DISPLAY_OLED_TYPE
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI || BOARD_TYPE_BREAD_COMPACT_ML307 || BOARD_TYPE_BREAD_COMPACT_NT26 || BOARD_TYPE_BREAD_COMPACT_ESP32 || BOARD_TYPE_HU_087
+    prompt "Tipe OLED"
+    default OLED_SSD1306_128X32
+    help
+        Tipe Layar Monokrom OLED
+    config OLED_SSD1306_128X32
+        bool "SSD1306 128*32"
+    config OLED_SSD1306_128X64
+        bool "SSD1306 128*64"
+    config OLED_SH1106_128X64
+        bool "SH1106 128*64"
+endchoice
+
+choice DISPLAY_LCD_TYPE
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD || BOARD_TYPE_BREAD_COMPACT_ESP32_LCD || BOARD_TYPE_CGC || BOARD_TYPE_BREAD_COMPACT_WIFI_CAM
+    prompt "Tipe LCD"
+    default LCD_ST7789_240X320
+    help
+        Tipe Layar LCD
+    config LCD_ST7789_240X320
+        bool "ST7789 240*320, IPS"
+    config LCD_ST7789_240X320_NO_IPS
+        bool "ST7789 240*320, Non-IPS"
+    config LCD_ST7789_170X320
+        bool "ST7789 170*320"
+    config LCD_ST7789_172X320
+        bool "ST7789 172*320"
+    config LCD_ST7789_240X280
+        bool "ST7789 240*280"
+    config LCD_ST7789_240X240
+        bool "ST7789 240*240"
+    config LCD_ST7789_240X240_7PIN
+        bool "ST7789 240*240, 7PIN"
+    config LCD_ST7789_240X135
+        bool "ST7789 240*135"
+    config LCD_ST7735_128X160
+        bool "ST7735 128*160"
+    config LCD_ST7735_128X128
+        bool "ST7735 128*128"
+    config LCD_ST7796_320X480
+        bool "ST7796 320*480 IPS"
+    config LCD_ST7796_320X480_NO_IPS
+        bool "ST7796 320*480, Non-IPS"
+    config LCD_ILI9341_240X320
+        bool "ILI9341 240*320"
+    config LCD_ILI9341_240X320_NO_IPS
+        bool "ILI9341 240*320, Non-IPS"
+    config LCD_GC9A01_240X240
+        bool "GC9A01 240*240 Lingkaran"
+    config LCD_CUSTOM
+        bool "LCD Kustom (Konfigurasi Parameter Layar Kustom)"
+endchoice
+
+choice DISPLAY_ESP32S3_KORVO2_V3
+    depends on BOARD_TYPE_ESP_KORVO2_V3 || BOARD_TYPE_ESP_KORVO2_V3_RNDIS
+    prompt "Tipe LCD ESP32S3_KORVO2_V3"
+    default ESP32S3_KORVO2_V3_LCD_ST7789
+    help
+        Tipe Layar LCD
+    config ESP32S3_KORVO2_V3_LCD_ST7789
+        bool "ST7789 240*280"
+    config ESP32S3_KORVO2_V3_LCD_ILI9341
+        bool "ILI9341 240*320"
+endchoice
+
+choice DISPLAY_ESP32S3_AUDIO_BOARD
+    depends on BOARD_TYPE_WAVESHARE_ESP32_S3_AUDIO_BOARD
+    prompt "Tipe LCD ESP32S3_AUDIO_BOARD"
+    default AUDIO_BOARD_LCD_JD9853
+    help
+        Tipe Layar LCD
+    config AUDIO_BOARD_LCD_JD9853
+        bool "JD9853 320*172"
+    config AUDIO_BOARD_LCD_ST7789
+        bool "ST7789 240*320"
+endchoice
+
+choice DISPLAY_ESP32S3_TOUCH_LCD_1_85C
+    depends on BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_85C
+    prompt "Versi ESP32S3_TOUCH_LCD_1_85C"
+    default VERSION_2_0 
+    help
+        Versi hardware
+    config VERSION_1_0
+        bool "versi 1.0"
+    config VERSION_2_0
+        bool "versi 2.0"
+endchoice
+
+
+choice DISPLAY_STYLE
+    prompt "Pilih gaya tampilan"
+    default USE_DEFAULT_MESSAGE_STYLE
+    help
+        Pilih gaya tampilan untuk perangkat Xiaozhi
+
+    config USE_DEFAULT_MESSAGE_STYLE
+        bool "Aktifkan gaya pesan default"
+
+    config USE_WECHAT_MESSAGE_STYLE
+        bool "Aktifkan Gaya Pesan WeChat"
+
+    config USE_EMOTE_MESSAGE_STYLE
+        bool "Gaya animasi emote"
+        depends on BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_3 \
+            || BOARD_TYPE_ESP_VOCAT || BOARD_TYPE_LICHUANG_DEV_S3 \
+            || BOARD_TYPE_ESP_SENSAIRSHUTTLE
+endchoice
+
+config USE_MULTILINE_CHAT_MESSAGE
+    bool "Gunakan tampilan pesan obrolan multiline (mode default saja)"
+    depends on USE_DEFAULT_MESSAGE_STYLE
+    default n
+    help
+        Saat diaktifkan, area pesan obrolan dalam mode tampilan default menampilkan
+        beberapa baris yang dibungkus yang tumbuh ke atas dari bagian bawah layar,
+        dengan tinggi adaptif otomatis.
+        Saat dinonaktifkan (default), label gulir horizontal satu baris
+        ditampilkan di bagian bawah layar.
+
+choice WAKE_WORD_TYPE
+    prompt "Tipe Implementasi Wake Word"
+    default USE_AFE_WAKE_WORD if (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
+    default WAKE_WORD_DISABLED
+    help
+        Pilih tipe implementasi wake word yang akan digunakan
+
+    config WAKE_WORD_DISABLED
+        bool "Nonaktif"
+        help
+            Nonaktifkan deteksi wake word
+
+    config USE_ESP_WAKE_WORD
+        bool "Model Wakenet tanpa AFE"
+        depends on IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32C5 || IDF_TARGET_ESP32C6 || (IDF_TARGET_ESP32 && SPIRAM)
+        help
+            Mendukung ESP32 C3、ESP32 C5 dan ESP32 C6, serta (ESP32 dengan PSRAM)
+
+    config USE_AFE_WAKE_WORD
+        bool "Model Wakenet dengan AFE"
+        depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
+        help
+            Mendukung AEC jika tersedia, memerlukan ESP32 S3 dan PSRAM
+
+    config USE_CUSTOM_WAKE_WORD
+        bool "Model Multinet (Kata Bangun Kustom)"
+        depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
+        help
+            Memerlukan ESP32 S3 dan PSRAM
+
+endchoice
+
+config CUSTOM_WAKE_WORD
+    string "Kata Bangun Kustom"
+    default "xiao tu dou"
+    depends on USE_CUSTOM_WAKE_WORD
+    help
+        Kata Bangun Kustom, gunakan pinyin untuk Cina, dipisahkan dengan spasi
+
+config CUSTOM_WAKE_WORD_DISPLAY
+    string "Tampilan Kata Bangun Kustom"
+    default "Xiaotudou"
+    depends on USE_CUSTOM_WAKE_WORD
+    help
+        Sapaan yang dikirim ke server setelah deteksi wake word
+
+config CUSTOM_WAKE_WORD_THRESHOLD
+    int "Ambang Batas Kata Bangun Kustom (%)"
+    default 20
+    range 1 99
+    depends on USE_CUSTOM_WAKE_WORD
+    help
+        Ambang Batas Kata Bangun Kustom, rentang 1-99, semakin kecil semakin sensitif, default 20
+
+config SEND_WAKE_WORD_DATA
+    bool "Kirim Data Wake Word"
+    default y
+    depends on USE_AFE_WAKE_WORD || USE_CUSTOM_WAKE_WORD
+    help
+        Kirim data wake word ke server sebagai pesan pertama percakapan dan tunggu respons
+
+config WAKE_WORD_DETECTION_IN_LISTENING
+    bool "Aktifkan Deteksi Wake Word dalam Mode Mendengarkan"
+    default n
+    depends on USE_AFE_WAKE_WORD || USE_CUSTOM_WAKE_WORD
+    help
+        Aktifkan deteksi wake word saat dalam mode mendengarkan.
+        Saat diaktifkan, perangkat dapat mendeteksi wake word selama mendengarkan,
+        yang memungkinkan interupsi percakapan saat ini.
+        Saat dinonaktifkan (default), deteksi wake word dimatikan saat mendengarkan.
+
+config USE_AUDIO_PROCESSOR
+    bool "Aktifkan Pengurangan Noise Audio"
+    default y
+    depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
+    help
+        Memerlukan ESP32 S3 dan PSRAM
+
+config USE_DEVICE_AEC
+    bool "Aktifkan AEC Sisi Perangkat"
+    default n
+        depends on USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP_BOX_3 || BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_LITE \
+        || BOARD_TYPE_LICHUANG_DEV_S3 || BOARD_TYPE_ESP_KORVO2_V3 || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75|| BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75C || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_83\
+        || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_2_06 || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_4B || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4B || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4_3 \
+        || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7B \
+        || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_3_4C || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4C || BOARD_TYPE_ESP_S3_LCD_EV_Board_2 || BOARD_TYPE_YUNLIAO_S3 \
+        || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7 || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_8 || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_10_1 \
+        || BOARD_TYPE_ESP_VOCAT || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_3_49 || BOARD_TYPE_WAVESHARE_ESP32_S3_RLCD_4_2 || BOARD_TYPE_ZHENGCHEN_CAM || BOARD_TYPE_ZHENGCHEN_CAM_ML307 \
+        || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_4_3C)
+    help
+        Untuk bekerja dengan baik, AEC sisi perangkat memerlukan jalur referensi output yang bersih dari sinyal speaker dan isolasi akustik fisik antara mikrofon dan speaker.
+
+config USE_SERVER_AEC
+    bool "Aktifkan AEC Sisi Server (Tidak Stabil)"
+    default n
+    depends on USE_AUDIO_PROCESSOR
+    help
+        Untuk bekerja dengan baik, AEC sisi server memerlukan dukungan server
+
+config USE_AUDIO_DEBUGGER
+    bool "Aktifkan Debugger Audio"
+    default n
+    help
+        Aktifkan debugger audio, kirim data audio melalui UDP ke mesin host
+
+menu "Metode Konfigurasi WiFi"
+    help
+        Pemilihan Metode Konfigurasi WiFi
+    config USE_HOTSPOT_WIFI_PROVISIONING
+        bool "Hotspot"
+        default y
+        help
+            Gunakan WiFi Hotspot untuk mengirimkan data konfigurasi WiFi
+    config USE_ACOUSTIC_WIFI_PROVISIONING
+        bool "Akustik"
+        help
+            Gunakan sinyal audio untuk mengirimkan data konfigurasi WiFi
+
+    config USE_ESP_BLUFI_WIFI_PROVISIONING
+        bool "Esp Blufi"
+        help
+            Gunakan protokol esp blufi untuk mengirimkan data konfigurasi WiFi
+        select BT_ENABLED
+        select BT_BLE_42_FEATURES_SUPPORTED
+        select BT_BLE_BLUFI_ENABLE
+        select MBEDTLS_DHM_C
+endmenu
+
+config AUDIO_DEBUG_UDP_SERVER
+    string "Alamat Server UDP Debug Audio"
+    default "192.168.2.100:8000"
+    depends on USE_AUDIO_DEBUGGER
+    help
+        Alamat server UDP, format: IP:PORT, digunakan untuk menerima data debugging audio
+
+config RECEIVE_CUSTOM_MESSAGE
+    bool "Aktifkan Penerimaan Pesan Kustom"
+    default n
+    help
+        Aktifkan penerimaan pesan kustom, izinkan perangkat menerima pesan kustom dari server (lebih baik melalui protokol MQTT)
+
+menu "Konfigurasi Kamera"
+    depends on !IDF_TARGET_ESP32
+
+    comment "Peringatan: Silakan baca teks bantuan sebelum memodifikasi pengaturan ini."
+
+    config XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
+        bool "Izinkan Input JPEG"
+        default n
+        help
+            Izinkan format Input JPEG untuk kamera.
+
+            Opsi ini mungkin perlu diaktifkan saat menggunakan kamera USB.
+
+            Saat ini tidak didukung saat digunakan bersamaan dengan XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE.
+
+    config XIAOZHI_ENABLE_HARDWARE_JPEG_ENCODER
+        bool "Aktifkan Encoder JPEG Hardware"
+        default y
+        depends on SOC_JPEG_ENCODE_SUPPORTED
+        help
+            Gunakan encoder JPEG hardware di ESP32-P4 untuk mengenkode gambar ke JPEG.
+            Lihat https://docs.espressif.com/projects/esp-idf/en/stable/esp32p4/api-reference/peripherals/jpeg.html untuk detail lebih lanjut.
+
+    config XIAOZHI_ENABLE_HARDWARE_JPEG_DECODER
+        bool "Aktifkan Decoder JPEG Hardware"
+        default n
+        depends on SOC_JPEG_DECODE_SUPPORTED && XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
+        help
+            Gunakan decoder JPEG hardware di ESP32-P4 untuk mendekode JPEG ke gambar.
+            Lihat https://docs.espressif.com/projects/esp-idf/en/stable/esp32p4/api-reference/peripherals/jpeg.html untuk detail lebih lanjut.
+
+    config XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
+        bool "Aktifkan Mode Debug Kamera"
+        default n
+        help
+            Aktifkan mode debug kamera, cetak informasi debug kamera ke konsol.
+            Hanya berfungsi pada board yang mendukung kamera.
+
+    config XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP
+        bool "Aktifkan penggantian endianness buffer kamera perangkat lunak"
+        default n
+        depends on !CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER
+        help
+            Opsi ini memperlakukan buffer kamera sebagai array uint16_t[] dan melakukan byte-swapping (konversi endianness) pada setiap elemen.
+
+            Hanya boleh dimodifikasi oleh insinyur integrasi board pengembangan.
+
+            **Penggunaan yang salah dapat mengakibatkan warna gambar yang tidak benar!**
+
+            PERHATIAN: Jika opsi CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER tersedia untuk sensor Anda, silakan gunakan itu saja.
+
+    menuconfig XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
+        bool "Aktifkan Rotasi Gambar Kamera"
+        default n
+        depends on !XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
+        help
+            Aktifkan rotasi gambar kamera, putar gambar kamera ke orientasi yang benar.
+            - Di ESP32-P4, rotasi ditangani oleh hardware PPA.
+            - Di chip lain, rotasi dilakukan di perangkat lunak dengan biaya performa.
+            - Untuk rotasi 180°, gunakan HFlip + VFlip, bukan opsi ini.
+
+            Saat ini tidak didukung saat digunakan bersamaan dengan XIAOZHI_CAMERA_ALLOW_JPEG_INPUT.
+
+    if XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
+        choice XIAOZHI_CAMERA_IMAGE_ROTATION_ANGLE
+            prompt "Sudut Rotasi Gambar Kamera (searah jarum jam)"
+            default XIAOZHI_CAMERA_IMAGE_ROTATION_ANGLE_90
+            help
+                Sudut rotasi gambar kamera.
+            config XIAOZHI_CAMERA_IMAGE_ROTATION_ANGLE_90
+                bool "90°"
+            config XIAOZHI_CAMERA_IMAGE_ROTATION_ANGLE_270
+                bool "270°"
+            comment "Untuk rotasi 180°, gunakan HFlip + VFlip, bukan opsi ini"
+        endchoice
+    endif
+endmenu
+
+menu "KONFIGURASI_TAIJIPAI_S3"
+    depends on BOARD_TYPE_TAIJI_PI_S3
+    choice I2S_TYPE_TAIJIPI_S3
+        prompt "Tipe I2S taiji-pi-S3"
+        default TAIJIPAI_I2S_TYPE_STD
+        help
+            Pemilihan Tipe I2S
+        config TAIJIPAI_I2S_TYPE_STD
+            bool "Tipe I2S STD"
+        config TAIJIPAI_I2S_TYPE_PDM
+            bool "Tipe I2S PDM"
+    endchoice
+
+    config I2S_USE_2SLOT
+    bool "Aktifkan I2S 2 Slot"
+    default y
+    help
+        Aktifkan dual channel
+endmenu
+
+endmenu
