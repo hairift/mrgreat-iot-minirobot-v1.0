@@ -6,29 +6,27 @@
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
-// I2S simpleks (mikrofon dan speaker terpisah)
+// 如果使用 Duplex I2S 模式，请注释下面一行
 #define AUDIO_I2S_METHOD_SIMPLEX
 
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
 
-// Mikrofon INMP441 (coba tukar WS dan SCK jika label modul tertukar)
-#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_5
-#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_4
+#define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4
+#define AUDIO_I2S_MIC_GPIO_SCK  GPIO_NUM_5
 #define AUDIO_I2S_MIC_GPIO_DIN  GPIO_NUM_6
-
-// Speaker MAX98357
 #define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7
 #define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15
 #define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16
 
 #else
 
-#define AUDIO_I2S_GPIO_WS   GPIO_NUM_4
+#define AUDIO_I2S_GPIO_WS GPIO_NUM_4
 #define AUDIO_I2S_GPIO_BCLK GPIO_NUM_5
 #define AUDIO_I2S_GPIO_DIN  GPIO_NUM_6
 #define AUDIO_I2S_GPIO_DOUT GPIO_NUM_7
 
 #endif
+
 
 #define BUILTIN_LED_GPIO        GPIO_NUM_48
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
@@ -36,14 +34,13 @@
 #define VOLUME_UP_BUTTON_GPIO   GPIO_NUM_NC
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 
-// Layar TFT ST7735 1,44 inci (128x128)
-// BLK=G3, CS=GND, DC=G46, RES=G11, SDA=G10, SCL=G9
-#define DISPLAY_BACKLIGHT_PIN GPIO_NUM_3
-#define DISPLAY_MOSI_PIN      GPIO_NUM_10   // SDA
-#define DISPLAY_CLK_PIN       GPIO_NUM_9    // SCL
-#define DISPLAY_DC_PIN        GPIO_NUM_46   // DC
-#define DISPLAY_RST_PIN       GPIO_NUM_11   // RES
-#define DISPLAY_CS_PIN        GPIO_NUM_NC   // CS = GND (selalu terpilih)
+
+#define DISPLAY_BACKLIGHT_PIN GPIO_NUM_42
+#define DISPLAY_MOSI_PIN      GPIO_NUM_47
+#define DISPLAY_CLK_PIN       GPIO_NUM_21
+#define DISPLAY_DC_PIN        GPIO_NUM_40
+#define DISPLAY_RST_PIN       GPIO_NUM_45
+#define DISPLAY_CS_PIN        GPIO_NUM_41
 
 
 #ifdef CONFIG_LCD_ST7789_240X320
@@ -190,8 +187,8 @@
 #define DISPLAY_SWAP_XY false
 #define DISPLAY_INVERT_COLOR  false
 #define DISPLAY_RGB_ORDER  LCD_RGB_ELEMENT_ORDER_BGR
-#define DISPLAY_OFFSET_X  2
-#define DISPLAY_OFFSET_Y  1
+#define DISPLAY_OFFSET_X  0
+#define DISPLAY_OFFSET_Y  32
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 #define DISPLAY_SPI_MODE 0
 #endif
@@ -286,12 +283,7 @@
 #endif
 
 
-// Uji MCP: kendalikan lampu
+// A MCP Test: Control a lamp
 #define LAMP_GPIO GPIO_NUM_18
-
-// Pin kendali servo (ESP32-S3, GPIO 22 dan 23 tidak tersedia di S3)
-#define SERVO_HEAD_GPIO     GPIO_NUM_12   // kepala
-#define SERVO_RARM_GPIO     GPIO_NUM_13   // tangan kanan
-#define SERVO_LARM_GPIO     GPIO_NUM_14   // tangan kiri
 
 #endif // _BOARD_CONFIG_H_

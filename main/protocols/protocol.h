@@ -7,25 +7,23 @@
 #include <chrono>
 #include <vector>
 
-// Struktur paket aliran audio.
 struct AudioStreamPacket {
-    int sample_rate = 0; // Laju sampel audio.
-    int frame_duration = 0; // Durasi tiap frame audio.
-    uint32_t timestamp = 0; // Penanda waktu dalam milidetik.
-    std::vector<uint8_t> payload; // Muatan data audio.
+    int sample_rate = 0;
+    int frame_duration = 0;
+    uint32_t timestamp = 0;
+    bool boost_volume = false;
+    std::vector<uint8_t> payload;
 };
 
-// Struktur protokol biner versi 2.
 struct BinaryProtocol2 {
-    uint16_t version; // Versi protokol.
-    uint16_t type; // Jenis pesan (0 untuk OPUS, 1 untuk JSON).
-    uint32_t reserved; // Ruang cadangan untuk penggunaan mendatang.
-    uint32_t timestamp; // Penanda waktu untuk AEC di sisi peladen.
-    uint32_t payload_size; // Ukuran muatan dalam byte.
-    uint8_t payload[]; // Muatan data.
+    uint16_t version;
+    uint16_t type;          // Message type (0: OPUS, 1: JSON)
+    uint32_t reserved;      // Reserved for future use
+    uint32_t timestamp;     // Timestamp in milliseconds (used for server-side AEC)
+    uint32_t payload_size;  // Payload size in bytes
+    uint8_t payload[];      // Payload data
 } __attribute__((packed));
 
-// Struktur protokol biner versi 3.
 struct BinaryProtocol3 {
     uint8_t type;
     uint8_t reserved;
@@ -41,7 +39,7 @@ enum AbortReason {
 enum ListeningMode {
     kListeningModeAutoStop,
     kListeningModeManualStop,
-    kListeningModeRealtime // Memerlukan dukungan AEC.
+    kListeningModeRealtime // 需要 AEC 支持
 };
 
 class Protocol {

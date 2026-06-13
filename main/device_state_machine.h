@@ -9,57 +9,57 @@
 #include "device_state.h"
 
 /**
- * DeviceStateMachine - Mengelola perpindahan status perangkat dengan validasi.
- *
- * Kelas ini memastikan aturan perpindahan status tetap ketat dan menyediakan
- * mekanisme callback agar komponen lain bisa merespons perubahan status.
+ * DeviceStateMachine - Manages device state transitions with validation
+ * 
+ * This class ensures strict state transition rules and provides a callback mechanism
+ * for components to react to state changes.
  */
 class DeviceStateMachine {
 public:
     DeviceStateMachine();
     ~DeviceStateMachine() = default;
 
-    // Nonaktifkan copy constructor dan operator assignment
+    // Delete copy constructor and assignment operator
     DeviceStateMachine(const DeviceStateMachine&) = delete;
     DeviceStateMachine& operator=(const DeviceStateMachine&) = delete;
 
     /**
-     * Ambil status perangkat saat ini.
+     * Get the current device state
      */
     DeviceState GetState() const { return current_state_.load(); }
 
     /**
-     * Coba pindah ke status baru.
-     * @param new_state Status tujuan.
-     * @return true jika perpindahan berhasil, false jika transisinya tidak valid.
+     * Attempt to transition to a new state
+     * @param new_state The target state
+     * @return true if transition was successful, false if invalid transition
      */
     bool TransitionTo(DeviceState new_state);
 
     /**
-     * Periksa apakah perpindahan ke status tujuan valid dari status saat ini.
+     * Check if transition to target state is valid from current state
      */
     bool CanTransitionTo(DeviceState target) const;
 
     /**
-     * Tipe callback perubahan status.
-     * Parameter: status_lama, status_baru
+     * State change callback type
+     * Parameters: old_state, new_state
      */
     using StateCallback = std::function<void(DeviceState, DeviceState)>;
 
     /**
-     * Tambahkan listener perubahan status.
-     * Callback dipanggil dalam konteks pemanggil TransitionTo().
-     * @return id listener yang dapat dipakai untuk penghapusan.
+     * Add a state change listener (observer pattern)
+     * Callback is invoked in the context of the caller of TransitionTo()
+     * @return listener id for removal
      */
     int AddStateChangeListener(StateCallback callback);
 
     /**
-     * Hapus listener perubahan status berdasarkan id.
+     * Remove a state change listener by id
      */
     void RemoveStateChangeListener(int listener_id);
 
     /**
-     * Ambil nama status dalam bentuk string untuk keperluan log.
+     * Get state name string for logging
      */
     static const char* GetStateName(DeviceState state);
 
@@ -70,12 +70,12 @@ private:
     std::mutex mutex_;
 
     /**
-     * Periksa apakah perpindahan dari status asal ke status tujuan valid.
+     * Check if transition from source to target is valid
      */
     bool IsValidTransition(DeviceState from, DeviceState to) const;
 
     /**
-     * Beri tahu callback bahwa status telah berubah.
+     * Notify callback of state change
      */
     void NotifyStateChange(DeviceState old_state, DeviceState new_state);
 };

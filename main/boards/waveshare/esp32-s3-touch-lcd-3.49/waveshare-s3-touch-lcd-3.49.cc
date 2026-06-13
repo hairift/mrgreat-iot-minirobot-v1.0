@@ -43,7 +43,7 @@ private:
     bool is_PwrControlEn = false;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -94,7 +94,7 @@ private:
         gpio_conf.pull_up_en = GPIO_PULLUP_ENABLE;
         ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&gpio_conf));
         
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGI(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = AXS15231B_PANEL_IO_QSPI_CONFIG(
             LCD_CS,
@@ -102,10 +102,10 @@ private:
             NULL);
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGI(TAG, "Install LCD driver");
         const axs15231b_vendor_config_t vendor_config = {
-            .init_cmds = lcd_init_cmds, // Hapus komentar pada baris ini jika ingin memakai perintah inisialisasi kustom
+            .init_cmds = lcd_init_cmds, // Uncomment these line if use custom initialization commands
             .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(lcd_init_cmds[0]),
             .flags = {
                 .use_qspi_interface = 1,
@@ -157,7 +157,7 @@ private:
 
     void InitializeTouch() {
         i2c_master_bus_handle_t touch_i2c_bus_;
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {};
             i2c_bus_cfg.i2c_port = (i2c_port_t)I2C_NUM_1;
             i2c_bus_cfg.sda_io_num = I2C_Touch_SDA_PIN;

@@ -30,12 +30,12 @@ std::string RndisBoard::GetBoardType() {
 void RndisBoard::StartNetwork() {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        /* Partisi NVS terpotong dan perlu dihapus.
-         * Coba lagi nvs_flash_init. */
+        /* NVS partition was truncated and needs to be erased
+         * Retry nvs_flash_init */
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
-     /* Inisialisasi stack TCP/IP bawaan */
+     /* Initialize default TCP/IP stack */
      ESP_ERROR_CHECK(esp_netif_init());
      ESP_ERROR_CHECK(esp_event_loop_create_default());
  
@@ -43,7 +43,7 @@ void RndisBoard::StartNetwork() {
      esp_event_handler_register(IOT_ETH_EVENT, ESP_EVENT_ANY_ID, iot_event_handle, this);
      esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, iot_event_handle, this);
  
-     // Pasang penggerak USBH CDC
+     // install usbh cdc driver
      usbh_cdc_driver_config_t config = {
          .task_stack_size = 1024 * 4,
          .task_priority = configMAX_PRIORITIES - 1,
@@ -105,7 +105,7 @@ void RndisBoard::OnNetworkEvent(NetworkEvent event, const std::string& data) {
             break;
     }
 
-    // Beri tahu fungsi panggil balik eksternal jika tersedia
+    // Notify external callback if set
     if (network_event_callback_) {
         network_event_callback_(event, data);
     }
@@ -125,7 +125,7 @@ void RndisBoard::install_rndis(uint16_t idVendor, uint16_t idProduct, const char
     dev_match_id[0].match_flags = USB_DEVICE_ID_MATCH_VID_PID;
     dev_match_id[0].idVendor = idVendor;
     dev_match_id[0].idProduct = idProduct;
-    memset(&dev_match_id[1], 0, sizeof(usb_device_match_id_t)); // Penanda akhir daftar
+    memset(&dev_match_id[1], 0, sizeof(usb_device_match_id_t)); // end of list
     iot_usbh_rndis_config_t rndis_cfg = {
         .match_id_list = dev_match_id,
     };
@@ -196,14 +196,14 @@ std::string RndisBoard::GetDeviceStatusJson() {
     auto& board = Board::GetInstance();
     auto root = cJSON_CreateObject();
 
-    // Speaker audio
+    // Audio speaker
     auto audio_speaker = cJSON_CreateObject();
     if (auto codec = board.GetAudioCodec()) {
         cJSON_AddNumberToObject(audio_speaker, "volume", codec->output_volume());
     }
     cJSON_AddItemToObject(root, "audio_speaker", audio_speaker);
 
-    // Layar
+    // Screen
     auto screen = cJSON_CreateObject();
     if (auto backlight = board.GetBacklight()) {
         cJSON_AddNumberToObject(screen, "brightness", backlight->brightness());
@@ -215,7 +215,7 @@ std::string RndisBoard::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "screen", screen);
 
-    // Baterai
+    // Battery
     int level = 0;
     bool charging = false, discharging = false;
     if (board.GetBatteryLevel(level, charging, discharging)) {
@@ -225,12 +225,12 @@ std::string RndisBoard::GetDeviceStatusJson() {
         cJSON_AddItemToObject(root, "battery", battery);
     }
 
-    // Jaringan
+    // Network
     auto network = cJSON_CreateObject();
     cJSON_AddStringToObject(network, "type", "rndis");
     cJSON_AddItemToObject(root, "network", network);
 
-    // Suhu chip
+    // Chip temperature
     float temp = 0.0f;
     if (board.GetTemperature(temp)) {
         auto chip = cJSON_CreateObject();

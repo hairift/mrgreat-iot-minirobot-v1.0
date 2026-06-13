@@ -29,15 +29,15 @@
 typedef struct {
     esp_lcd_panel_io_handle_t io;
     int reset_gpio_num;
-    uint8_t madctl_val; // Simpan nilai register LCD_CMD_MADCTL saat ini
-    uint8_t colmod_val; // Simpan nilai register LCD_CMD_COLMOD saat ini
+    uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
+    uint8_t colmod_val; // save surrent value of LCD_CMD_COLMOD register
     const st7123_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
     uint8_t lane_num;
     struct {
         unsigned int reset_level: 1;
     } flags;
-    // Simpan fungsi asli panel MIPI DPI
+    // To save the original functions of MIPI DPI panel
     esp_err_t (*del)(esp_lcd_panel_t *panel);
     esp_err_t (*init)(esp_lcd_panel_t *panel);
 } st7123_panel_t;
@@ -85,13 +85,13 @@ esp_err_t esp_lcd_new_panel_st7123(const esp_lcd_panel_io_handle_t io, const esp
     }
 
     switch (panel_dev_config->bits_per_pixel) {
-        case 16: // Format RGB565
+        case 16: // RGB565
         st7123->colmod_val = 0x55;
         break;
-        case 18: // Format RGB666
+        case 18: // RGB666
         st7123->colmod_val = 0x66;
         break;
-        case 24: // Format RGB888
+        case 24: // RGB888
         st7123->colmod_val = 0x77;
         break;
         default:
@@ -106,15 +106,15 @@ esp_err_t esp_lcd_new_panel_st7123(const esp_lcd_panel_io_handle_t io, const esp
     st7123->reset_gpio_num = panel_dev_config->reset_gpio_num;
     st7123->flags.reset_level = panel_dev_config->flags.reset_active_high;
 
-    // Buat panel MIPI DPI
+    // Create MIPI DPI panel
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_dpi(vendor_config->mipi_config.dsi_bus, vendor_config->mipi_config.dpi_config, ret_panel), err, TAG,
                 "create MIPI DPI panel failed");
     ESP_LOGD(TAG, "new MIPI DPI panel @%p", *ret_panel);
 
-    // Simpan fungsi asli panel MIPI DPI
+    // Save the original functions of MIPI DPI panel
     st7123->del = (*ret_panel)->del;
     st7123->init = (*ret_panel)->init;
-    // Timpa fungsi panel MIPI DPI dengan fungsi khusus driver ini
+    // Overwrite the functions of MIPI DPI panel
     (*ret_panel)->del = panel_st7123_del;
     (*ret_panel)->init = panel_st7123_init;
     (*ret_panel)->reset = panel_st7123_reset;
@@ -138,7 +138,7 @@ esp_err_t esp_lcd_new_panel_st7123(const esp_lcd_panel_io_handle_t io, const esp
 }
  
 static const st7123_lcd_init_cmd_t vendor_specific_init_default[] = {
-    // {cmd, { data }, ukuran_data, delay_ms}
+    // {cmd, { data }, data_size, delay_ms}
     // TODO: 
     {0x60, (uint8_t []){0x71,0x23,0xa2}, 3, 0},
     {0x60, (uint8_t []){0x71,0x23,0xa3}, 3, 0},
@@ -167,7 +167,7 @@ static const st7123_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0x11, (uint8_t []){0x00}, 1, 100},
     {0x29, (uint8_t []){0x00}, 1, 0},
     {0x35, (uint8_t []){0x00}, 1, 100},
-    //============ Akhir gamma ===========
+    //============ Gamma END===========
 };
 
 static esp_err_t panel_st7123_del(esp_lcd_panel_t *panel)
@@ -177,7 +177,7 @@ static esp_err_t panel_st7123_del(esp_lcd_panel_t *panel)
     if (st7123->reset_gpio_num >= 0) {
         gpio_reset_pin(st7123->reset_gpio_num);
     }
-    // Hapus panel MIPI DPI
+    // Delete MIPI DPI panel
     st7123->del(panel);
     ESP_LOGD(TAG, "del st7123 panel @%p", st7123);
     free(st7123);
@@ -201,7 +201,7 @@ static esp_err_t panel_st7123_init(esp_lcd_panel_t *panel)
     // case 4:
     //     lane_command = ST7123_DSI_3_4_LANE;
     //     break;
-    // bawaan:
+    // default:
     //     ESP_LOGE(TAG, "Invalid lane number %d", st7123->lane_num);
     //     return ESP_ERR_INVALID_ARG;
     // }
@@ -231,8 +231,8 @@ static esp_err_t panel_st7123_init(esp_lcd_panel_t *panel)
     //     st7123->colmod_val,
     // }, 1), TAG, "send command failed");
 
-    // Inisialisasi khusus vendor dapat berbeda antar pabrikan
-    // sebaiknya rujuk ke pemasok LCD untuk urutan inisialisasinya
+    // vendor specific initialization, it can be different between manufacturers
+    // should consult the LCD supplier for initialization sequence code
     if (st7123->init_cmds) {
         init_cmds = st7123->init_cmds;
         init_cmds_size = st7123->init_cmds_size;
@@ -242,7 +242,7 @@ static esp_err_t panel_st7123_init(esp_lcd_panel_t *panel)
     }
 
     for (int i = 0; i < init_cmds_size; i++) {
-        // Periksa apakah perintah sudah dipakai atau bentrok dengan pengaturan internal
+        // Check if the command has been used or conflicts with the internal
         // if (is_command0_enable && init_cmds[i].data_bytes > 0) {
         //     switch (init_cmds[i].cmd) {
         //     case LCD_CMD_MADCTL:
@@ -253,19 +253,19 @@ static esp_err_t panel_st7123_init(esp_lcd_panel_t *panel)
         //         is_cmd_overwritten = true;
         //         st7123->colmod_val = ((uint8_t *)init_cmds[i].data)[0];
         //         break;
-        //     bawaan:
+        //     default:
         //         is_cmd_overwritten = false;
         //         break;
         //     }
 
         //     if (is_cmd_overwritten) {
         //         is_cmd_overwritten = false;
-        //         ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal",
+        //         ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence",
         //                  init_cmds[i].cmd);
         //     }
         // }
 
-        // Kirim perintah
+        // Send command
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(init_cmds[i].delay_ms));
 
@@ -287,13 +287,13 @@ static esp_err_t panel_st7123_reset(esp_lcd_panel_t *panel)
     st7123_panel_t *st7123 = (st7123_panel_t *)panel->user_data;
     esp_lcd_panel_io_handle_t io = st7123->io;
 
-    // Lakukan reset perangkat keras
+    // Perform hardware reset
     if (st7123->reset_gpio_num >= 0) {
         gpio_set_level(st7123->reset_gpio_num, st7123->flags.reset_level);
         vTaskDelay(pdMS_TO_TICKS(50));
         gpio_set_level(st7123->reset_gpio_num, !st7123->flags.reset_level);
         vTaskDelay(pdMS_TO_TICKS(50));
-    } else if (io) { // Lakukan reset perangkat lunak
+    } else if (io) { // Perform software reset
         // ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(20));
     }
@@ -327,7 +327,7 @@ static esp_err_t panel_st7123_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool
 
     // ESP_RETURN_ON_FALSE(io, ESP_ERR_INVALID_STATE, TAG, "invalid panel IO");
 
-    // // Kendalikan pencerminan melalui perintah LCD
+    // // Control mirror through LCD command
     // if (mirror_x) {
     //     madctl_val |= ST7123_CMD_GS_BIT;
     // } else {

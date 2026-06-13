@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Bangun partisi aset SPIFFS.
+Build the spiffs assets partition
 
-Cara pakai:
-    ./build.py --wakenet_model <direktori_wakenet_model> \
-        --text_font <berkas_font_teks> \
-        --emoji_collection <direktori_koleksi_emoji>
+Usage:
+    ./build.py --wakenet_model <wakenet_model_dir> \
+        --text_font <text_font_file> \
+        --emoji_collection <emoji_collection_dir>
 
-Contoh:
+Example:
     ./build.py --wakenet_model ../../managed_components/espressif__esp-sr/model/wakenet_model/wn9_nihaoxiaozhi_tts \
         --text_font ../../components/xiaozhi-fonts/build/font_puhui_common_20_4.bin \
         --emoji_collection ../../components/xiaozhi-fonts/build/emojis_64/
@@ -23,12 +23,12 @@ from pathlib import Path
 
 
 def ensure_dir(directory):
-    """Pastikan direktori ada, buat jika belum ada."""
+    """Ensure directory exists, create if not"""
     os.makedirs(directory, exist_ok=True)
 
 
 def copy_file(src, dst):
-    """Salin berkas."""
+    """Copy file"""
     if os.path.exists(src):
         shutil.copy2(src, dst)
         print(f"Copied: {src} -> {dst}")
@@ -37,7 +37,7 @@ def copy_file(src, dst):
 
 
 def copy_directory(src, dst):
-    """Salin direktori."""
+    """Copy directory"""
     if os.path.exists(src):
         shutil.copytree(src, dst, dirs_exist_ok=True)
         print(f"Copied directory: {src} -> {dst}")
@@ -46,17 +46,17 @@ def copy_directory(src, dst):
 
 
 def process_wakenet_model(wakenet_model_dir, build_dir, assets_dir):
-    """Proses parameter wakenet_model."""
+    """Process wakenet_model parameter"""
     if not wakenet_model_dir:
         return None
     
-    # Salin direktori masukan ke direktori build
+    # Copy input directory to build directory
     wakenet_build_dir = os.path.join(build_dir, "wakenet_model")
     if os.path.exists(wakenet_build_dir):
         shutil.rmtree(wakenet_build_dir)
     copy_directory(wakenet_model_dir, os.path.join(wakenet_build_dir, os.path.basename(wakenet_model_dir)))
     
-    # Gunakan pack_model.py untuk membuat srmodels.bin
+    # Use pack_model.py to generate srmodels.bin
     srmodels_output = os.path.join(wakenet_build_dir, "srmodels.bin")
     try:
         subprocess.run([
@@ -65,7 +65,7 @@ def process_wakenet_model(wakenet_model_dir, build_dir, assets_dir):
             "-o", "srmodels.bin"
         ], check=True, cwd=os.path.dirname(__file__))
         print(f"Generated: {srmodels_output}")
-        # Salin srmodels.bin ke direktori aset
+        # Copy srmodels.bin to assets directory
         copy_file(srmodels_output, os.path.join(assets_dir, "srmodels.bin"))
         return "srmodels.bin"
     except subprocess.CalledProcessError as e:
@@ -74,11 +74,11 @@ def process_wakenet_model(wakenet_model_dir, build_dir, assets_dir):
 
 
 def process_text_font(text_font_file, assets_dir):
-    """Proses parameter text_font."""
+    """Process text_font parameter"""
     if not text_font_file:
         return None
     
-    # Salin berkas masukan ke direktori build/assets
+    # Copy input file to build/assets directory
     font_filename = os.path.basename(text_font_file)
     font_dst = os.path.join(assets_dir, font_filename)
     copy_file(text_font_file, font_dst)
@@ -87,25 +87,25 @@ def process_text_font(text_font_file, assets_dir):
 
 
 def process_emoji_collection(emoji_collection_dir, assets_dir):
-    """Proses parameter emoji_collection."""
+    """Process emoji_collection parameter"""
     if not emoji_collection_dir:
         return []
     
     emoji_list = []
     
-    # Salin setiap gambar dari direktori masukan ke direktori build/assets
+    # Copy each image from input directory to build/assets directory
     for root, dirs, files in os.walk(emoji_collection_dir):
         for file in files:
             if file.lower().endswith(('.png', '.gif')):
-                # Salin berkas
+                # Copy file
                 src_file = os.path.join(root, file)
                 dst_file = os.path.join(assets_dir, file)
                 copy_file(src_file, dst_file)
                 
-                # Ambil nama berkas tanpa ekstensi
+                # Get filename without extension
                 filename_without_ext = os.path.splitext(file)[0]
                 
-                # Tambahkan ke daftar emoji
+                # Add to emoji list
                 emoji_list.append({
                     "name": filename_without_ext,
                     "file": file
@@ -114,7 +114,7 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
     return emoji_list
 
 def load_emoji_config(emoji_collection_dir):
-    """Muat konfigurasi emoji dari berkas config."""
+    """Load emoji config from config.json file"""
     config_path = os.path.join(emoji_collection_dir, "emote.json")
     if not os.path.exists(config_path):
         print(f"Warning: Config file not found: {config_path}")
@@ -124,7 +124,7 @@ def load_emoji_config(emoji_collection_dir):
         with open(config_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
         
-        # Ubah format daftar menjadi kamus agar pencarian lebih mudah
+        # Convert list format to dict for easy lookup
         config_dict = {}
         for item in config_data:
             if "emote" in item:
@@ -136,7 +136,7 @@ def load_emoji_config(emoji_collection_dir):
         return {}
 
 def process_board_emoji_collection(emoji_collection_dir, target_board_dir, assets_dir):
-    """Proses parameter emoji_collection untuk papan."""
+    """Process emoji_collection parameter"""
     if not emoji_collection_dir:
         return []
     
@@ -157,10 +157,10 @@ def process_board_emoji_collection(emoji_collection_dir, target_board_dir, asset
         if not file_exists:
             print(f"Warning: EAF file not found for emote '{emote_name}': {eaf_file_path}")
         else:
-            # Salin berkas EAF ke direktori aset
+            # Copy eaf file to assets directory
             copy_file(eaf_file_path, os.path.join(assets_dir, config["src"]))
         
-        # Buat entri emoji dengan src sebagai nama berkas
+        # Create emoji entry with src as file (merge file and src)
         emoji_entry = {
             "name": emote_name,
             "file": config["src"]  # Use src as the actual file
@@ -190,7 +190,7 @@ def process_board_emoji_collection(emoji_collection_dir, target_board_dir, asset
     return emoji_list
 
 def process_board_icon_collection(icon_collection_dir, assets_dir):
-    """Proses parameter icon_collection untuk papan."""
+    """Process emoji_collection parameter"""
     if not icon_collection_dir:
         return []
     
@@ -212,7 +212,7 @@ def process_board_icon_collection(icon_collection_dir, assets_dir):
     
     return icon_list
 def process_board_layout(layout_json_file, assets_dir):
-    """Proses parameter layout_json."""
+    """Process layout_json parameter"""
     if not layout_json_file:
         print(f"Warning: Layout json file not provided")
         return []
@@ -234,7 +234,7 @@ def process_board_layout(layout_json_file, assets_dir):
         with open(layout_json_file, 'r', encoding='utf-8') as f:
             layout_data = json.load(f)
         
-        # Data layout sekarang bisa langsung berupa larik, jadi tidak wajib memakai kunci "layout"
+        # Layout data is now directly an array, no need to get "layout" key
         layout_items = layout_data if isinstance(layout_data, list) else layout_data.get("layout", [])
         
         processed_layout = []

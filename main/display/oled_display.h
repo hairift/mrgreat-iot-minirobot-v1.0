@@ -20,8 +20,8 @@ private:
     lv_obj_t* content_right_ = nullptr;
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
-    lv_obj_t *emotion_label_ = nullptr;
-    lv_obj_t *emoji_image_ = nullptr;
+    lv_obj_t* emotion_label_ = nullptr;
+    lv_obj_t* emotion_image_ = nullptr;
     Twemoji64 emoji_collection_;
     lv_obj_t* chat_message_label_ = nullptr;
 

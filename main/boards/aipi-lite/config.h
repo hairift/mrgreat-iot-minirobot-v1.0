@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi aipi-lite
+// aipi-lite configuration
 
 #include <driver/gpio.h>
 

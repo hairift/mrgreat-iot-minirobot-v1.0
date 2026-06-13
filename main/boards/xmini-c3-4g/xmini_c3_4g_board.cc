@@ -42,28 +42,28 @@ private:
     }
 
     void InitializePowerSaveTimer() {
-        // Deteksi kata pemicu akan dinonaktifkan pada mode tidur ringan
+        // Wake word detection will be disabled in light sleep mode
         sleep_timer_ = new SleepTimer(30);
         sleep_timer_->OnEnterLightSleepMode([this]() {
             ESP_LOGI(TAG, "Enabling sleep mode");
-            // Tampilkan layar siaga
+            // Show the standby screen
             GetDisplay()->SetPowerSaveMode(true);
-            // Aktifkan mode tidur, lalu tidur 1 detik setelah DTR diatur tinggi
+            // Enable sleep mode, and sleep in 1 second after DTR is set to high
             modem_->SetSleepMode(true, 1);
-            // Atur pin DTR ke level tinggi agar modem masuk ke mode tidur
+            // Set the DTR pin to high to make the modem enter sleep mode
             modem_->GetAtUart()->SetDtrPin(true);
         });
         sleep_timer_->OnExitLightSleepMode([this]() {
-            // Atur pin DTR ke level rendah agar modem bangun kembali
+            // Set the DTR pin to low to make the modem wake up
             modem_->GetAtUart()->SetDtrPin(false);
-            // Sembunyikan layar siaga
+            // Hide the standby screen
             GetDisplay()->SetPowerSaveMode(false);
         });
         sleep_timer_->SetEnabled(true);
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -87,7 +87,7 @@ private:
     }
 
     void InitializeSsd1306Display() {
-        // Konfigurasi SSD1306
+        // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
             .on_color_trans_done = nullptr,
@@ -105,7 +105,7 @@ private:
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(codec_i2c_bus_, &io_config, &panel_io_));
 
-        ESP_LOGI(TAG, "Memasang driver SSD1306");
+        ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = -1;
         panel_config.bits_per_pixel = 1;
@@ -116,18 +116,18 @@ private:
         panel_config.vendor_config = &ssd1306_config;
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(panel_io_, &panel_config, &panel_));
-        ESP_LOGI(TAG, "Driver SSD1306 berhasil dipasang");
+        ESP_LOGI(TAG, "SSD1306 driver installed");
 
-        // Atur ulang layar
+        // Reset the display
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
         if (esp_lcd_panel_init(panel_) != ESP_OK) {
-            ESP_LOGE(TAG, "Gagal menginisialisasi layar");
+            ESP_LOGE(TAG, "Failed to initialize display");
             display_ = new NoDisplay();
             return;
         }
 
-        // Nyalakan layar
-        ESP_LOGI(TAG, "Menyalakan layar");
+        // Set the display to on
+        ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);

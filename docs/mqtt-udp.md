@@ -1,41 +1,31 @@
 # Protokol MQTT dan UDP
 
-Dokumen ini menjelaskan pola komunikasi gabungan MQTT dan UDP yang dipakai proyek.
+Firmware Mr Great memakai MQTT untuk kontrol sesi dan UDP untuk pengiriman audio real-time. Keduanya harus stabil agar suara AI tidak patah atau hilang.
 
-## Tujuan
+## Alur Koneksi
 
-- MQTT dipakai untuk pesan kendali, status, dan sinkronisasi sesi
-- UDP dipakai untuk aliran audio yang membutuhkan latensi rendah
+1. Perangkat tersambung ke Wi-Fi.
+2. Firmware melakukan aktivasi.
+3. Firmware membuka koneksi MQTT.
+4. Saat percakapan aktif, audio dikirim dan diterima melalui jalur real-time.
 
-## Alur Ringkas
+## Gejala Jaringan Tidak Stabil
 
-1. Perangkat tersambung ke broker MQTT.
-2. Perangkat mengirim pesan `hello` untuk meminta sesi audio.
-3. Peladen membalas dengan informasi sesi UDP.
-4. Perangkat membuka jalur UDP sesuai informasi tersebut.
-5. Audio dikirim melalui UDP, sedangkan kendali sesi tetap lewat MQTT.
+- Log menampilkan paket audio dengan sequence tidak sesuai.
+- Suara TTS terdengar patah.
+- Respons AI berhenti di tengah.
+- Perangkat kembali ke state koneksi jika jaringan benar-benar putus.
 
-## Data Kendali melalui MQTT
+## Mitigasi Firmware
 
-Contoh pesan yang umum dipakai:
+- Antrean audio dibuat lebih longgar agar jitter jaringan ringan tidak langsung memutus playback.
+- Timeout output audio dibatasi agar task tidak macet selamanya.
+- Mode hemat daya Wi-Fi diturunkan saat percakapan aktif.
 
-- `hello`
-- `listen`
-- `abort`
-- `mcp`
-- `goodbye`
+## Validasi
 
-## Data Audio melalui UDP
+```powershell
+idf.py -p COM3 monitor
+```
 
-Saluran UDP dipakai untuk frame audio yang menuntut jeda serendah mungkin. Jalur ini dapat dilengkapi enkripsi, nomor urut paket, dan informasi sesi agar dua arah audio tetap sinkron.
-
-## Hal yang Perlu Dicek
-
-- perangkat dapat menyambung ulang ke MQTT secara otomatis
-- sesi UDP dapat dibuka setelah `hello` berhasil
-- audio dua arah tetap sinkron selama percakapan
-- putus jaringan tidak membuat status aplikasi macet
-
-## Kapan Dipakai
-
-Gunakan pola ini jika penempatan sistem membutuhkan pemisahan yang tegas antara saluran kendali dan saluran audio.
+Perhatikan log `MQTT`, `AudioService`, `StateMachine`, dan `SystemInfo`. Jika sequence audio sering salah, perbaiki kualitas sinyal Wi-Fi terlebih dahulu.

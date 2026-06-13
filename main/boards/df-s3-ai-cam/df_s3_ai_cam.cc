@@ -90,7 +90,7 @@ class DfrobotEsp32S3AiCam : public WifiBoard {
         InitializeCamera();
     }
 
-    // Hanya memakai model Wakenet
+    // Wakenet model only
 
     virtual Led* GetLed() override {
         static GpioLed led(BUILTIN_LED_GPIO, 0);

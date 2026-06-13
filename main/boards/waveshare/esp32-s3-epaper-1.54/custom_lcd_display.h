@@ -4,7 +4,7 @@
 #include <driver/gpio.h>
 #include "lcd_display.h"
 
-/* Warna layar */
+/* Display color */
 typedef enum {
     DRIVER_COLOR_WHITE  = 0xff,
     DRIVER_COLOR_BLACK  = 0x00,
@@ -30,11 +30,11 @@ public:
                   bool mirror_x, bool mirror_y, bool swap_xy,custom_lcd_spi_t _lcd_spi_data);
     ~CustomLcdDisplay();
 
-    void EPD_Init();    /* Inisialisasi layar e-paper */
-    void EPD_Clear();   /* Kosongkan layar */
-    void EPD_Display(); /* Kirim buffer ke layar e-paper */
+    void EPD_Init();    /* 墨水屏初始化 */
+    void EPD_Clear();   /* 清空屏幕 */
+    void EPD_Display(); /* 刷buffer到墨水屏 */
     
-    /* Penyegaran cepat */
+    /*快速刷新*/
     void EPD_DisplayPartBaseImage();
     void EPD_Init_Partial();
     void EPD_DisplayPart();

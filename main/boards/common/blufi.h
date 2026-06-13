@@ -16,32 +16,33 @@
 class Blufi {
 public:
     /**
-     * @brief Dapatkan instance singleton dari kelas Blufi.
+     * @brief Get the singleton instance of the Blufi class.
      */
     static Blufi &GetInstance();
 
     /**
-     * @brief Mulai scan WiFi untuk provisioning Blufi
-     * Metode ini secara cerdas menangani pemindaian Wi-Fi berdasarkan status Wi-Fi saat ini:
-     * - Jika mode konfigurasi WiFi aktif, menggunakan hasil scan yang ada dari WifiConfigurationAp
-     * - Jika tidak, melakukan scan khusus tanpa mengganggu operasi WiFi normal
+     * @brief Start WiFi scan for Blufi provisioning
+     * This method intelligently handles WiFi scanning based on current WiFi state:
+     * - If WiFi config mode is active, it uses the existing scan results from WifiConfigurationAp
+     * - Otherwise, it performs a dedicated scan without interfering with normal WiFi operations
+     * @return true if a scan was started (or was already in progress); false on failure.
      */
-    void start_wifi_scan();
+    bool start_wifi_scan();
 
     /**
-     * @brief Menginisialisasi kontroler Bluetooth, host, dan profil Blufi.
-     * Ini adalah titik masuk utama untuk memulai proses Blufi.
-     * @return ESP_OK jika berhasil, jika tidak kode error.
+     * @brief Initializes the Bluetooth controller, host, and Blufi profile.
+     * This is the main entry point to start the Blufi process.
+     * @return ESP_OK on success, otherwise an error code.
      */
     esp_err_t init();
 
     /**
-     * @brief Mengdeinisialisasi Blufi dan stack Bluetooth.
-     * @return ESP_OK jika berhasil, jika tidak kode error.
+     * @brief Deinitializes Blufi and the Bluetooth stack.
+     * @return ESP_OK on success, otherwise an error code.
      */
     esp_err_t deinit();
 
-    // Hapus copy constructor dan assignment operator untuk singleton
+    // Delete copy constructor and assignment operator for singleton
     Blufi(const Blufi &) = delete;
 
     Blufi &operator=(const Blufi &) = delete;
@@ -53,7 +54,7 @@ private:
 
     ~Blufi();
 
-    // Logika inisialisasi
+    // Initialization logic
     static esp_err_t _controller_init();
 
     static esp_err_t _controller_deinit();
@@ -83,14 +84,14 @@ private:
 
     static int _get_softap_conn_num();
 
-    // Metode pemindaian WiFi
+    // WiFi scan methods
     void _send_wifi_list();
     void _start_dedicated_wifi_scan();
     static void _wifi_scan_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                          void *event_data);
 
-    // Fungsi-fungsi gaya C ini didaftarkan dengan ESP-IDF dan memanggil metode instance
-    // yang sesuai.
+    // These C-style functions are registered with ESP-IDF and call the corresponding instance
+    // methods.
 
     static void _event_callback_trampoline(esp_blufi_cb_event_t event, esp_blufi_cb_param_t *param);
 
@@ -109,7 +110,7 @@ private:
     static void _nimble_host_task(void *param);
 #endif
 
-    // Konteks keamanan, sebelumnya struct blufi_sec
+    // Security context, formerly blufi_sec struct
     struct BlufiSecurity {
 #define DH_SELF_PUB_KEY_LEN 128
         uint8_t self_public_key[DH_SELF_PUB_KEY_LEN];
@@ -127,7 +128,7 @@ private:
 
     BlufiSecurity *m_sec;
 
-    // Variabel status
+    // State variables
     wifi_config_t m_sta_config{};
     bool m_ble_is_connected;
     bool m_sta_connected;
@@ -140,8 +141,16 @@ private:
     bool m_sta_is_connecting;
     esp_blufi_extra_info_t m_sta_conn_info{};
 
-    // Terkait scan WiFi
+    // WiFi scan related
     std::vector<wifi_ap_record_t> m_ap_records;
     bool m_scan_in_progress = false;
+    // When true, scan results are stored in m_ap_records on scan completion.
+    // Cleared during connect-to-AP so that the connect-time scan does not
+    // overwrite the cache with results gathered for connection purposes.
     bool m_scan_should_save_ssid = true;
+    // When true, the next scan-done event responds to a pending GET_WIFI_LIST
+    // request from the App. Set by the GET_WIFI_LIST handler when no cache is
+    // available or a scan is already in flight; cleared by the scan-done
+    // handler after dispatching the response.
+    bool m_send_list_after_scan = false;
 };

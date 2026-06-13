@@ -27,7 +27,7 @@
 #define HI8561_MDCTL_VALUE_DEFAULT (0x01)
 
 static const hi8561_lcd_init_cmd_t vendor_specific_init_default[] = {
-    // {cmd, { data }, ukuran_data, delay_ms}
+    //  {cmd, { data }, data_size, delay_ms}
     /**** CMD_Page 3 ****/
     {0xDF, (uint8_t[]){0x90, 0x69, 0xF9}, 3, 0},
     {0xDE, (uint8_t[]){0x00}, 1, 0},
@@ -38,8 +38,8 @@ static const hi8561_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0xC6, (uint8_t[]){0x00, 0x7D, 0x00, 0xC8, 0x00, 0x17, 0x1A, 0x82, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01}, 23, 0},
     {0xC8, (uint8_t[]){0x23, 0x48, 0x87}, 3, 0},
     // {0xCC, (uint8_t[]){0x33}, 1, 0},//4lane
-    {0xCC, (uint8_t[]){0x31}, 1, 0}, // 2 jalur
-    // {0xCC, (uint8_t[]){0x30}, 1, 0}, // 1 jalur
+    {0xCC, (uint8_t[]){0x31}, 1, 0}, // 2lane
+    // {0xCC, (uint8_t[]){0x30}, 1, 0}, // 1lane
     {0xBC, (uint8_t[]){0x2E, 0x80, 0x84}, 3, 0},
     {0xC3, (uint8_t[]){0x3B, 0x01, 0x02, 0x05, 0x0C, 0x0C, 0x75, 0x0A, 0x79, 0x0A, 0x79, 0x02, 0x6E, 0x02, 0x6E, 0x02, 0x6E, 0x0A, 0x0D, 0x0A, 0x0F, 0x0A, 0x0F, 0x0A, 0x0F}, 25, 0},
     {0xC4, (uint8_t[]){0x01, 0x02, 0x05, 0x0C, 0x0C, 0x75, 0x0A, 0x79, 0x0A, 0x79, 0x02, 0x6E, 0x02, 0x6E, 0x02, 0x6E, 0x0A, 0x0D, 0x0A, 0x0F, 0x0A, 0x0F, 0x0A, 0x0F}, 24, 0},
@@ -84,14 +84,14 @@ static const hi8561_lcd_init_cmd_t vendor_specific_init_default[] = {
 
     {0x29, (uint8_t[]){0x00}, 0, 50},
 
-    //============ Akhir gamma ===========
+    //============ Gamma END===========
 };
 
 typedef struct
 {
     esp_lcd_panel_io_handle_t io;
     int reset_gpio_num;
-    uint8_t madctl_val; // Simpan nilai register LCD_CMD_MADCTL saat ini
+    uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
     const hi8561_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
     uint8_t lane_num;
@@ -99,7 +99,7 @@ typedef struct
     {
         unsigned int reset_level : 1;
     } flags;
-    // Simpan fungsi asli panel MIPI DPI
+    // To save the original functions of MIPI DPI panel
     esp_err_t (*del)(esp_lcd_panel_t *panel);
     esp_err_t (*init)(esp_lcd_panel_t *panel);
 } hi8561_panel_t;
@@ -147,15 +147,15 @@ esp_err_t esp_lcd_new_panel_hi8561(const esp_lcd_panel_io_handle_t io, const esp
     hi8561->flags.reset_level = panel_dev_config->flags.reset_active_high;
     hi8561->madctl_val = HI8561_MDCTL_VALUE_DEFAULT;
 
-    // Buat panel MIPI DPI
+    // Create MIPI DPI panel
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_dpi(vendor_config->mipi_config.dsi_bus, vendor_config->mipi_config.dpi_config, ret_panel), err, TAG,
                       "create MIPI DPI panel failed");
     ESP_LOGD(TAG, "new MIPI DPI panel @%p", *ret_panel);
 
-    // Simpan fungsi asli panel MIPI DPI
+    // Save the original functions of MIPI DPI panel
     hi8561->del = (*ret_panel)->del;
     hi8561->init = (*ret_panel)->init;
-    // Timpa fungsi panel MIPI DPI dengan fungsi khusus driver ini
+    // Overwrite the functions of MIPI DPI panel
     (*ret_panel)->del = panel_hi8561_del;
     (*ret_panel)->init = panel_hi8561_init;
     (*ret_panel)->reset = panel_hi8561_reset;
@@ -198,7 +198,7 @@ static esp_err_t panel_hi8561_send_init_cmds(hi8561_panel_t *hi8561)
     // case 4:
     //     lane_command = HI8561_DSI_4_LANE;
     //     break;
-    // bawaan:
+    // default:
     //     ESP_LOGE(TAG, "Invalid lane number %d", hi8561->lane_num);
     //     return ESP_ERR_INVALID_ARG;
     // }
@@ -208,8 +208,8 @@ static esp_err_t panel_hi8561_send_init_cmds(hi8561_panel_t *hi8561)
     //                                               1),
     //                     TAG, "send command failed");
 
-    // Inisialisasi khusus vendor dapat berbeda antar pabrikan
-    // sebaiknya rujuk ke pemasok LCD untuk urutan inisialisasinya
+    // vendor specific initialization, it can be different between manufacturers
+    // should consult the LCD supplier for initialization sequence code
     // if (hi8561->init_cmds)
     // {
     //     init_cmds = hi8561->init_cmds;
@@ -226,7 +226,7 @@ static esp_err_t panel_hi8561_send_init_cmds(hi8561_panel_t *hi8561)
 
     for (int i = 0; i < init_cmds_size; i++)
     {
-        //     // Periksa apakah perintah sudah dipakai atau bentrok dengan pengaturan internal
+        //     // Check if the command has been used or conflicts with the internal
         //     if (init_cmds[i].data_bytes > 0)
         //     {
         //         switch (init_cmds[i].cmd)
@@ -235,7 +235,7 @@ static esp_err_t panel_hi8561_send_init_cmds(hi8561_panel_t *hi8561)
         //             is_cmd_overwritten = true;
         //             hi8561->madctl_val = ((uint8_t *)init_cmds[i].data)[0];
         //             break;
-        //         bawaan:
+        //         default:
         //             is_cmd_overwritten = false;
         //             break;
         //         }
@@ -243,7 +243,7 @@ static esp_err_t panel_hi8561_send_init_cmds(hi8561_panel_t *hi8561)
         //         if (is_cmd_overwritten)
         //         {
         //             is_cmd_overwritten = false;
-        //             ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal",
+        //             ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence",
         //                      init_cmds[i].cmd);
         //         }
         //     }
@@ -266,7 +266,7 @@ static esp_err_t panel_hi8561_del(esp_lcd_panel_t *panel)
     {
         gpio_reset_pin(static_cast<gpio_num_t>(hi8561->reset_gpio_num));
     }
-    // Hapus panel MIPI DPI
+    // Delete MIPI DPI panel
     hi8561->del(panel);
     ESP_LOGD(TAG, "del hi8561 panel @%p", hi8561);
     free(hi8561);
@@ -289,7 +289,7 @@ static esp_err_t panel_hi8561_reset(esp_lcd_panel_t *panel)
     hi8561_panel_t *hi8561 = (hi8561_panel_t *)panel->user_data;
     esp_lcd_panel_io_handle_t io = hi8561->io;
 
-    // Lakukan reset perangkat keras
+    // Perform hardware reset
     if (hi8561->reset_gpio_num >= 0)
     {
         gpio_set_level(static_cast<gpio_num_t>(hi8561->reset_gpio_num), hi8561->flags.reset_level);
@@ -298,7 +298,7 @@ static esp_err_t panel_hi8561_reset(esp_lcd_panel_t *panel)
         vTaskDelay(pdMS_TO_TICKS(20));
     }
     else if (io)
-    { // Lakukan reset perangkat lunak
+    { // Perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(20));
     }
@@ -356,7 +356,7 @@ static esp_err_t panel_hi8561_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool
 
     ESP_RETURN_ON_FALSE(io, ESP_ERR_INVALID_STATE, TAG, "invalid panel IO");
 
-    // Atur pencerminan melalui perintah LCD
+    // Control mirror through LCD command
     if (mirror_x)
     {
         madctl_val |= HI8561_CMD_SHLR_BIT;

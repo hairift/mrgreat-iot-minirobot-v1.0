@@ -6,7 +6,7 @@
 
 /**
  * @file
- * @brief Ekspander IO ESP: TCA9554
+ * @brief ESP IO expander: TCA9554
  */
 
 #pragma once
@@ -21,35 +21,33 @@ extern "C" {
 #endif
 
 /**
- * @brief Buat objek ekspander IO TCA9554(A)
+ * @brief Create a TCA9554(A) IO expander object
  *
- * @param[in]  i2c_bus    Objek bus I2C. Diperoleh dari `i2c_new_master_bus()`
- * @param[in]  dev_addr   Alamat perangkat I2C pada chip. Dapat berupa
- *                        `ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_XXX` atau
- *                        `ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_XXX`
- * @param[out] handle_ret Objek ekspander IO yang dibuat
+ * @param[in]  i2c_bus    I2C bus handle. Obtained from `i2c_new_master_bus()`
+ * @param[in]  dev_addr   I2C device address of chip. Can be `ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_XXX` or `ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_XXX`.
+ * @param[out] handle_ret Handle to created IO expander object
  *
  * @return
- *      - ESP_OK: berhasil, selain itu akan mengembalikan ESP_ERR_xxx
+ *      - ESP_OK: Success, otherwise returns ESP_ERR_xxx
  */
 esp_err_t esp_io_expander_new_i2c_tca9554(i2c_master_bus_handle_t i2c_bus, uint32_t dev_addr, esp_io_expander_handle_t *handle_ret);
 
 /**
- * @brief Alamat I2C untuk TCA9554
+ * @brief I2C address of the TCA9554
  *
- * Format alamat 8-bit sebagai berikut:
+ * The 8-bit address format is as follows:
  *
- *                (Alamat slave)
- *      bit7  bit6  bit5  bit4  bit3 bit2 bit1 bit0
- *       0     1     0     0     A2   A1   A0  R/W
+ *                (Slave Address)
+ *     ┌─────────────────┷─────────────────┐
+ *  ┌─────┐─────┐─────┐─────┐─────┐─────┐─────┐─────┐
+ *  |  0  |  1  |  0  |  0  | A2  | A1  | A0  | R/W |
+ *  └─────┘─────┘─────┘─────┘─────┘─────┘─────┘─────┘
+ *     └────────┯────────┘     └─────┯──────┘
+ *           (Fixed)        (Hareware Selectable)
  *
- * Empat bit pertama bersifat tetap, sedangkan A2, A1, dan A0 dipilih melalui
- * perangkat keras.
- *
- * Alamat slave 7-bit adalah data yang paling penting bagi pengguna.
- * Contohnya, jika pin A0, A1, dan A2 terhubung ke GND, alamat slave 7-bit-nya
- * adalah 0100000b (0x20). Pengguna dapat memakai
- * `ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_000` untuk inisialisasi.
+ * And the 7-bit slave address is the most important data for users.
+ * For example, if a chip's A0,A1,A2 are connected to GND, it's 7-bit slave address is 0100000b(0x20).
+ * Then users can use `ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_000` to init it.
  */
 #define ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_000    (0x20)
 #define ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_001    (0x21)
@@ -60,22 +58,23 @@ esp_err_t esp_io_expander_new_i2c_tca9554(i2c_master_bus_handle_t i2c_bus, uint3
 #define ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_110    (0x26)
 #define ESP_IO_EXPANDER_I2C_TCA9554_ADDRESS_111    (0x27)
 
+
 /**
- * @brief Alamat I2C untuk TCA9554A
+ * @brief I2C address of the TCA9554A
  *
- * Format alamat 8-bit sebagai berikut:
+ * The 8-bit address format is as follows:
  *
- *                (Alamat slave)
- *      bit7  bit6  bit5  bit4  bit3 bit2 bit1 bit0
- *       0     1     1     1     A2   A1   A0  R/W
+ *                (Slave Address)
+ *     ┌─────────────────┷─────────────────┐
+ *  ┌─────┐─────┐─────┐─────┐─────┐─────┐─────┐─────┐
+ *  |  0  |  1  |  1  |  1  | A2  | A1  | A0  | R/W |
+ *  └─────┘─────┘─────┘─────┘─────┘─────┘─────┘─────┘
+ *     └────────┯────────┘     └─────┯──────┘
+ *           (Fixed)        (Hareware Selectable)
  *
- * Empat bit pertama bersifat tetap, sedangkan A2, A1, dan A0 dipilih melalui
- * perangkat keras.
- *
- * Alamat slave 7-bit adalah data yang paling penting bagi pengguna.
- * Contohnya, jika pin A0, A1, dan A2 terhubung ke GND, alamat slave 7-bit-nya
- * adalah 0111000b (0x38). Pengguna dapat memakai
- * `ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_000` untuk inisialisasi.
+ * And the 7-bit slave address is the most important data for users.
+ * For example, if a chip's A0,A1,A2 are connected to GND, it's 7-bit slave address is 0111000b(0x38).
+ * Then users can use `ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_000` to init it.
  */
 #define ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_000    (0x38)
 #define ESP_IO_EXPANDER_I2C_TCA9554A_ADDRESS_001    (0x39)

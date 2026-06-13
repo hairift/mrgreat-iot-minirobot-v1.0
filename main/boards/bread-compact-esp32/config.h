@@ -6,7 +6,7 @@
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
-// Jika memakai mode I2S dupleks, beri komentar pada baris di bawah ini
+// 如果使用 Duplex I2S 模式，请注释下面一行
 #define AUDIO_I2S_METHOD_SIMPLEX
 
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
@@ -52,11 +52,7 @@
 #define DISPLAY_MIRROR_Y true
 
 
-// Uji MCP: kendalikan lampu
+// A MCP Test: Control a lamp
 #define LAMP_GPIO GPIO_NUM_18
-// Pin kendali servo
-#define SERVO_HEAD_GPIO     GPIO_NUM_23   // kepala
-#define SERVO_RARM_GPIO     GPIO_NUM_13   // tangan kanan
-#define SERVO_LARM_GPIO     GPIO_NUM_22   // tangan kiri
 
 #endif // _BOARD_CONFIG_H_

@@ -4,7 +4,7 @@
 class Led {
 public:
     virtual ~Led() = default;
-    // Atur status LED berdasarkan status perangkat
+    // Set the led state based on the device state
     virtual void OnStateChanged() = 0;
 };
 

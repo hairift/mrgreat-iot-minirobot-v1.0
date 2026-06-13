@@ -12,8 +12,10 @@
 
 
 SingleLed::SingleLed(gpio_num_t gpio) {
-    // Jika gpio tidak terhubung, Anda harus menggunakan kelas NoLed
-    assert(gpio != GPIO_NUM_NC);
+    if (gpio == GPIO_NUM_NC) {
+        ESP_LOGW(TAG, "SingleLed initialized with GPIO_NUM_NC, LED will not function");
+        return;
+    }
 
     led_strip_config_t strip_config = {};
     strip_config.strip_gpio_num = gpio;
@@ -41,7 +43,9 @@ SingleLed::SingleLed(gpio_num_t gpio) {
 }
 
 SingleLed::~SingleLed() {
-    esp_timer_stop(blink_timer_);
+    if (blink_timer_ != nullptr) {
+        esp_timer_stop(blink_timer_);
+    }
     if (led_strip_ != nullptr) {
         led_strip_del(led_strip_);
     }
@@ -118,7 +122,6 @@ void SingleLed::OnBlinkTimer() {
 
 void SingleLed::OnStateChanged() {
     auto& app = Application::GetInstance();
-    // Atur status LED berdasarkan status perangkat
     auto device_state = app.GetDeviceState();
     switch (device_state) {
         case kDeviceStateStarting:
@@ -158,7 +161,7 @@ void SingleLed::OnStateChanged() {
             StartContinuousBlink(500);
             break;
         default:
-            ESP_LOGW(TAG, "Event led strip tidak dikenal: %d", device_state);
+            ESP_LOGW(TAG, "Unknown led strip event: %d", device_state);
             return;
     }
 }

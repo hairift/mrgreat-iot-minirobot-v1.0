@@ -219,7 +219,7 @@ private:
     LcdDisplay* display_;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)0,
             .sda_io_num = I2C_SDA_IO,
@@ -236,22 +236,22 @@ private:
             ESP_LOGE(TAG, "TCA9554 create returned error");        
 
         // uint32_t input_level_mask = 0;
-        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_INPUT);               // Atur pin EXIO0 dan EXIO1 sebagai masukan
-        // ret = esp_io_expander_get_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, &input_level_mask);             // Baca level pin EXIO0 dan EXIO1 lalu simpan ke input_level_mask
+        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_INPUT);               // 设置引脚 EXIO0 和 EXIO1 模式为输入 
+        // ret = esp_io_expander_get_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, &input_level_mask);             // 获取引脚 EXIO0 和 EXIO1 的电平状态,存放在 input_level_mask 中
 
-        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, IO_EXPANDER_OUTPUT);              // Atur pin EXIO2 dan EXIO3 sebagai keluaran
-        // ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, 1);                             // Atur level pin menjadi 1
-        // ret = esp_io_expander_print_state(io_expander);                                                                             // Cetak status pin
+        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, IO_EXPANDER_OUTPUT);              // 设置引脚 EXIO2 和 EXIO3 模式为输出
+        // ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, 1);                             // 将引脚电平设置为 1
+        // ret = esp_io_expander_print_state(io_expander);                                                                             // 打印引脚状态
 
-        ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_OUTPUT);                 // Atur pin EXIO0 dan EXIO1 sebagai keluaran
+        ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_OUTPUT);                 // 设置引脚 EXIO0 和 EXIO1 模式为输出
         ESP_ERROR_CHECK(ret);
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
         vTaskDelay(pdMS_TO_TICKS(300));
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 0);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 0);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
         vTaskDelay(pdMS_TO_TICKS(300));
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
     }
 
@@ -309,7 +309,7 @@ private:
         size_t param_size = sizeof(register_data);
         lcd_cmd &= 0xff;
         lcd_cmd <<= 8;
-        lcd_cmd |= LCD_OPCODE_READ_CMD << 24;  // Gunakan opcode baca, bukan tulis
+        lcd_cmd |= LCD_OPCODE_READ_CMD << 24;  // Use the read opcode instead of write
         ret = esp_lcd_panel_io_rx_param(panel_io, lcd_cmd, register_data, param_size); 
         if (ret == ESP_OK) {
             printf("Register 0x04 data: %02x %02x %02x %02x\n", register_data[0], register_data[1], register_data[2], register_data[3]);
@@ -324,13 +324,13 @@ private:
         }
         printf("LCD communication parameters are set successfully -- SPI\r\n");
         
-        // Periksa nilai register lalu atur sesuai kebutuhan
+        // Check register values and configure accordingly
         if (register_data[0] == 0x00 && register_data[1] == 0x7F && register_data[2] == 0x7F && register_data[3] == 0x7F) {
-            // Tangani kondisi saat data register cocok dengan pola ini
+            // Handle the case where the register data matches this pattern
             printf("Vendor-specific initialization for case 1.\n");
         }
         else if (register_data[0] == 0x00 && register_data[1] == 0x02 && register_data[2] == 0x7F && register_data[3] == 0x7F) {
-            // Sediakan perintah inisialisasi khusus vendor jika data register cocok dengan pola ini
+            // Provide vendor-specific initialization commands if register data matches this pattern
             vendor_config.init_cmds = vendor_specific_init_new;
             vendor_config.init_cmds_size = sizeof(vendor_specific_init_new) / sizeof(st77916_lcd_init_cmd_t);
             printf("Vendor-specific initialization for case 2.\n");

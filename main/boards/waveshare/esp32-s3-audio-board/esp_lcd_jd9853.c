@@ -40,8 +40,8 @@ typedef struct
     int x_gap;
     int y_gap;
     uint8_t fb_bits_per_pixel;
-    uint8_t madctl_val; // simpan nilai register LCD_CMD_MADCTL saat ini
-    uint8_t colmod_val; // simpan nilai register LCD_CMD_COLMOD saat ini
+    uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
+    uint8_t colmod_val; // save current value of LCD_CMD_COLMOD register
     const jd9853_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
 } jd9853_panel_t;
@@ -99,7 +99,7 @@ esp_err_t esp_lcd_new_panel_jd9853(const esp_lcd_panel_io_handle_t io, const esp
         break;
     case 18: // RGB666
         jd9853->colmod_val = 0x66;
-        // Setiap komponen warna (R/G/B) menempati 6 bit tinggi pada satu byte, sehingga satu piksel memerlukan 3 byte penuh
+        // each color component (R/G/B) should occupy the 6 high bits of a byte, which means 3 full bytes are required for a pixel
         jd9853->fb_bits_per_pixel = 24;
         break;
     default:
@@ -131,7 +131,7 @@ esp_err_t esp_lcd_new_panel_jd9853(const esp_lcd_panel_io_handle_t io, const esp
     *ret_panel = &(jd9853->base);
     ESP_LOGD(TAG, "new jd9853 panel @%p", jd9853);
 
-    // ESP_LOGI(TAG, "Pembuatan panel LCD berhasil, versi: %d.%d.%d", ESP_LCD_jd9853_VER_MAJOR, ESP_LCD_jd9853_VER_MINOR,
+    // ESP_LOGI(TAG, "LCD panel create success, version: %d.%d.%d", ESP_LCD_jd9853_VER_MAJOR, ESP_LCD_jd9853_VER_MINOR,
     //          ESP_LCD_jd9853_VER_PATCH);
 
     return ESP_OK;
@@ -166,7 +166,7 @@ static esp_err_t panel_jd9853_reset(esp_lcd_panel_t *panel)
     jd9853_panel_t *jd9853 = __containerof(panel, jd9853_panel_t, base);
     esp_lcd_panel_io_handle_t io = jd9853->io;
 
-    // Lakukan setel ulang perangkat keras
+    // perform hardware reset
     if (jd9853->reset_gpio_num >= 0)
     {
         gpio_set_level(jd9853->reset_gpio_num, jd9853->reset_level);
@@ -175,9 +175,9 @@ static esp_err_t panel_jd9853_reset(esp_lcd_panel_t *panel)
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     else
-    { // lakukan reset perangkat lunak
+    { // perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
-        vTaskDelay(pdMS_TO_TICKS(20)); // sesuai spesifikasi, tunggu minimal 5 ms sebelum mengirim perintah baru
+        vTaskDelay(pdMS_TO_TICKS(20)); // spec, wait at least 5ms before sending new command
     }
 
     return ESP_OK;
@@ -187,54 +187,54 @@ typedef struct
 {
     uint8_t cmd;
     uint8_t data[16];
-    uint8_t data_bytes; // Panjang data pada larik di atas; 0xFF = akhir daftar perintah.
+    uint8_t data_bytes; // Length of data in above data array; 0xFF = end of cmds.
 } lcd_init_cmd_t;
 
 // static const jd9853_lcd_init_cmd_t vendor_specific_init_default[] = {
 // //  {cmd, { data }, data_size, delay_ms}
-//     /* Kendali daya B, kontrol daya = 0, DC_ENA = 1 */
+//     /* Power contorl B, power control = 0, DC_ENA = 1 */
 //     {0xCF, (uint8_t []){0x00, 0xAA, 0XE0}, 3, 0},
-//     /* Kendali urutan daya aktif,
-//      * cp1 menahan 1 bingkai, bingkai pertama diaktifkan
+//     /* Power on sequence control,
+//      * cp1 keeps 1 frame, 1st frame enable
 //      * vcl = 0, ddvdh=3, vgh=1, vgl=2
 //      * DDVDH_ENH=1
 //      */
 //     {0xED, (uint8_t []){0x67, 0x03, 0X12, 0X81}, 4, 0},
-//     /* Kendali timing driver A,
-//      * non-overlap=bawaan +1
-//      * EQ=bawaan - 1, CR=bawaan
-//      * pre-charge=bawaan - 1
+//     /* Driver timing control A,
+//      * non-overlap=default +1
+//      * EQ=default - 1, CR=default
+//      * pre-charge=default - 1
 //      */
 //     {0xE8, (uint8_t []){0x8A, 0x01, 0x78}, 3, 0},
-//     /* Kendali daya A, Vcore=1,6V, DDVDH=5,6V */
+//     /* Power control A, Vcore=1.6V, DDVDH=5.6V */
 //     {0xCB, (uint8_t []){0x39, 0x2C, 0x00, 0x34, 0x02}, 5, 0},
-//     /* Kendali rasio pompa, DDVDH=2xVCl */
+//     /* Pump ratio control, DDVDH=2xVCl */
 //     {0xF7, (uint8_t []){0x20}, 1, 0},
 
 //     {0xF7, (uint8_t []){0x20}, 1, 0},
-//     /* Kendali timing driver, semua=0 unit */
+//     /* Driver timing control, all=0 unit */
 //     {0xEA, (uint8_t []){0x00, 0x00}, 2, 0},
-//     /* Kendali daya 1, GVDD=4,75V */
+//     /* Power control 1, GVDD=4.75V */
 //     {0xC0, (uint8_t []){0x23}, 1, 0},
-//     /* Kendali daya 2, DDVDH=VCl*2, VGH=VCl*7, VGL=-VCl*3 */
+//     /* Power control 2, DDVDH=VCl*2, VGH=VCl*7, VGL=-VCl*3 */
 //     {0xC1, (uint8_t []){0x11}, 1, 0},
-//     /* Kendali VCOM 1, VCOMH=4,025V, VCOML=-0,950V */
+//     /* VCOM control 1, VCOMH=4.025V, VCOML=-0.950V */
 //     {0xC5, (uint8_t []){0x43, 0x4C}, 2, 0},
-//     /* Kendali VCOM 2, VCOMH=VMH-2, VCOML=VML-2 */
+//     /* VCOM control 2, VCOMH=VMH-2, VCOML=VML-2 */
 //     {0xC7, (uint8_t []){0xA0}, 1, 0},
-//     /* Kendali laju bingkai, f=fosc, 70Hz fps */
+//     /* Frame rate control, f=fosc, 70Hz fps */
 //     {0xB1, (uint8_t []){0x00, 0x1B}, 2, 0},
-//     /* Aktifkan 3G, dinonaktifkan */
+//     /* Enable 3G, disabled */
 //     {0xF2, (uint8_t []){0x00}, 1, 0},
-//     /* Setel gamma, kurva 1 */
+//     /* Gamma set, curve 1 */
 //     {0x26, (uint8_t []){0x01}, 1, 0},
-//     /* Koreksi gamma positif */
+//     /* Positive gamma correction */
 //     {0xE0, (uint8_t []){0x1F, 0x36, 0x36, 0x3A, 0x0C, 0x05, 0x4F, 0X87, 0x3C, 0x08, 0x11, 0x35, 0x19, 0x13, 0x00}, 15, 0},
-//     /* Koreksi gamma negatif */
+//     /* Negative gamma correction */
 //     {0xE1, (uint8_t []){0x00, 0x09, 0x09, 0x05, 0x13, 0x0A, 0x30, 0x78, 0x43, 0x07, 0x0E, 0x0A, 0x26, 0x2C, 0x1F}, 15, 0},
-//     /* Atur mode masuk, deteksi tegangan rendah nonaktif, tampilan normal */
+//     /* Entry mode set, Low vol detect disabled, normal display */
 //     {0xB7, (uint8_t []){0x07}, 1, 0},
-//     /* Kendali fungsi layar */
+//     /* Display function control */
 //     {0xB6, (uint8_t []){0x08, 0x82, 0x27}, 3, 0},
 // };
 
@@ -248,8 +248,8 @@ static const jd9853_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0xC0, (uint8_t[]){0x44, 0xA4}, 2, 0},
     {0xC1, (uint8_t[]){0x16}, 1, 0},
     {0xC3, (uint8_t[]){0x7D, 0x07, 0x14, 0x06, 0xCF, 0x71, 0x72, 0x77}, 8, 0},
-    {0xC4, (uint8_t[]){0x00, 0x00, 0xA0, 0x79, 0x0B, 0x0A, 0x16, 0x79, 0x0B, 0x0A, 0x16, 0x82}, 12, 0},                                                                                                                         // 00=60Hz 06=57Hz 08=51Hz, LN=320 baris
-    {0xC8, (uint8_t[]){0x3F, 0x32, 0x29, 0x29, 0x27, 0x2B, 0x27, 0x28, 0x28, 0x26, 0x25, 0x17, 0x12, 0x0D, 0x04, 0x00, 0x3F, 0x32, 0x29, 0x29, 0x27, 0x2B, 0x27, 0x28, 0x28, 0x26, 0x25, 0x17, 0x12, 0x0D, 0x04, 0x00}, 32, 0}, // Atur gamma merah
+    {0xC4, (uint8_t[]){0x00, 0x00, 0xA0, 0x79, 0x0B, 0x0A, 0x16, 0x79, 0x0B, 0x0A, 0x16, 0x82}, 12, 0},                                                                                                                         // 00=60Hz 06=57Hz 08=51Hz, LN=320 Line
+    {0xC8, (uint8_t[]){0x3F, 0x32, 0x29, 0x29, 0x27, 0x2B, 0x27, 0x28, 0x28, 0x26, 0x25, 0x17, 0x12, 0x0D, 0x04, 0x00, 0x3F, 0x32, 0x29, 0x29, 0x27, 0x2B, 0x27, 0x28, 0x28, 0x26, 0x25, 0x17, 0x12, 0x0D, 0x04, 0x00}, 32, 0}, // SET_R_GAMMA
     {0xD0, (uint8_t[]){0x04, 0x06, 0x6B, 0x0F, 0x00}, 5, 0},
     {0xD7, (uint8_t[]){0x00, 0x30}, 2, 0},
     {0xE6, (uint8_t[]){0x14}, 1, 0},
@@ -278,7 +278,7 @@ static esp_err_t panel_jd9853_init(esp_lcd_panel_t *panel)
     jd9853_panel_t *jd9853 = __containerof(panel, jd9853_panel_t, base);
     esp_lcd_panel_io_handle_t io = jd9853->io;
 
-    // LCD masuk ke mode tidur dan layar akan mati setelah reset saat daya menyala, jadi keluar dari mode tidur terlebih dahulu
+    // LCD goes into sleep mode and display will be turned off after power on reset, exit sleep mode first
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SLPOUT, NULL, 0), TAG, "send command failed");
     vTaskDelay(pdMS_TO_TICKS(100));
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_MADCTL, (uint8_t[]){
@@ -308,7 +308,7 @@ static esp_err_t panel_jd9853_init(esp_lcd_panel_t *panel)
     bool is_cmd_overwritten = false;
     for (int i = 0; i < init_cmds_size; i++)
     {
-        // Periksa apakah perintah sudah dipakai atau berbenturan dengan perintah internal
+        // Check if the command has been used or conflicts with the internal
         switch (init_cmds[i].cmd)
         {
         case LCD_CMD_MADCTL:
@@ -326,7 +326,7 @@ static esp_err_t panel_jd9853_init(esp_lcd_panel_t *panel)
 
         if (is_cmd_overwritten)
         {
-            ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal", init_cmds[i].cmd);
+            ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence", init_cmds[i].cmd);
         }
 
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
@@ -365,7 +365,7 @@ static esp_err_t panel_jd9853_draw_bitmap(esp_lcd_panel_t *panel, int x_start, i
                                                                      },
                                                   4),
                         TAG, "send command failed");
-    // Kirim isi frame buffer
+    // transfer frame buffer
     size_t len = (x_end - x_start) * (y_end - y_start) * jd9853->fb_bits_per_pixel / 8;
     esp_lcd_panel_io_tx_color(io, LCD_CMD_RAMWR, color_data, len);
 

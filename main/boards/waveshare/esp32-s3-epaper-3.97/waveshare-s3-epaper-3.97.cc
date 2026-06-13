@@ -25,23 +25,23 @@ public:
         WriteReg(0x22, 0b110);  // PWRON > OFFLEVEL as POWEROFF Source enable
         WriteReg(0x27, 0x10);   // hold 4s to power off
 
-        // Nonaktifkan semua DC kecuali DC1
+        // Disable All DCs but DC1
         WriteReg(0x80, 0x01);
-        // Nonaktifkan semua LDO
+        // Disable All LDOs
         WriteReg(0x90, 0x00);
         WriteReg(0x91, 0x00);
 
-        // Atur DC1 ke 3,3 V
+        // Set DC1 to 3.3V
         WriteReg(0x82, (3300 - 1500) / 100);
 
-        // Atur ALDO1 ke 3,3 V
+        // Set ALDO1 to 3.3V
         WriteReg(0x92, (3300 - 500) / 100);
-        // Atur ALDO2 ke 3,3 V
+        // Set ALDO2 to 3.3V
         WriteReg(0x93, (3300 - 500) / 100);
-        // Atur ALDO3 ke 3,3 V
+        // Set ALDO3 to 3.3V
         WriteReg(0x94, (3300 - 500) / 100);
 
-        // Aktifkan ALDO1, ALDO2, dan ALDO3
+        // Enable ALDO1、ALDO2、ALDO2
         WriteReg(0x90, 0x07);
 
         WriteReg(0x64, 0x03);  // CV charger voltage setting to 4.2V
@@ -88,7 +88,7 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            // Saat proses awal sebelum terhubung, tombol BOOT masuk ke mode konfigurasi Wi-Fi
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode
             // without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
@@ -111,7 +111,7 @@ private:
 
     void InitializeTools() {
         auto& mcp_server = McpServer::GetInstance();
-        mcp_server.AddTool("self.disp.network", "Memulai ulang konfigurasi jaringan", PropertyList(),
+        mcp_server.AddTool("self.disp.network", "重新配网", PropertyList(),
                            [this](const PropertyList&) -> ReturnValue {
                                EnterWifiConfigMode();
                                return true;

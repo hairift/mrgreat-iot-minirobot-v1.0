@@ -115,16 +115,16 @@ public:
                     bool mirror_y,
                     bool swap_xy)
         : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian antarmuka sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek lvgl sudah dibuat sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek lvgl dibuat
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
-        // Karena layar berbentuk bulat, bilah status perlu jarak kiri dan kanan tambahan
+        // 由于屏幕是圆的，所以状态栏需要增加左右内边距
         lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES * 0.33, 0);
         lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES * 0.33, 0);
     }
@@ -159,16 +159,16 @@ private:
         });
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
-            // Matikan codec audio ES8311
+            // 关闭ES8311音频编解码器
             auto codec = GetAudioCodec();
             if (codec) {
                 codec->EnableInput(false);
                 codec->EnableOutput(false);
             }
             rtc_gpio_set_level(GPIO_NUM_3, 0);
-            // Aktifkan fitur tahan level agar sinyal tetap stabil saat tidur
+            // 启用保持功能，确保睡眠期间电平不变
             rtc_gpio_hold_en(GPIO_NUM_3);
-            esp_lcd_panel_disp_on_off(panel_, false); // Matikan tampilan
+            esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
             esp_deep_sleep_start();
         });
         power_save_timer_->SetEnabled(true);
@@ -186,7 +186,7 @@ private:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -203,7 +203,7 @@ private:
     }
 
     void InitializeCodecI2c_Touch() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_1,
             .sda_io_num = TP_PIN_NUM_TP_SDA,
@@ -229,25 +229,25 @@ private:
         if (!board || !board->cst816d_) return;
         static bool was_touched = false;
         static int64_t touch_start_time = 0;
-        const int64_t TOUCH_THRESHOLD_MS = 500;  // Ambang durasi sentuh, lebih dari 500 ms dianggap tekan lama
+        const int64_t TOUCH_THRESHOLD_MS = 500;  // 触摸时长阈值，超过500ms视为长按
 
         board->cst816d_->UpdateTouchPoint();
         auto touch_point = board->cst816d_->GetTouchPoint();
 
-        // Deteksi awal sentuhan
+        // 检测触摸开始
         if (touch_point.num > 0 && !was_touched) {
             was_touched = true;
-            touch_start_time = esp_timer_get_time() / 1000; // Ubah ke milidetik
+            touch_start_time = esp_timer_get_time() / 1000; // 转换为毫秒
         }
-        // Deteksi saat sentuhan dilepas
+        // 检测触摸释放
         else if (touch_point.num == 0 && was_touched) {
             was_touched = false;
             int64_t touch_duration = (esp_timer_get_time() / 1000) - touch_start_time;
 
-            // Hanya sentuhan singkat yang memicu aksi
+            // 只有短触才触发
             if (touch_duration < TOUCH_THRESHOLD_MS) {
                 auto& app = Application::GetInstance();
-                // Saat perangkat masih mulai dan belum terhubung, sentuhan akan masuk ke mode konfigurasi Wi-Fi tanpa reboot
+                // During startup (before connected), pressing touch enters Wi-Fi config mode without reboot
                 if (app.GetDeviceState() == kDeviceStateStarting) {
                     board->EnterWifiConfigMode();
                     return;
@@ -260,7 +260,7 @@ private:
     void InitializeCst816DTouchPad() {
         ESP_LOGI(TAG, "Init Cst816D");
 
-        // Inisialisasi pin RST dan INT
+        // RST/INT 管脚初始化
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_OUTPUT;
@@ -277,13 +277,13 @@ private:
         int_conf.pull_up_en = GPIO_PULLUP_ENABLE;
         gpio_config(&int_conf);
 
-        // Urutan reset chip sentuh
+        // 触摸芯片复位序列
         gpio_set_level(TP_PIN_NUM_TP_RST, 0);
         vTaskDelay(pdMS_TO_TICKS(5));
         gpio_set_level(TP_PIN_NUM_TP_RST, 1);
         vTaskDelay(pdMS_TO_TICKS(50));
 
-        // Periksa apakah chip sentuh tersedia
+        // 探测是否存在触摸芯片
         uint8_t chip_id = 0;
         if (!i2c_bus_) {
             ESP_LOGW(TAG, "Touch I2C bus not initialized, skip touch");
@@ -292,7 +292,7 @@ private:
         bool touch_available = Cst816d::Probe(i2c_bus_, 0x15, chip_id);
         if (!touch_available) {
             ESP_LOGW(TAG, "CST816D not found, running in non-touch mode");
-            // Lepaskan I2C sentuh agar tidak terus melaporkan error saat perangkat tidak ada
+            // 释放触摸I2C，避免无设备时反复报错
             i2c_del_master_bus(i2c_bus_);
             i2c_bus_ = nullptr;
             return;
@@ -300,7 +300,7 @@ private:
 
         cst816d_ = new Cst816d(i2c_bus_, 0x15);
 
-        // Buat pewaktu dengan interval 10 ms
+        // 创建定时器，10ms 间隔
         esp_timer_create_args_t timer_args = {
             .callback = touchpad_timer_callback,
             .arg = this,
@@ -310,11 +310,11 @@ private:
         };
 
         if (esp_timer_create(&timer_args, &touchpad_timer_) == ESP_OK) {
-            esp_timer_start_periodic(touchpad_timer_, 10 * 1000); // 10 ms = 10000 us
+            esp_timer_start_periodic(touchpad_timer_, 10 * 1000); // 10ms = 10000us
         }
     }
 
-    // Inisialisasi SPI
+    // SPI初始化
     void InitializeSpi() {
         ESP_LOGI(TAG, "Initialize SPI bus");
         spi_bus_config_t buscfg = GC9A01_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN,
@@ -322,7 +322,7 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
-    // Inisialisasi GC9A01
+    // GC9A01初始化
     void InitializeGc9a01Display() {
         ESP_LOGI(TAG, "Init GC9A01 display");
         ESP_LOGI(TAG, "Install panel IO");
@@ -334,7 +334,7 @@ private:
         ESP_LOGI(TAG, "Install GC9A01 panel driver");
         esp_lcd_panel_handle_t panel_handle = NULL;
         esp_lcd_panel_dev_config_t panel_config = {};
-        panel_config.reset_gpio_num = DISPLAY_SPI_RESET_PIN;    // Atur ke -1 jika tidak dipakai
+        panel_config.reset_gpio_num = DISPLAY_SPI_RESET_PIN;    // Set to -1 if not use
         panel_config.rgb_endian = LCD_RGB_ENDIAN_BGR;           //LCD_RGB_ENDIAN_RGB;
         panel_config.bits_per_pixel = 16;
 
@@ -372,7 +372,7 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            // Saat perangkat masih mulai dan belum terhubung, tombol BOOT akan masuk ke mode konfigurasi Wi-Fi tanpa reboot
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -383,14 +383,14 @@ private:
 
 public:
     Spotpear_ESP32_S3_1_28_BOX() : boot_button_(BOOT_BUTTON_GPIO) {
-        // Inisialisasi I2C sentuh lebih dulu lalu deteksi dan siapkan sentuhan jika tersedia
+        // 先初始化触摸的I2C并探测/初始化触摸（若无触摸则跳过）
         InitializeCodecI2c_Touch();
         InitializeCst816DTouchPad();
 
-        // Inisialisasi I2C audio
+        // 初始化音频I2C
         InitializeCodecI2c();
 
-        // Siapkan dulu komponen yang berkaitan dengan tampilan
+        // 显示相关先建立起来
         InitializeSpi();
         InitializeGc9a01Display();
         InitializeButtons();
@@ -398,7 +398,7 @@ public:
             GetBacklight()->RestoreBrightness();
         }
 
-        // Setelah tampilan dan lampu latar siap, baru inisialisasi logika hemat daya agar tidak terjadi null pointer
+        // 显示和背光可用后再初始化省电逻辑，避免空指针
         InitializePowerSaveTimer();
         InitializePowerManager();
     }

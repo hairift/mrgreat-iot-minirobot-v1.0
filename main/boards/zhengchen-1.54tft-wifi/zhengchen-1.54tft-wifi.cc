@@ -87,17 +87,17 @@ private:
             app.ToggleChatState();
         });
 
-        // Atur aksi tekan lama tombol daya untuk langsung masuk ke mode konfigurasi Wi-Fi
+        // 设置开机按钮的长按事件（直接进入配网模式）
         boot_button_.OnLongPress([this]() {
-            // Bangunkan penghitung hemat daya
+            // 唤醒电源保存定时器
             power_save_timer_->WakeUp();
-            // Ambil instans aplikasi
+            // 获取应用程序实例
             auto& app = Application::GetInstance();
             
-            // Masuk ke mode konfigurasi Wi-Fi
+            // 进入配网模式
             app.SetDeviceState(kDeviceStateWifiConfiguring);
             
-            // Atur ulang konfigurasi Wi-Fi agar mode konfigurasi benar-benar aktif
+            // 重置WiFi配置以确保进入配网模式
             EnterWifiConfigMode();
         });
 
@@ -182,12 +182,12 @@ public:
         GetBacklight()->RestoreBrightness();
     }
 
-    // Mengambil codec audio
+    // 获取音频编解码器
     virtual AudioCodec* GetAudioCodec() override {
-        // Membuat instans statis NoAudioCodecSimplex
+        // 静态实例化NoAudioCodecSimplex类
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
-        // Mengembalikan codec audio
+        // 返回音频编解码器
         return &audio_codec;
     }
 

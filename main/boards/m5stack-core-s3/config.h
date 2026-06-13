@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi papan M5Stack CoreS3
+// M5Stack CoreS3 Board configuration
 
 #include <driver/gpio.h>
 
@@ -41,12 +41,12 @@
 
 
 
-/* Pin kamera */
+/* Camera pins */
 #define CAMERA_PIN_PWDN GPIO_NUM_NC
 #define CAMERA_PIN_RESET GPIO_NUM_NC
-#define CAMERA_PIN_XCLK  GPIO_NUM_NC // Jam piksel (tetap dari kristal eksternal 20 MHz)
-#define CAMERA_PIN_SIOD GPIO_NUM_NC  // Jalur serial data, memakai port I2C yang sudah ada
-#define CAMERA_PIN_SIOC GPIO_NUM_NC  // Jalur serial clock, memakai port I2C yang sudah ada
+#define CAMERA_PIN_XCLK  GPIO_NUM_NC // 像素时钟 (固定由 20MHz 外部晶振输入) 
+#define CAMERA_PIN_SIOD GPIO_NUM_NC  // 串行时钟 Using existing I2C port
+#define CAMERA_PIN_SIOC GPIO_NUM_NC  // 串行时钟 Using existing I2C port
 #define CAMERA_PIN_D0 GPIO_NUM_39
 #define CAMERA_PIN_D1 GPIO_NUM_40
 #define CAMERA_PIN_D2 GPIO_NUM_41

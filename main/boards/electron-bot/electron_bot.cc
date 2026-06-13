@@ -20,7 +20,7 @@
 
 #define TAG "ElectronBot"
 
-// Deklarasi fungsi inisialisasi pengendali
+// 控制器初始化函数声明
 void InitializeElectronBotController();
 
 class ElectronBot : public WifiBoard {
@@ -42,7 +42,7 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
-    // Inisialisasi GC9A01
+    // GC9A01初始化
     void InitializeGc9a01Display() {
         ESP_LOGI(TAG, "Init GC9A01 display");
 
@@ -56,9 +56,9 @@ private:
         ESP_LOGI(TAG, "Install GC9A01 panel driver");
         esp_lcd_panel_handle_t panel_handle = NULL;
         esp_lcd_panel_dev_config_t panel_config = {};
-        panel_config.reset_gpio_num = DISPLAY_SPI_RESET_PIN;  // Ubah ke -1 bila pin reset tidak dipakai
+        panel_config.reset_gpio_num = DISPLAY_SPI_RESET_PIN;  // Set to -1 if not use
         panel_config.rgb_endian = LCD_RGB_ENDIAN_BGR;         // LCD_RGB_ENDIAN_RGB;
-        panel_config.bits_per_pixel = 16;  // Ditetapkan oleh perintah LCD `3Ah` (16/18)
+        panel_config.bits_per_pixel = 16;  // Implemented by LCD command `3Ah` (16/18)
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_gc9a01(io_handle, &panel_config, &panel_handle));
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));

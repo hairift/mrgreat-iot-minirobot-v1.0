@@ -34,37 +34,37 @@ constexpr char TAG[] = "ESP_SensairShuttle";
 
 static const ili9341_lcd_init_cmd_t vendor_specific_init[] = {
     // {cmd, { data }, data_size, delay_ms}
-    {0x11, NULL, 0, 120},                                          // Keluar dari mode tidur
-    {0x36, (uint8_t []){0x00}, 1, 0},                              // Kendali akses data memori
-    {0x3A, (uint8_t []){0x05}, 1, 0},                              // Format piksel antarmuka (16-bit)
-    {0xB2, (uint8_t []){0x0C, 0x0C, 0x00, 0x33, 0x33}, 5, 0},      // Pengaturan porch
-    {0xB7, (uint8_t []){0x05}, 1, 0},                              // Kendali gerbang
-    {0xBB, (uint8_t []){0x21}, 1, 0},                              // Pengaturan VCOM
-    {0xC0, (uint8_t []){0x2C}, 1, 0},                              // Kendali LCM
-    {0xC2, (uint8_t []){0x01}, 1, 0},                              // Aktifkan perintah VDV dan VRH
-    {0xC3, (uint8_t []){0x15}, 1, 0},                              // Atur VRH
-    {0xC6, (uint8_t []){0x0F}, 1, 0},                              // Kendali laju bingkai
-    {0xD0, (uint8_t []){0xA7}, 1, 0},                              // Kendali daya 1
-    {0xD0, (uint8_t []){0xA4, 0xA1}, 2, 0},                        // Kendali daya 1
-    {0xD6, (uint8_t []){0xA1}, 1, 0},                              // Keluaran gerbang GND saat mode tidur
+    {0x11, NULL, 0, 120},                                          // Sleep Out
+    {0x36, (uint8_t []){0x00}, 1, 0},                              // Memory Data Access Control
+    {0x3A, (uint8_t []){0x05}, 1, 0},                              // Interface Pixel Format (16-bit)
+    {0xB2, (uint8_t []){0x0C, 0x0C, 0x00, 0x33, 0x33}, 5, 0},      // Porch Setting
+    {0xB7, (uint8_t []){0x05}, 1, 0},                              // Gate Control
+    {0xBB, (uint8_t []){0x21}, 1, 0},                              // VCOM Setting
+    {0xC0, (uint8_t []){0x2C}, 1, 0},                              // LCM Control
+    {0xC2, (uint8_t []){0x01}, 1, 0},                              // VDV and VRH Command Enable
+    {0xC3, (uint8_t []){0x15}, 1, 0},                              // VRH Set
+    {0xC6, (uint8_t []){0x0F}, 1, 0},                              // Frame Rate Control
+    {0xD0, (uint8_t []){0xA7}, 1, 0},                              // Power Control 1
+    {0xD0, (uint8_t []){0xA4, 0xA1}, 2, 0},                        // Power Control 1
+    {0xD6, (uint8_t []){0xA1}, 1, 0},                              // Gate output GND in sleep mode
     {
         0xE0, (uint8_t [])
         {
             0xF0, 0x05, 0x0E, 0x08, 0x0A, 0x17, 0x39, 0x54,
             0x4E, 0x37, 0x12, 0x12, 0x31, 0x37
         }, 14, 0
-    },                                                             // Kendali gamma positif
+    },                                                             // Positive Gamma Control
     {
         0xE1, (uint8_t [])
         {
             0xF0, 0x10, 0x14, 0x0D, 0x0B, 0x05, 0x39, 0x44,
             0x4D, 0x38, 0x14, 0x14, 0x2E, 0x35
         }, 14, 0
-    },                                                             // Kendali gamma negatif
-    {0xE4, (uint8_t []){0x23, 0x00, 0x00}, 3, 0},                  // Kendali posisi gerbang
-    {0x21, NULL, 0, 0},                                            // Aktifkan inversi layar
-    {0x29, NULL, 0, 0},                                            // Nyalakan layar
-    {0x2C, NULL, 0, 0},                                            // Tulis memori
+    },                                                             // Negative Gamma Control
+    {0xE4, (uint8_t []){0x23, 0x00, 0x00}, 3, 0},                  // Gate position control
+    {0x21, NULL, 0, 0},                                            // Display Inversion On
+    {0x29, NULL, 0, 0},                                            // Display On
+    {0x2C, NULL, 0, 0},                                            // Memory Write
 };
 
 class Cst816d : public I2cDevice {
@@ -113,21 +113,21 @@ public:
         TouchEvent event = TOUCH_NONE;
 
         if (is_touched && !was_touched_) {
-            // Kejadian tekan, saat status berubah dari tidak disentuh menjadi disentuh
+            // Press event (transition from not touched to touched)
             press_count_++;
             event = TOUCH_PRESS;
             ESP_LOGI(TAG, "TOUCH PRESS - count: %d, x: %d, y: %d", press_count_, tp_.x, tp_.y);
         } else if (!is_touched && was_touched_) {
-            // Kejadian lepas, saat status berubah dari disentuh menjadi tidak disentuh
+            // Release event (transition from touched to not touched)
             event = TOUCH_RELEASE;
             ESP_LOGI(TAG, "TOUCH RELEASE - total presses: %d", press_count_);
         } else if (is_touched && was_touched_) {
-            // Sentuhan berkelanjutan (tahan)
+            // Continuous touch (hold)
             event = TOUCH_HOLD;
             ESP_LOGD(TAG, "TOUCH HOLD - x: %d, y: %d", tp_.x, tp_.y);
         }
 
-        // Perbarui status sebelumnya
+        // Update previous state
         was_touched_ = is_touched;
         return event;
     }
@@ -146,7 +146,7 @@ private:
     uint8_t* read_buffer_ = nullptr;
     TouchPoint_t tp_;
 
-    // Pelacakan status sentuhan
+    // Touch state tracking
     bool was_touched_;
     int press_count_;
 };
@@ -269,7 +269,7 @@ private:
         esp_lcd_panel_set_gap(panel, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
-        ESP_LOGI(TAG, "Pembuatan panel LCD berhasil, %p", panel);
+        ESP_LOGI(TAG, "LCD panel create success, %p", panel);
 
 #ifdef CONFIG_USE_EMOTE_MESSAGE_STYLE
         display_ = new emote::EmoteDisplay(panel, panel_io, DISPLAY_WIDTH, DISPLAY_HEIGHT);

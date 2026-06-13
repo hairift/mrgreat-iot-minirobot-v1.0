@@ -7,9 +7,9 @@
 Es8388AudioCodec::Es8388AudioCodec(void* i2c_master_handle, i2c_port_t i2c_port, int input_sample_rate, int output_sample_rate,
     gpio_num_t mclk, gpio_num_t bclk, gpio_num_t ws, gpio_num_t dout, gpio_num_t din,
     gpio_num_t pa_pin, uint8_t es8388_addr, bool input_reference) {
-    duplex_ = true; // Apakah duplex
-    input_reference_ = input_reference; // Apakah menggunakan input referensi untuk peredaman gema
-    input_channels_ = input_reference_ ? 2 : 1; // Jumlah kanal masukan
+    duplex_ = true; // 是否双工
+    input_reference_ = input_reference; // 是否使用参考输入，实现回声消除
+    input_channels_ = input_reference_ ? 2 : 1; // 输入通道数
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
     input_gain_ = 24;
@@ -17,7 +17,7 @@ Es8388AudioCodec::Es8388AudioCodec(void* i2c_master_handle, i2c_port_t i2c_port,
     pa_pin_ = pa_pin;
     CreateDuplexChannels(mclk, bclk, ws, dout, din);
 
-    // Lakukan inisialisasi interface terkait: data_if, ctrl_if dan gpio_if
+    // Do initialize of related interface: data_if, ctrl_if and gpio_if
     audio_codec_i2s_cfg_t i2s_cfg = {
         .port = I2S_NUM_0,
         .rx_handle = rx_handle_,
@@ -26,7 +26,7 @@ Es8388AudioCodec::Es8388AudioCodec(void* i2c_master_handle, i2c_port_t i2c_port,
     data_if_ = audio_codec_new_i2s_data(&i2s_cfg);
     assert(data_if_ != NULL);
 
-    // Keluaran
+    // Output
     audio_codec_i2c_cfg_t i2c_cfg = {
         .port = i2c_port,
         .addr = es8388_addr,
@@ -67,7 +67,7 @@ Es8388AudioCodec::Es8388AudioCodec(void* i2c_master_handle, i2c_port_t i2c_port,
     assert(input_dev_ != NULL);
     esp_codec_set_disable_when_closed(output_dev_, false);
     esp_codec_set_disable_when_closed(input_dev_, false);
-    ESP_LOGI(TAG, "Es8388AudioCodec diinisialisasi");
+    ESP_LOGI(TAG, "Es8388AudioCodec initialized");
 }
 
 Es8388AudioCodec::~Es8388AudioCodec() {
@@ -133,7 +133,7 @@ void Es8388AudioCodec::CreateDuplexChannels(gpio_num_t mclk, gpio_num_t bclk, gp
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
     ESP_ERROR_CHECK(i2s_channel_enable(tx_handle_));
     ESP_ERROR_CHECK(i2s_channel_enable(rx_handle_));
-    ESP_LOGI(TAG, "Channel duplex dibuat");
+    ESP_LOGI(TAG, "Duplex channels created");
 }
 
 void Es8388AudioCodec::SetOutputVolume(int volume) {
@@ -186,7 +186,7 @@ void Es8388AudioCodec::EnableOutput(bool enable) {
         ESP_ERROR_CHECK(esp_codec_dev_open(output_dev_, &fs));
         ESP_ERROR_CHECK(esp_codec_dev_set_out_vol(output_dev_, output_volume_));
 
-        // Atur volume keluaran analog ke 0 dB, nilai bawaannya -45 dB
+        // Set analog output volume to 0dB, default is -45dB
         uint8_t reg_val = 30; // 0dB
         uint8_t regs[] = { 46, 47, 48, 49 }; // HP_LVOL, HP_RVOL, SPK_LVOL, SPK_RVOL
         for (uint8_t reg : regs) {

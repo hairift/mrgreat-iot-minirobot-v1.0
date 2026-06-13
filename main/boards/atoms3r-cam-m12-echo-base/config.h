@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi papan AtomS3R M12+EchoBase
+// AtomS3R M12+EchoBase Board configuration
 
 #include <driver/gpio.h>
 

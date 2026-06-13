@@ -26,7 +26,7 @@
 #define TAG "magiclick_2p5"
 
 static const gc9a01_lcd_init_cmd_t gc9107_lcd_init_cmds[] = {
-    // {perintah, {data}, ukuran_data, tunda_ms}
+    //  {cmd, { data }, data_size, delay_ms}
     {0xfe, (uint8_t[]){0x00}, 0, 0},
     {0xef, (uint8_t[]){0x00}, 0, 0},
     {0xb0, (uint8_t[]){0xc0}, 1, 0},
@@ -72,7 +72,7 @@ private:
 
     uint8_t pcb_version_ = 0;
 
-    // Struktur konfigurasi layar
+    // 屏幕配置结构体
     struct DisplayConfig {
         bool use_gc9107;
         bool mirror_x;
@@ -157,20 +157,20 @@ private:
     }
 
     void Enable4GModule() {
-        // Aktifkan modul 4G
+        // enable the 4G module
         gpio_reset_pin(ML307_POWER_PIN);
         gpio_set_direction(ML307_POWER_PIN, GPIO_MODE_OUTPUT);
         gpio_set_level(ML307_POWER_PIN, ML307_POWER_OUTPUT_INVERT ? 0 : 1);
     }
     void Disable4GModule() {
-        // Nonaktifkan modul 4G
+        // enable the 4G module
         gpio_reset_pin(ML307_POWER_PIN);
         gpio_set_direction(ML307_POWER_PIN, GPIO_MODE_OUTPUT);
         gpio_set_level(ML307_POWER_PIN, ML307_POWER_OUTPUT_INVERT ? 1 : 0);
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -195,7 +195,7 @@ private:
         
     }
 
-    // Baca tegangan pin IO3 lewat ADC untuk mengetahui versi PCB
+    //通过adc读取IO3引脚的电压来获取PCB版本
     void CheckPCBVersion() {
         adc_oneshot_unit_handle_t adc1_handle;
         adc_oneshot_unit_init_cfg_t init_config1 = {
@@ -209,7 +209,7 @@ private:
         };
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_2, &config));
 
-        // Ambil 10 sampel lalu hitung rata-ratanya
+        //获取10次， 然后求平均
         int adc_value = 0;
         int raw_value;
         for (int i = 0; i < 10; i++) {
@@ -220,13 +220,13 @@ private:
         
         int voltage = adc_value * (3300 / 4095.0);
         if (voltage < 100) {
-            // Versi 1
+            // 版本1
             pcb_version_ = PCB_VERSION_2_5A;
         } else if (voltage > 3200 ) {
-            // Versi 2
+            // 版本2
             pcb_version_ = PCB_VERSION_2_5A1;   
         }
-        // Uji paksa versi papan bila diperlukan
+        // test
         // pcb_version_ = PCB_VERSION_2_5A1;
         
         adc_oneshot_del_unit(adc1_handle);
@@ -238,7 +238,7 @@ private:
             auto& app = Application::GetInstance();
             if (GetNetworkType() == NetworkType::WIFI) {
                 if (app.GetDeviceState() == kDeviceStateStarting) {
-                    // Perlakukan board saat ini sebagai WifiBoard
+                    // cast to WifiBoard
                     auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
                     wifi_board.EnterWifiConfigMode();
                 }
@@ -294,7 +294,7 @@ private:
     }
 
     void InitializeLedPower() {
-        // Atur mode GPIO
+        // 设置GPIO模式
         gpio_reset_pin(BUILTIN_LED_POWER);
         gpio_set_direction(BUILTIN_LED_POWER, GPIO_MODE_OUTPUT);
         gpio_set_level(BUILTIN_LED_POWER, BUILTIN_LED_POWER_OUTPUT_INVERT ? 0 : 1);
@@ -315,11 +315,11 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Ambil konfigurasi layar
+        // 获取屏幕配置
         DisplayConfig config = GetDisplayConfig();
         ESP_LOGW(TAG, "PCB Version: %d, Using %s screen", pcb_version_, config.screen_name);
 
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_CS_PIN;
@@ -331,7 +331,7 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");  
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = DISPLAY_RST_PIN;

@@ -10,6 +10,8 @@
 #include <mutex>
 #include <deque>
 #include <memory>
+#include <functional>
+#include <atomic>
 
 #include "protocol.h"
 #include "ota.h"
@@ -108,6 +110,7 @@ public:
     bool UpgradeFirmware(const std::string& url, const std::string& version = "");
     bool CanEnterSleepMode();
     void SendMcpMessage(const std::string& payload);
+    void RegisterMcpBroadcastCallback(std::function<void(const std::string&)> callback);
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     void PlaySound(const std::string_view& sound);
@@ -135,11 +138,15 @@ private:
     std::string last_error_message_;
     AudioService audio_service_;
     std::unique_ptr<Ota> ota_;
+    std::function<void(const std::string&)> mcp_broadcast_callback_;
 
     bool has_server_time_ = false;
     bool aborted_ = false;
     bool assets_version_checked_ = false;
     bool play_popup_on_listening_ = false;  // Penanda untuk memutar suara penanda setelah status berubah ke mode mendengarkan
+    std::atomic<bool> tts_stream_active_{false};
+    std::atomic<bool> tts_stop_pending_{false};
+    std::atomic<int64_t> last_tts_audio_us_{0};
     int clock_ticks_ = 0;
     int speaking_idle_ticks_ = 0;
     TaskHandle_t activation_task_handle_ = nullptr;

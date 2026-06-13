@@ -1,4 +1,4 @@
-# Ubah berkas audio menjadi aliran protokol v3
+# convert audio files to protocol v3 stream
 import librosa
 import opuslib
 import struct
@@ -9,10 +9,10 @@ import argparse
 import pyloudnorm as pyln
 
 def encode_audio_to_opus(input_file, output_file, target_lufs=None):
-    # Muat berkas audio dengan librosa
+    # Load audio file using librosa
     audio, sample_rate = librosa.load(input_file, sr=None, mono=False, dtype=np.float32)
     
-    # Ubah menjadi mono jika sumbernya stereo
+    # Convert to mono if stereo
     if audio.ndim == 2:
         audio = librosa.to_mono(audio)
     
@@ -26,19 +26,19 @@ def encode_audio_to_opus(input_file, output_file, target_lufs=None):
         audio = pyln.normalize.loudness(audio, current_loudness, target_lufs)
         print(f"Adjusted loudness: {current_loudness:.1f} LUFS -> {target_lufs} LUFS")
 
-    # Ubah sample rate ke 16000 Hz jika diperlukan
+    # Convert sample rate to 16000Hz if necessary
     target_sample_rate = 16000
     if sample_rate != target_sample_rate:
         audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=target_sample_rate)
         sample_rate = target_sample_rate
     
-    # Ubah kembali data audio ke int16 setelah diproses
+    # Convert audio data back to int16 after processing
     audio = (audio * 32767).astype(np.int16)
     
-    # Inisialisasi encoder Opus
+    # Initialize Opus encoder
     encoder = opuslib.Encoder(sample_rate, 1, opuslib.APPLICATION_AUDIO)
 
-    # Enkode lalu simpan
+    # Encode and save
     with open(output_file, 'wb') as f:
         duration = 60  # 60ms per frame
         frame_size = int(sample_rate * duration / 1000)

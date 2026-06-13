@@ -1,6 +1,7 @@
 #include "otto_movements.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "freertos/idf_additions.h"
 #include "oscillator.h"
@@ -9,10 +10,17 @@ static const char* TAG = "OttoMovements";
 
 #define HAND_HOME_POSITION 45
 
+namespace {
+float EaseOutCubic(float t) {
+    float inv = 1.0f - t;
+    return 1.0f - inv * inv * inv;
+}
+}  // namespace
+
 Otto::Otto() {
     is_otto_resting_ = false;
     has_hands_ = false;
-    // Inisialisasi semua pin servo ke -1 sebagai penanda belum terhubung
+    // 初始化所有舵机管脚为-1（未连接）
     for (int i = 0; i < SERVO_COUNT; i++) {
         servo_pins_[i] = -1;
         servo_trim_[i] = 0;
@@ -36,7 +44,7 @@ void Otto::Init(int left_leg, int right_leg, int left_foot, int right_foot, int 
     servo_pins_[LEFT_HAND] = left_hand;
     servo_pins_[RIGHT_HAND] = right_hand;
 
-    // Periksa apakah servo tangan tersedia
+    // 检查是否有手部舵机
     has_hands_ = (left_hand != -1 && right_hand != -1);
 
     AttachServos();
@@ -92,53 +100,40 @@ void Otto::MoveServos(int time, int servo_target[]) {
         SetRestState(false);
     }
 
-    final_time_ = millis() + time;
-    if (time > 10) {
-        for (int i = 0; i < SERVO_COUNT; i++) {
-            if (servo_pins_[i] != -1) {
-                increment_[i] = (servo_target[i] - servo_[i].GetPosition()) / (time / 10.0);
-            }
-        }
-
-        for (int iteration = 1; millis() < final_time_; iteration++) {
-            partial_time_ = millis() + 10;
-            for (int i = 0; i < SERVO_COUNT; i++) {
-                if (servo_pins_[i] != -1) {
-                    servo_[i].SetPosition(servo_[i].GetPosition() + increment_[i]);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-    } else {
+    if (time <= 10) {
         for (int i = 0; i < SERVO_COUNT; i++) {
             if (servo_pins_[i] != -1) {
                 servo_[i].SetPosition(servo_target[i]);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(time));
+        return;
     }
 
-    // Penyesuaian akhir menuju target.
-    bool f = true;
-    int adjustment_count = 0;
-    while (f && adjustment_count < 10) {
-        f = false;
+    int start[SERVO_COUNT];
+    for (int i = 0; i < SERVO_COUNT; i++) {
+        start[i] = servo_[i].GetPosition();
+    }
+
+    int steps = std::max(1, time / 10);
+    for (int step = 1; step <= steps; step++) {
+        float t = static_cast<float>(step) / static_cast<float>(steps);
+        float eased_t = EaseOutCubic(t);
         for (int i = 0; i < SERVO_COUNT; i++) {
-            if (servo_pins_[i] != -1 && servo_target[i] != servo_[i].GetPosition()) {
-                f = true;
-                break;
+            if (servo_pins_[i] != -1) {
+                float interpolated =
+                    start[i] + (servo_target[i] - start[i]) * eased_t;
+                servo_[i].SetPosition(static_cast<int>(std::round(interpolated)));
             }
         }
-        if (f) {
-            for (int i = 0; i < SERVO_COUNT; i++) {
-                if (servo_pins_[i] != -1) {
-                    servo_[i].SetPosition(servo_target[i]);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-            adjustment_count++;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    for (int i = 0; i < SERVO_COUNT; i++) {
+        if (servo_pins_[i] != -1) {
+            servo_[i].SetPosition(servo_target[i]);
         }
-    };
+    }
 }
 
 void Otto::MoveSingle(int position, int servo_number) {
@@ -189,24 +184,24 @@ void Otto::Execute(int amplitude[SERVO_COUNT], int offset[SERVO_COUNT], int peri
 
     int cycles = (int)steps;
 
-    //-- Jalankan siklus penuh
+    //-- Execute complete cycles
     if (cycles >= 1)
         for (int i = 0; i < cycles; i++)
             OscillateServos(amplitude, offset, period, phase_diff);
 
-    //-- Jalankan siklus akhir yang belum penuh
+    //-- Execute the final not complete cycle
     OscillateServos(amplitude, offset, period, phase_diff, (float)steps - cycles);
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 //---------------------------------------------------------
-//-- Execute2: menggunakan sudut absolut sebagai pusat osilasi
+//-- Execute2: 使用绝对角度作为振荡中心
 //--  Parameters:
-//--    amplitude: array amplitudo untuk tiap servo
-//--    center_angle: array sudut absolut (0-180 derajat) sebagai pusat osilasi
-//--    period: periode dalam milidetik
-//--    phase_diff: array beda fase dalam radian
-//--    steps: jumlah langkah atau siklus, boleh pecahan
+//--    amplitude: 振幅数组（每个舵机的振荡幅度）
+//--    center_angle: 绝对角度数组（0-180度），作为振荡中心位置
+//--    period: 周期（毫秒）
+//--    phase_diff: 相位差数组（弧度）
+//--    steps: 步数/周期数（可为小数）
 //---------------------------------------------------------
 void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], int period,
                     double phase_diff[SERVO_COUNT], float steps = 1.0) {
@@ -214,7 +209,7 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
         SetRestState(false);
     }
 
-    // Ubah sudut absolut menjadi offset dengan rumus offset = center_angle - 90
+    // 将绝对角度转换为offset（offset = center_angle - 90）
     int offset[SERVO_COUNT];
     for (int i = 0; i < SERVO_COUNT; i++) {
         offset[i] = center_angle[i] - 90;
@@ -222,12 +217,12 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
 
     int cycles = (int)steps;
 
-    //-- Jalankan siklus penuh
+    //-- Execute complete cycles
     if (cycles >= 1)
         for (int i = 0; i < cycles; i++)
             OscillateServos(amplitude, offset, period, phase_diff);
 
-    //-- Jalankan siklus akhir yang belum penuh
+    //-- Execute the final not complete cycle
     OscillateServos(amplitude, offset, period, phase_diff, (float)steps - cycles);
     vTaskDelay(pdMS_TO_TICKS(10));
 }
@@ -237,28 +232,35 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
 ///////////////////////////////////////////////////////////////////
 void Otto::Home(bool hands_down) {
     if (is_otto_resting_ == false) {  // Go to rest position only if necessary
-        // Siapkan nilai posisi awal untuk semua servo
+        // 为所有舵机准备初始位置值
         int homes[SERVO_COUNT];
+        int max_delta = 0;
         for (int i = 0; i < SERVO_COUNT; i++) {
             if (i == LEFT_HAND || i == RIGHT_HAND) {
                 if (hands_down) {
-                    // Jika tangan perlu direset, kembalikan ke nilai bawaan
+                    // 如果需要复位手部，设置为默认值
                     if (i == LEFT_HAND) {
                         homes[i] = HAND_HOME_POSITION;
                     } else {                                  // RIGHT_HAND
-                        homes[i] = 180 - HAND_HOME_POSITION;  // Posisi cermin untuk tangan kanan
+                        homes[i] = 180 - HAND_HOME_POSITION;  // 右手镜像位置
                     }
                 } else {
-                    // Jika tangan tidak perlu direset, pertahankan posisi sekarang
+                    // 如果不需要复位手部，保持当前位置
                     homes[i] = servo_[i].GetPosition();
                 }
             } else {
-                // Servo kaki dan telapak selalu kembali ke posisi netral
+                // 腿部和脚部舵机始终复位
                 homes[i] = 90;
+            }
+
+            if (servo_pins_[i] != -1) {
+                max_delta = std::max(max_delta, std::abs(homes[i] - servo_[i].GetPosition()));
             }
         }
 
-        MoveServos(700, homes);
+        // 位移越大，归位时间越长，避免末端“急刹车”感
+        int home_time = std::clamp(500 + max_delta * 9, 500, 1700);
+        MoveServos(home_time, homes);
         is_otto_resting_ = true;
     }
 
@@ -274,11 +276,11 @@ void Otto::SetRestState(bool state) {
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- RANGKAIAN GERAK SIAP PAKAI ---------------------------------//
+//-- PREDETERMINED MOTION SEQUENCES -----------------------------//
 ///////////////////////////////////////////////////////////////////
-//-- Gerakan Otto: Melompat
-//--  Parameter:
-//--    steps: Jumlah langkah
+//-- Otto movement: Jump
+//--  Parameters:
+//--    steps: Number of steps
 //--    T: Period
 //---------------------------------------------------------
 void Otto::Jump(float steps, int period) {
@@ -289,114 +291,114 @@ void Otto::Jump(float steps, int period) {
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Berjalan (maju atau mundur)
-//--  Parameter:
-//--    * steps: Jumlah langkah
-//--    * T : Periode
-//--    * Dir: Arah: FORWARD / BACKWARD
-//--    * amount: amplitudo ayunan tangan, 0 berarti tanpa ayunan
+//-- Otto gait: Walking  (forward or backward)
+//--  Parameters:
+//--    * steps:  Number of steps
+//--    * T : Period
+//--    * Dir: Direction: FORWARD / BACKWARD
+//--    * amount: 手部摆动幅度, 0表示不摆动
 //---------------------------------------------------------
 void Otto::Walk(float steps, int period, int dir, int amount) {
-    //-- Parameter osilator untuk berjalan
-    //-- Servo pinggul bergerak sefase
-    //-- Servo telapak kaki bergerak sefase
-    //-- Pinggul dan telapak kaki berselisih fase 90 derajat
-    //--      -90 : Berjalan maju
-    //--       90 : Berjalan mundur
-    //-- Servo telapak kaki juga memakai offset yang sama agar sedikit berjinjit
+    //-- Oscillator parameters for walking
+    //-- Hip sevos are in phase
+    //-- Feet servos are in phase
+    //-- Hip and feet are 90 degrees out of phase
+    //--      -90 : Walk forward
+    //--       90 : Walk backward
+    //-- Feet servos also have the same offset (for tiptoe a little bit)
     int A[SERVO_COUNT] = {30, 30, 30, 30, 0, 0};
     int O[SERVO_COUNT] = {0, 0, 5, -5, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(dir * -90), DEG2RAD(dir * -90), 0, 0};
 
-    // Jika amount > 0 dan servo tangan tersedia, atur amplitudo serta fasenya
+    // 如果amount>0且有手部舵机，设置手部振幅和相位
     if (amount > 0 && has_hands_) {
-        // Amplitudo lengan mengikuti nilai amount yang diberikan
+        // 手臂振幅使用传入的amount参数
         A[LEFT_HAND] = amount;
         A[RIGHT_HAND] = amount;
 
-        // Tangan kiri sefase dengan kaki kanan, tangan kanan sefase dengan kaki kiri
-        phase_diff[LEFT_HAND] = phase_diff[RIGHT_LEG];  // Tangan kiri sefase dengan kaki kanan
-        phase_diff[RIGHT_HAND] = phase_diff[LEFT_LEG];  // Tangan kanan sefase dengan kaki kiri
+        // 左手与右腿同相，右手与左腿同相，使得机器人走路时手臂自然摆动
+        phase_diff[LEFT_HAND] = phase_diff[RIGHT_LEG];  // 左手与右腿同相
+        phase_diff[RIGHT_HAND] = phase_diff[LEFT_LEG];  // 右手与左腿同相
     } else {
         A[LEFT_HAND] = 0;
         A[RIGHT_HAND] = 0;
     }
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Berputar (kiri atau kanan)
-//--  Parameter:
-//--   * Steps: Jumlah langkah
-//--   * T: Periode
-//--   * Dir: Arah: LEFT / RIGHT
-//--   * amount: amplitudo ayunan tangan, 0 berarti tanpa ayunan
+//-- Otto gait: Turning (left or right)
+//--  Parameters:
+//--   * Steps: Number of steps
+//--   * T: Period
+//--   * Dir: Direction: LEFT / RIGHT
+//--   * amount: 手部摆动幅度, 0表示不摆动
 //---------------------------------------------------------
 void Otto::Turn(float steps, int period, int dir, int amount) {
-    //-- Koordinasinya sama seperti saat berjalan
-    //-- Amplitudo osilator pada pinggul tidak sama
-    //-- Saat amplitudo servo pinggul kanan lebih besar,
-    //-- langkah kaki kanan menjadi lebih panjang daripada kiri,
-    //-- sehingga robot membentuk lengkungan ke kiri
+    //-- Same coordination than for walking (see Otto::walk)
+    //-- The Amplitudes of the hip's oscillators are not igual
+    //-- When the right hip servo amplitude is higher, the steps taken by
+    //--   the right leg are bigger than the left. So, the robot describes an
+    //--   left arc
     int A[SERVO_COUNT] = {30, 30, 30, 30, 0, 0};
     int O[SERVO_COUNT] = {0, 0, 5, -5, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(-90), DEG2RAD(-90), 0, 0};
 
     if (dir == LEFT) {
-        A[0] = 30;  //-- Servo pinggul kiri
-        A[1] = 0;   //-- Servo pinggul kanan
+        A[0] = 30;  //-- Left hip servo
+        A[1] = 0;   //-- Right hip servo
     } else {
         A[0] = 0;
         A[1] = 30;
     }
 
-    // Jika amount > 0 dan servo tangan tersedia, atur amplitudo serta fasenya
+    // 如果amount>0且有手部舵机，设置手部振幅和相位
     if (amount > 0 && has_hands_) {
-        // Amplitudo lengan mengikuti nilai amount yang diberikan
+        // 手臂振幅使用传入的amount参数
         A[LEFT_HAND] = amount;
         A[RIGHT_HAND] = amount;
 
-        // Saat berbelok, lengan dibuat sefase dengan kaki di sisi yang sama
-        phase_diff[LEFT_HAND] = phase_diff[LEFT_LEG];    // Tangan kiri sefase dengan kaki kiri
-        phase_diff[RIGHT_HAND] = phase_diff[RIGHT_LEG];  // Tangan kanan sefase dengan kaki kanan
+        // 转向时手臂摆动相位：左手与左腿同相，右手与右腿同相，增强转向效果
+        phase_diff[LEFT_HAND] = phase_diff[LEFT_LEG];    // 左手与左腿同相
+        phase_diff[RIGHT_HAND] = phase_diff[RIGHT_LEG];  // 右手与右腿同相
     } else {
         A[LEFT_HAND] = 0;
         A[RIGHT_HAND] = 0;
     }
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Menekuk ke samping
-//--  Parameter:
-//--    steps: Jumlah tekukan
-//--    T: Periode satu tekukan
-//--    dir: RIGHT = tekuk kanan, LEFT = tekuk kiri
+//-- Otto gait: Lateral bend
+//--  Parameters:
+//--    steps: Number of bends
+//--    T: Period of one bend
+//--    dir: RIGHT=Right bend LEFT=Left bend
 //---------------------------------------------------------
 void Otto::Bend(int steps, int period, int dir) {
-    // Parameter untuk seluruh gerakan. Bawaan: tekuk ke kiri
+    // Parameters of all the movements. Default: Left bend
     int bend1[SERVO_COUNT] = {90, 90, 62, 35, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     int bend2[SERVO_COUNT] = {90, 90, 62, 105, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     int homes[SERVO_COUNT] = {90, 90, 90, 90, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
 
-    // Durasi satu tekukan dibatasi agar gerakan tidak terlalu cepat.
+    // Time of one bend, constrained in order to avoid movements too fast.
     // T=max(T, 600);
-    // Ubah parameter jika arah yang dipilih adalah kanan
+    // Changes in the parameters if right direction is chosen
     if (dir == -1) {
         bend1[2] = 180 - 35;
-        bend1[3] = 180 - 60;  // Bukan 65, karena Otto tidak seimbang
+        bend1[3] = 180 - 60;  // Not 65. Otto is unbalanced
         bend2[2] = 180 - 105;
         bend2[3] = 180 - 60;
     }
 
-    // Durasi gerakan tekuk. Dibuat tetap agar robot tidak mudah jatuh
+    // Time of the bend movement. Fixed parameter to avoid falls
     int T2 = 800;
 
-    // Jalankan gerakan menekuk
+    // Bend movement
     for (int i = 0; i < steps; i++) {
         MoveServos(T2 / 2, bend1);
         MoveServos(T2 / 2, bend2);
@@ -406,23 +408,23 @@ void Otto::Bend(int steps, int period, int dir) {
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Mengayun satu kaki
-//--  Parameter:
-//--    steps: Jumlah ayunan
-//--    T: Periode satu ayunan
-//--    dir: RIGHT = kaki kanan, LEFT = kaki kiri
+//-- Otto gait: Shake a leg
+//--  Parameters:
+//--    steps: Number of shakes
+//--    T: Period of one shake
+//--    dir: RIGHT=Right leg LEFT=Left leg
 //---------------------------------------------------------
 void Otto::ShakeLeg(int steps, int period, int dir) {
-    // Variabel ini mengatur jumlah ayunan kaki
+    // This variable change the amount of shakes
     int numberLegMoves = 2;
 
-    // Parameter untuk seluruh gerakan. Bawaan: kaki kanan
+    // Parameters of all the movements. Default: Right leg
     int shake_leg1[SERVO_COUNT] = {90, 90, 58, 35, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     int shake_leg2[SERVO_COUNT] = {90, 90, 58, 120, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     int shake_leg3[SERVO_COUNT] = {90, 90, 58, 60, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     int homes[SERVO_COUNT] = {90, 90, 90, 90, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
 
-    // Ubah parameter jika kaki kiri yang dipilih
+    // Changes in the parameters if left leg is chosen
     if (dir == LEFT) {
         shake_leg1[2] = 180 - 35;
         shake_leg1[3] = 180 - 58;
@@ -432,30 +434,30 @@ void Otto::ShakeLeg(int steps, int period, int dir) {
         shake_leg3[3] = 180 - 58;
     }
 
-    // Durasi gerakan tekuk. Dibuat tetap agar robot tidak mudah jatuh
+    // Time of the bend movement. Fixed parameter to avoid falls
     int T2 = 1000;
-    // Durasi satu ayunan dibatasi agar gerakan tidak terlalu cepat.
+    // Time of one shake, constrained in order to avoid movements too fast.
     period = period - T2;
     period = std::max(period, 200 * numberLegMoves);
 
     for (int j = 0; j < steps; j++) {
-        // Gerakan menekuk
+        // Bend movement
         MoveServos(T2 / 2, shake_leg1);
         MoveServos(T2 / 2, shake_leg2);
 
-        // Gerakan mengayun
+        // Shake movement
         for (int i = 0; i < numberLegMoves; i++) {
             MoveServos(period / (2 * numberLegMoves), shake_leg3);
             MoveServos(period / (2 * numberLegMoves), shake_leg2);
         }
-        MoveServos(500, homes);  // Kembali ke posisi home
+        MoveServos(500, homes);  // Return to home position
     }
 
     vTaskDelay(pdMS_TO_TICKS(period));
 }
 
 //---------------------------------------------------------
-//-- Gerakan Otto: duduk
+//-- Otto movement: Sit (坐下)
 //---------------------------------------------------------
 void Otto::Sit() {
     int target[SERVO_COUNT] = {120, 60, 0, 180, 45, 135};
@@ -463,120 +465,125 @@ void Otto::Sit() {
 }
 
 //---------------------------------------------------------
-//-- Gerakan Otto: Naik turun
-//--  Parameter:
-//--    * steps: Jumlah lompatan
-//--    * T: Periode
+//-- Otto movement: up & down
+//--  Parameters:
+//--    * steps: Number of jumps
+//--    * T: Period
 //--    * h: Jump height: SMALL / MEDIUM / BIG
 //--              (or a number in degrees 0 - 90)
 //---------------------------------------------------------
 void Otto::UpDown(float steps, int period, int height) {
-    //-- Kedua telapak kaki berbeda fase 180 derajat
-    //-- Amplitudo dan offset telapak kaki sama
-    //-- Fase awal telapak kaki kanan adalah -90 agar mulai dari posisi ekstrem
+    //-- Both feet are 180 degrees out of phase
+    //-- Feet amplitude and offset are the same
+    //-- Initial phase for the right foot is -90, so that it starts
+    //--   in one extreme position (not in the middle)
     int A[SERVO_COUNT] = {0, 0, height, height, 0, 0};
     int O[SERVO_COUNT] = {0, 0, height, -height, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(-90), DEG2RAD(90), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Gerakan Otto: Mengayun ke kiri dan kanan
-//--  Parameter:
-//--     steps: Jumlah langkah
-//--     T : Periode
-//--     h : Besar ayunan (sekitar 0 sampai 50)
+//-- Otto movement: swinging side to side
+//--  Parameters:
+//--     steps: Number of steps
+//--     T : Period
+//--     h : Amount of swing (from 0 to 50 aprox)
 //---------------------------------------------------------
 void Otto::Swing(float steps, int period, int height) {
-    //-- Kedua telapak kaki sefase, dengan offset setengah amplitudo
-    //-- Ini membuat robot mengayun ke kiri dan kanan
+    //-- Both feets are in phase. The offset is half the amplitude
+    //-- It causes the robot to swing from side to side
     int A[SERVO_COUNT] = {0, 0, height, height, 0, 0};
     int O[SERVO_COUNT] = {
         0, 0, height / 2, -height / 2, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(0), DEG2RAD(0), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Gerakan Otto: Mengayun tanpa tumit menyentuh lantai
-//--  Parameter:
-//--     steps: Jumlah langkah
-//--     T : Periode
-//--     h : Besar ayunan (sekitar 0 sampai 50)
+//-- Otto movement: swinging side to side without touching the floor with the heel
+//--  Parameters:
+//--     steps: Number of steps
+//--     T : Period
+//--     h : Amount of swing (from 0 to 50 aprox)
 //---------------------------------------------------------
 void Otto::TiptoeSwing(float steps, int period, int height) {
-    //-- Kedua telapak kaki sefase. Offset tidak dibuat setengah amplitudo agar robot berjinjit
-    //-- Ini membuat robot mengayun ke kiri dan kanan
+    //-- Both feets are in phase. The offset is not half the amplitude in order to tiptoe
+    //-- It causes the robot to swing from side to side
     int A[SERVO_COUNT] = {0, 0, height, height, 0, 0};
     int O[SERVO_COUNT] = {0, 0, height, -height, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, 0, 0, 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Getaran cepat
-//--  Parameter:
-//--    steps: Jumlah getaran
-//--    T: Periode satu getaran
-//--    h: Tinggi (nilai 5 - 25)
+//-- Otto gait: Jitter
+//--  Parameters:
+//--    steps: Number of jitters
+//--    T: Period of one jitter
+//--    h: height (Values between 5 - 25)
 //---------------------------------------------------------
 void Otto::Jitter(float steps, int period, int height) {
-    //-- Kedua telapak kaki berbeda fase 180 derajat
-    //-- Amplitudo dan offset telapak kaki sama
-    //-- Fase awal telapak kaki kanan adalah -90 agar mulai dari posisi ekstrem
-    //-- Nilai h dibatasi agar telapak kaki tidak saling bertabrakan
+    //-- Both feet are 180 degrees out of phase
+    //-- Feet amplitude and offset are the same
+    //-- Initial phase for the right foot is -90, so that it starts
+    //--   in one extreme position (not in the middle)
+    //-- h is constrained to avoid hit the feets
     height = std::min(25, height);
     int A[SERVO_COUNT] = {height, height, 0, 0, 0, 0};
     int O[SERVO_COUNT] = {0, 0, 0, 0, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {DEG2RAD(-90), DEG2RAD(90), 0, 0, 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Naik sambil berputar
-//--  Parameter:
-//--    steps: Jumlah tekukan
-//--    T: Periode satu tekukan
-//--    h: Tinggi (nilai 5 - 15)
+//-- Otto gait: Ascending & turn (Jitter while up&down)
+//--  Parameters:
+//--    steps: Number of bends
+//--    T: Period of one bend
+//--    h: height (Values between 5 - 15)
 //---------------------------------------------------------
 void Otto::AscendingTurn(float steps, int period, int height) {
-    //-- Kedua kaki dan telapak berbeda fase 180 derajat
-    //-- Fase awal telapak kaki kanan adalah -90 agar mulai dari posisi ekstrem
-    //-- Nilai h dibatasi agar telapak kaki tidak saling bertabrakan
+    //-- Both feet and legs are 180 degrees out of phase
+    //-- Initial phase for the right foot is -90, so that it starts
+    //--   in one extreme position (not in the middle)
+    //-- h is constrained to avoid hit the feets
     height = std::min(13, height);
     int A[SERVO_COUNT] = {height, height, height, height, 0, 0};
     int O[SERVO_COUNT] = {
         0, 0, height + 4, -height + 4, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {DEG2RAD(-90), DEG2RAD(90), DEG2RAD(-90), DEG2RAD(90), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Moonwalker
-//--  Parameter:
-//--    Steps: Jumlah langkah
-//--    T: Periode
-//--    h: Tinggi. Nilai umum antara 15 dan 40
-//--    dir: Arah: LEFT / RIGHT
+//-- Otto gait: Moonwalker. Otto moves like Michael Jackson
+//--  Parameters:
+//--    Steps: Number of steps
+//--    T: Period
+//--    h: Height. Typical valures between 15 and 40
+//--    dir: Direction: LEFT / RIGHT
 //---------------------------------------------------------
 void Otto::Moonwalker(float steps, int period, int height, int dir) {
-    //-- Gerakan ini mirip dengan robot ulat: gelombang berjalan dari satu sisi ke sisi lain
-    //-- Dua telapak kaki Otto menjadi konfigurasi minimal
-    //-- Dua servo dapat bergerak seperti ulat bila berbeda fase 120 derajat
-    //-- Pada Otto, kedua telapak kaki dicerminkan sehingga menjadi:
-    //--    180 - 120 = 60 derajat. Selisih fase aktualnya adalah 60 derajat
-    //-- Kedua amplitudo dibuat sama. Offset bernilai setengah amplitudo ditambah sedikit
-    //-   tambahan offset agar robot sedikit berjinjit
+    //-- This motion is similar to that of the caterpillar robots: A travelling
+    //-- wave moving from one side to another
+    //-- The two Otto's feet are equivalent to a minimal configuration. It is known
+    //-- that 2 servos can move like a worm if they are 120 degrees out of phase
+    //-- In the example of Otto, the two feet are mirrored so that we have:
+    //--    180 - 120 = 60 degrees. The actual phase difference given to the oscillators
+    //--  is 60 degrees.
+    //--  Both amplitudes are equal. The offset is half the amplitud plus a little bit of
+    //-   offset so that the robot tiptoe lightly
 
     int A[SERVO_COUNT] = {0, 0, height, height, 0, 0};
     int O[SERVO_COUNT] = {
@@ -584,17 +591,17 @@ void Otto::Moonwalker(float steps, int period, int height, int dir) {
     int phi = -dir * 90;
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(phi), DEG2RAD(-60 * dir + phi), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //----------------------------------------------------------
-//-- Langkah Otto: Crusaito, gabungan moonwalker dan berjalan
-//--   Parameter:
-//--     steps: Jumlah langkah
-//--     T: Periode
-//--     h: Tinggi (nilai 20 - 50)
-//--     dir:  Arah: LEFT / RIGHT
+//-- Otto gait: Crusaito. A mixture between moonwalker and walk
+//--   Parameters:
+//--     steps: Number of steps
+//--     T: Period
+//--     h: height (Values between 20 - 50)
+//--     dir:  Direction: LEFT / RIGHT
 //-----------------------------------------------------------
 void Otto::Crusaito(float steps, int period, int height, int dir) {
     int A[SERVO_COUNT] = {25, 25, height, height, 0, 0};
@@ -602,17 +609,17 @@ void Otto::Crusaito(float steps, int period, int height, int dir) {
         0, 0, height / 2 + 4, -height / 2 - 4, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {90, 90, DEG2RAD(0), DEG2RAD(-60 * dir), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: Mengepak
-//--  Parameter:
-//--    steps: Jumlah langkah
-//--    T: Periode
-//--    h: Tinggi (nilai 10 - 30)
-//--    dir: Arah: FOREWARD, BACKWARD
+//-- Otto gait: Flapping
+//--  Parameters:
+//--    steps: Number of steps
+//--    T: Period
+//--    h: height (Values between 10 - 30)
+//--    dir: direction: FOREWARD, BACKWARD
 //---------------------------------------------------------
 void Otto::Flapping(float steps, int period, int height, int dir) {
     int A[SERVO_COUNT] = {12, 12, height, height, 0, 0};
@@ -621,16 +628,16 @@ void Otto::Flapping(float steps, int period, int height, int dir) {
     double phase_diff[SERVO_COUNT] = {
         DEG2RAD(0), DEG2RAD(180), DEG2RAD(-90 * dir), DEG2RAD(90 * dir), 0, 0};
 
-    //-- Jalankan osilasi servo
+    //-- Let's oscillate the servos!
     Execute(A, O, period, phase_diff, steps);
 }
 
 //---------------------------------------------------------
-//-- Langkah Otto: WhirlwindLeg
-//--   Parameter:
-//--     steps: Jumlah langkah
-//--     period: Periode, disarankan 100-800 milidetik
-//--     amplitude: Amplitudo (nilai 20 - 40)
+//-- Otto gait: WhirlwindLeg (旋风腿)
+//--   Parameters:
+//--     steps: Number of steps
+//--     period: Period (建议100-800毫秒)
+//--     amplitude: amplitude (Values between 20 - 40)
 //---------------------------------------------------------
 void Otto::WhirlwindLeg(float steps, int period, int amplitude) {
 
@@ -649,10 +656,10 @@ void Otto::WhirlwindLeg(float steps, int period, int amplitude) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: angkat tangan
+//-- 手部动作: 举手
 //--  Parameters:
-//--    period: durasi gerakan
-//--    dir: arah 1=tangan kiri, -1=tangan kanan, 0=keduanya
+//--    period: 动作时间
+//--    dir: 方向 1=左手, -1=右手, 0=双手
 //---------------------------------------------------------
 void Otto::HandsUp(int period, int dir) {
     if (!has_hands_) {
@@ -676,10 +683,10 @@ void Otto::HandsUp(int period, int dir) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: turunkan kedua tangan
+//-- 手部动作: 双手放下
 //--  Parameters:
-//--    period: durasi gerakan
-//--    dir: arah 1=tangan kiri, -1=tangan kanan, 0=keduanya
+//--    period: 动作时间
+//--    dir: 方向 1=左手, -1=右手, 0=双手
 //---------------------------------------------------------
 void Otto::HandsDown(int period, int dir) {
     if (!has_hands_) {
@@ -698,9 +705,9 @@ void Otto::HandsDown(int period, int dir) {
 }
 
 //---------------------------------------------------------
-//--  Aksi tangan: melambaikan tangan
+//--  手部动作: 挥手
 //--  Parameters:
-//--  dir: arah LEFT/RIGHT/BOTH
+//--  dir: 方向 LEFT/RIGHT/BOTH
 //---------------------------------------------------------
 void Otto::HandWave(int dir) {
     if (!has_hands_) {
@@ -728,11 +735,11 @@ void Otto::HandWave(int dir) {
 
 
 //---------------------------------------------------------
-//-- Aksi tangan: kincir tangan
+//-- 手部动作: 大风车
 //--  Parameters:
-//--    steps: jumlah gerakan
-//--    period: periode gerakan dalam milidetik
-//--    amplitude: amplitudo osilasi dalam derajat
+//--    steps: 动作次数
+//--    period: 动作周期（毫秒）
+//--    amplitude: 振荡幅度（度）
 //---------------------------------------------------------
 void Otto::Windmill(float steps, int period, int amplitude) {
     if (!has_hands_) {
@@ -746,11 +753,11 @@ void Otto::Windmill(float steps, int period, int amplitude) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: lepas landas
+//-- 手部动作: 起飞
 //--  Parameters:
-//--    steps: jumlah gerakan
-//--    period: periode gerakan dalam milidetik, makin kecil makin cepat
-//--    amplitude: amplitudo osilasi dalam derajat
+//--    steps: 动作次数
+//--    period: 动作周期（毫秒），数值越小速度越快
+//--    amplitude: 振荡幅度（度）
 //---------------------------------------------------------
 void Otto::Takeoff(float steps, int period, int amplitude) {
     if (!has_hands_) {
@@ -766,11 +773,11 @@ void Otto::Takeoff(float steps, int period, int amplitude) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: gerakan kebugaran
+//-- 手部动作: 健身
 //--  Parameters:
-//--    steps: jumlah gerakan
-//--    period: periode gerakan dalam milidetik
-//--    amplitude: amplitudo osilasi dalam derajat
+//--    steps: 动作次数
+//--    period: 动作周期（毫秒）
+//--    amplitude: 振荡幅度（度）
 //---------------------------------------------------------
 void Otto::Fitness(float steps, int period, int amplitude) {
     if (!has_hands_) {
@@ -790,10 +797,10 @@ void Otto::Fitness(float steps, int period, int amplitude) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: menyapa
+//-- 手部动作: 打招呼
 //--  Parameters:
-//--    dir: arah LEFT=tangan kiri, RIGHT=tangan kanan
-//--    steps: jumlah gerakan
+//--    dir: 方向 LEFT=左手, RIGHT=右手
+//--    steps: 动作次数
 //---------------------------------------------------------
 void Otto::Greeting(int dir, float steps) {
     if (!has_hands_) {
@@ -819,10 +826,10 @@ void Otto::Greeting(int dir, float steps) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: malu-malu
+//-- 手部动作: 害羞
 //--  Parameters:
-//--    dir: arah LEFT=tangan kiri, RIGHT=tangan kanan
-//--    steps: jumlah gerakan
+//--    dir: 方向 LEFT=左手, RIGHT=右手
+//--    steps: 动作次数
 //---------------------------------------------------------
 void Otto::Shy(int dir, float steps) {
     if (!has_hands_) {
@@ -848,7 +855,7 @@ void Otto::Shy(int dir, float steps) {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: senam
+//-- 手部动作: 广播体操
 //---------------------------------------------------------
 void Otto::RadioCalisthenics() {
     if (!has_hands_) {
@@ -880,7 +887,7 @@ void Otto::RadioCalisthenics() {
 }
 
 //---------------------------------------------------------
-//-- Aksi tangan: putaran lingkaran
+//-- 手部动作: 爱的魔力转圈圈
 //---------------------------------------------------------
 void Otto::MagicCircle() {
     if (!has_hands_) {
@@ -895,50 +902,50 @@ void Otto::MagicCircle() {
 }
 
 //---------------------------------------------------------
-//-- Gerakan demo: rangkai beberapa aksi menjadi satu pertunjukan
+//-- 展示动作：串联多个动作展示
 //---------------------------------------------------------
 void Otto::Showcase() {
     if (GetRestState() == true) {
         SetRestState(false);
     }
 
-    // 1. Berjalan maju 3 langkah
+    // 1. 往前走3步
     Walk(3, 1000, FORWARD, 50);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    // 2. Melambaikan tangan
+    // 2. 挥挥手
     if (has_hands_) {
         HandWave(LEFT);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    // 3. Menari dengan gerakan senam
+    // 3. 跳舞（使用广播体操）
     if (has_hands_) {
         RadioCalisthenics();
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    // 4. Melakukan moonwalk
+    // 4. 太空步
     Moonwalker(3, 900, 25, LEFT);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    // 5. Bergoyang
+    // 5. 摇摆
     Swing(3, 1000, 30);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    // 6. Gerakan lepas landas
+    // 6. 起飞
     if (has_hands_) {
         Takeoff(5, 300, 40);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    // 7. Gerakan kebugaran
+    // 7. 健身
     if (has_hands_) {
         Fitness(5, 1000, 25);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    // 8. Berjalan mundur 3 langkah
+    // 8. 往后走3步
     Walk(3, 1000, BACKWARD, 50);
 }
 

@@ -1,6 +1,6 @@
 #include "emote_display.h"
 
-// Header C++ standar
+// Standard C++ headers
 #include <cstring>
 #include <memory>
 #include <unordered_map>
@@ -8,21 +8,21 @@
 #include <algorithm>
 #include <cinttypes>
 
-// Header C standar
+// Standard C headers
 #include <sys/time.h>
 #include <time.h>
 
-// Header ESP-IDF
+// ESP-IDF headers
 #include <esp_log.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_timer.h>
 #include <lvgl.h>
 
-// Header FreeRTOS
+// FreeRTOS headers
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-// Header proyek
+// Project headers
 #include "assets/lang_config.h"
 #include "assets.h"
 #include "board.h"
@@ -33,19 +33,19 @@
 namespace emote {
 
 // ============================================================================
-// Konstanta dan definisi tipe
+// Constants and Type Definitions
 // ============================================================================
 
 static const char* TAG = "EmoteDisplay";
 
 // ============================================================================
-// Deklarasi awal
+// Forward Declarations
 // ============================================================================
 
 class EmoteDisplay;
 
 // ============================================================================
-// Fungsi bantu
+// Helper Functions
 // ============================================================================
 
 static bool OnFlushIoReady(const esp_lcd_panel_io_handle_t panel_io,
@@ -58,7 +58,7 @@ static bool OnFlushIoReady(const esp_lcd_panel_io_handle_t panel_io,
     return true;
 }
 
-// Fungsi panggil balik pengosongan layar untuk emote
+// Flush callback for emote
 static void OnFlushCallback(int x_start, int y_start, int x_end, int y_end, const void* data, emote_handle_t handle)
 {
     esp_lcd_panel_handle_t panel = (esp_lcd_panel_handle_t)emote_get_user_data(handle);
@@ -68,7 +68,7 @@ static void OnFlushCallback(int x_start, int y_start, int x_end, int y_end, cons
 }
 
 // ============================================================================
-// Fungsi inisialisasi grafis
+// Graphics Initialization Functions
 // ============================================================================
 
 static emote_handle_t InitializeEmote(const esp_lcd_panel_handle_t panel, const int width, const int height)
@@ -112,7 +112,7 @@ static emote_handle_t InitializeEmote(const esp_lcd_panel_handle_t panel, const 
 }
 
 // ============================================================================
-// Implementasi kelas tampilan emote
+// EmoteDisplay Class Implementation
 // ============================================================================
 
 EmoteDisplay::EmoteDisplay(const esp_lcd_panel_handle_t panel, const esp_lcd_panel_io_handle_t panel_io,

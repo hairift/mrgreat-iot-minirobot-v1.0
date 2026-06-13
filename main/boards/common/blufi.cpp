@@ -12,7 +12,7 @@
 #include "freertos/task.h"
 #include "wifi_manager.h"
 
-#define BLUFI_DEVICE_NAME "MrGreat-Blufi"
+#define BLUFI_DEVICE_NAME "Xiaozhi-Blufi"
 
 #ifdef CONFIG_BT_BLUEDROID_ENABLED
 #include "esp_bt_device.h"
@@ -108,10 +108,10 @@ esp_err_t Blufi::init() {
     m_provisioned = false;
     m_deinited = false;
 
-    // Mulai pemindaian WiFi lebih awal agar hasilnya siap saat pengguna terhubung
+    // Start WiFi scan early to have results ready when user connects
     auto& wifi_manager = WifiManager::GetInstance();
     if (!wifi_manager.IsInitialized() || !wifi_manager.IsConfigMode()) {
-        // Mulai pemindaian sekarang juga
+        // start scan immediately
         start_wifi_scan();
     } else {
         ESP_LOGE(BLUFI_TAG,
@@ -231,7 +231,7 @@ esp_err_t Blufi::_host_and_cb_init() {
 #endif /* CONFIG_BT_BLUEDROID_ENABLED */
 
 #ifdef CONFIG_BT_NIMBLE_ENABLED
-// Fungsi pengganti sementara untuk fitur penyimpanan khusus NimBLE
+// Stubs for NimBLE specific store functionality
 void ble_store_config_init();
 
 void Blufi::_nimble_on_reset(int reason) {
@@ -298,7 +298,7 @@ esp_err_t Blufi::_host_and_cb_init() {
         return ret;
     }
 
-    // Inisialisasi host harus dipanggil setelah fungsi panggil balik NimBLE didaftarkan
+    // Host init must be called after registering callbacks for NimBLE
     ret = _host_init();
     if (ret) {
         ESP_LOGE(BLUFI_TAG, "%s initialise host failed: %s", __func__, esp_err_to_name(ret));
@@ -533,70 +533,78 @@ int Blufi::_get_softap_conn_num() {
     return 0;
 }
 
-void Blufi::start_wifi_scan() {
+bool Blufi::start_wifi_scan() {
     ESP_LOGI(BLUFI_TAG, "Starting dedicated WiFi scan");
 
-    // Periksa apakah pemindaian masih berjalan
+    // Already running: caller can rely on the in-flight scan and await its done event.
     if (m_scan_in_progress) {
         ESP_LOGW(BLUFI_TAG, "Scan already in progress, skipping");
-        return;
+        return true;
     }
 
     m_scan_in_progress = true;
 
-    // Ambil mode WiFi saat ini
+    // Get current WiFi mode
     wifi_mode_t current_mode;
     esp_err_t err = esp_wifi_get_mode(&current_mode);
 
     if (current_mode == WIFI_MODE_AP) {
-        // Jika sedang di mode AP, pindah sementara agar pemindaian bisa dilakukan
+        // If in AP mode, temporarily switch to APSTA to allow scanning
         ESP_LOGI(BLUFI_TAG, "WiFi in AP mode");
         err = esp_wifi_set_mode(WIFI_MODE_STA);
         if (err != ESP_OK) {
             ESP_LOGE(BLUFI_TAG, "Failed to set WiFi mode to STA: %s", esp_err_to_name(err));
             m_scan_in_progress = false;
-            return;
+            return false;
         }
-        // WiFi perlu dihidupkan ulang agar perubahan mode berlaku
+        // Need to restart WiFi for mode change to take effect
         err = esp_wifi_start();
         if (err != ESP_OK) {
             ESP_LOGE(BLUFI_TAG, "Failed to start WiFi after mode switch: %s", esp_err_to_name(err));
             m_scan_in_progress = false;
-            return;
+            return false;
         }
-        // Daftarkan penangan kejadian untuk pemindaian
+        // Register scan event handler
         esp_event_handler_instance_t scan_event_instance;
         esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                             &Blufi::_wifi_scan_event_handler, this,
                                             &scan_event_instance);
 
-        // Mulai pemindaian
+        // Start scan
         err = esp_wifi_scan_start(NULL, false);
         if (err != ESP_OK) {
             ESP_LOGE(BLUFI_TAG, "Failed to start WiFi scan: %s", esp_err_to_name(err));
             m_scan_in_progress = false;
-            return;
+            return false;
         }
-    } else if (current_mode == WIFI_MODE_STA) {
-        // Mulai pemindaian
+    } else if (current_mode == WIFI_MODE_STA || current_mode == WIFI_MODE_APSTA) {
+        // Ensure WiFi driver is started (may have been stopped during config mode transition)
+        err = esp_wifi_start();
+        if (err != ESP_OK && err != ESP_ERR_WIFI_STATE) {
+            ESP_LOGE(BLUFI_TAG, "Failed to start WiFi before scan: %s", esp_err_to_name(err));
+            m_scan_in_progress = false;
+            return false;
+        }
         err = esp_wifi_scan_start(NULL, false);
         if (err != ESP_OK) {
             ESP_LOGE(BLUFI_TAG, "Failed to start WiFi scan: %s", esp_err_to_name(err));
             m_scan_in_progress = false;
-            return;
+            return false;
         }
     } else {
         ESP_LOGE(BLUFI_TAG, "Unexpected WiFi mode: %d", current_mode);
         m_scan_in_progress = false;
-        return;
+        return false;
     }
 
     ESP_LOGI(BLUFI_TAG, "WiFi scan started");
+    return true;
 }
 
 void Blufi::_send_wifi_list() {
     if (m_ap_records.empty()) {
-        ESP_LOGW(BLUFI_TAG, "No AP records available to send");
+        ESP_LOGW(BLUFI_TAG, "No AP records available, sending WiFi scan fail");
+        esp_blufi_send_error_info(ESP_BLUFI_WIFI_SCAN_FAIL);
         return;
     }
 
@@ -631,7 +639,7 @@ void Blufi::_wifi_scan_event_handler(void* arg, esp_event_base_t event_base, int
             ESP_LOGW(BLUFI_TAG, "No APs found");
             self->m_ap_records.clear();
         } else {
-            if (static_cast<Blufi*>(arg)->m_scan_should_save_ssid == true) {
+            if (self->m_scan_should_save_ssid) {
                 self->m_ap_records.resize(ap_num);
                 esp_wifi_scan_get_ap_records(&ap_num, self->m_ap_records.data());
 
@@ -643,6 +651,11 @@ void Blufi::_wifi_scan_event_handler(void* arg, esp_event_base_t event_base, int
             }
         }
         self->m_scan_in_progress = false;
+        // Dispatch a pending GET_WIFI_LIST response if one is waiting on this scan.
+        if (self->m_send_list_after_scan) {
+            self->m_send_list_after_scan = false;
+            self->_send_wifi_list();
+        }
     }
 }
 
@@ -865,10 +878,29 @@ void Blufi::_handle_event(esp_blufi_cb_event_t event, esp_blufi_cb_param_t* para
             break;
         case ESP_BLUFI_EVENT_GET_WIFI_LIST: {
             ESP_LOGI(BLUFI_TAG, "BLUFI get wifi list");
-            while (m_scan_in_progress) {
-                vTaskDelay(pdMS_TO_TICKS(500));
+            // Case 1: a scan is already in flight (init scan or refresh scan started by
+            // the previous _send_wifi_list()). Defer the response to its done handler
+            // instead of blocking the BluFi task.
+            if (m_scan_in_progress) {
+                m_send_list_after_scan = true;
+                break;
             }
-            _send_wifi_list();
+            // Case 2: cache is populated. Respond immediately; _send_wifi_list() also
+            // kicks off an async refresh scan to keep the cache fresh.
+            if (!m_ap_records.empty()) {
+                _send_wifi_list();
+                break;
+            }
+            // Case 3: no cache (e.g. driver was stopped during a config-mode transition,
+            // init scan never completed). Trigger a real scan and dispatch from the
+            // scan-done handler. If the scan cannot start, return an error frame so the
+            // App exits its wait state instead of timing out.
+            m_scan_should_save_ssid = true;
+            m_send_list_after_scan = true;
+            if (!start_wifi_scan()) {
+                m_send_list_after_scan = false;
+                esp_blufi_send_error_info(ESP_BLUFI_WIFI_SCAN_FAIL);
+            }
             break;
         }
         default:

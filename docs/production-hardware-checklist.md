@@ -1,57 +1,66 @@
 # Daftar Validasi Perangkat Keras Produksi
 
-Dokumen ini dipakai sebagai daftar pemeriksaan sebelum firmware dinyatakan siap untuk produksi.
+Dokumen ini dipakai sebelum firmware Mr Great dinyatakan siap demo atau produksi.
 
-## 1. Kompilasi dan artefak
+## Firmware
 
-- `xiaozhi.bin`, `xiaozhi.elf`, dan `generated_assets.bin` berhasil dibuat dari source terbaru
-- parameter memori flash sesuai dengan papan target
-- offset partisi sesuai skema proyek
+- `idf.py build` selesai tanpa error.
+- Ukuran `xiaozhi.bin` masih lebih kecil dari partisi aplikasi.
+- `generated_assets.bin` berhasil dibuat dan berisi aset bahasa Indonesia serta Inggris.
+- Tidak ada reboot loop setelah flash.
 
-## 2. Penulisan firmware dan boot
+## Audio
 
-- firmware berhasil ditulis ke perangkat tanpa kesalahan serial
-- boot awal tidak mengalami panic, abort, atau reboot loop
-- log inisialisasi audio, jaringan, dan board berjalan normal
+- INMP441 memakai `GPIO4`, `GPIO5`, dan `GPIO6`.
+- MAX98357 memakai `GPIO7`, `GPIO15`, dan `GPIO16`.
+- File OGG di `main/assets/common` dan `main/assets/locales/id-ID` dapat diputar tanpa patah pada kondisi jaringan normal.
+- Jika suara TTS patah saat jaringan buruk, cek kualitas Wi-Fi, antrean audio, dan log MQTT.
 
-## 3. Jaringan
+## Layar dan Emoji
 
-- provisioning berhasil dari kondisi awal
-- sambung ulang otomatis berhasil setelah router dihidupkan ulang
-- siklus mati-hidup daya berulang tidak merusak konfigurasi jaringan
+- OLED memakai `GPIO10` untuk SDA dan `GPIO9` untuk SCL.
+- Ikon non-emosi seperti `microchip_ai` tetap memakai Font Awesome.
+- Emosi wajah memakai file 64-bit dari `components/78__xiaozhi-fonts/src/emoji`.
+- Ikon Wi-Fi dan baterai tetap berasal dari Font Awesome.
 
-## 4. Audio
+## Servo
 
-- kata bangun terdeteksi secara konsisten
-- audio masukan dan keluaran berjalan normal
-- TTS panjang tidak terputus
-- interupsi percakapan tidak merusak status aplikasi
+- Kepala memakai `GPIO17`.
+- Tangan kanan memakai `GPIO38`.
+- Tangan kiri memakai `GPIO39`.
+- Servo mendapat 5V stabil dan ground bersama dengan ESP32-S3.
+- Perintah kanan dan kiri tidak tertukar.
 
-## 5. Data kampus
+## Tombol
 
-- pertanyaan kampus memprioritaskan `campus_data.cc`
-- jawaban dosen, biaya, kurikulum, profil, akreditasi, dan fasilitas sesuai dataset
-- AI tidak mengarang ketika data kampus tersedia
+- Tombol manual memakai `GPIO1` ke GND.
+- Pull-up internal aktif.
+- Menekan tombol tidak menyebabkan restart.
+- Untuk tombol tactile 4 kaki, `GPIO1` dan GND harus berada di dua sisi atau rail yang berbeda, bukan `kiri atas` + `kiri bawah` atau `kanan atas` + `kanan bawah` jika pasangan itu sudah tersambung permanen.
 
-## 6. Pencarian web
+## USB Type-C dan Charging
 
-- pertanyaan yang memerlukan data terbaru memakai `web_search.cc`
-- jawaban tokoh publik dan jabatan mengarah ke hasil yang relevan
-- saat pencarian gagal, AI menjawab jujur tanpa halusinasi
+- USB breakout `V` dan `G` masuk ke TP4056 untuk charging.
+- USB breakout `D+` masuk ke `GPIO20`.
+- USB breakout `D-` masuk ke `GPIO19`.
+- `D+` dan `D-` hanya jalur data, bukan jalur charging atau jalur power utama.
+- `D+` dan `D-` tidak bisa menyalakan ESP32. ESP32 tetap harus diberi daya dari baterai, boost, atau jalur 5V yang aman.
+- Jika komputer tidak mendeteksi ESP32-S3, cek kabel data, driver, ground bersama, dan konfigurasi USB Serial/JTAG.
+- Untuk flash lewat USB native, komputer harus menampilkan port COM USB Serial/JTAG. Jika tidak muncul, tahan BOOT `GPIO0` ke GND saat reset atau power dinyalakan untuk masuk download mode.
 
-## 7. Servo dan gerakan
+## Baterai
 
-- servo dapat aktif dan nonaktif sesuai perintah
-- gerakan kepala tetap kiri-kanan
-- gerakan emosi tidak bentrok dengan perintah eksplisit pengguna
-- kata bangun dan gerakan bicara berjalan normal
+- Pembagi tegangan memakai dua resistor `100 kOhm`.
+- Kapasitor `104` atau `100 nF` dipasang dari node ADC ke GND.
+- Node ADC masuk ke `GPIO2`.
+- Titik ukur sebaiknya dari baterai atau output TP4056, bukan output 5V MT3608.
 
-## 8. Keandalan
+## Data Kampus
 
-- perangkat stabil untuk percakapan panjang
-- tidak ada kebocoran memori yang terlihat
-- tidak ada task audio atau protokol yang macet
+- Pertanyaan kampus harus memprioritaskan `main/campus_data.cc`.
+- Jika Campus RAG Server aktif, firmware memakai server terlebih dahulu lalu fallback ke data lokal.
+- Jawaban tidak boleh menyatakan data tidak ada jika entri tersedia di dataset.
 
-## 9. Keputusan rilis
+## Keputusan Rilis
 
-Firmware layak produksi bila seluruh poin di atas lulus dan tidak ditemukan regresi pada fungsi utama proyek.
+Firmware layak dipakai jika seluruh poin di atas lulus dan tidak ada error, panic, brownout, atau regresi fitur utama.

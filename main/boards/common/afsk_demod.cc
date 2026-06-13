@@ -19,29 +19,29 @@ namespace audio_wifi_config
                                         size_t input_channels
                                     )
     {
-        const int kInputSampleRate = 16000;                                    // Laju sampel masukan.
-        const float kDownsampleStep = static_cast<float>(kInputSampleRate) / static_cast<float>(kAudioSampleRate); // Langkah downsampling.
+        const int kInputSampleRate = 16000;                                    // Input sampling rate
+        const float kDownsampleStep = static_cast<float>(kInputSampleRate) / static_cast<float>(kAudioSampleRate); // Downsampling step
         std::vector<int16_t> audio_data;
         AudioSignalProcessor signal_processor(kAudioSampleRate, kMarkFrequency, kSpaceFrequency, kBitRate, kWindowSize);
         AudioDataBuffer data_buffer;
 
         while (true)
         {
-            // Proses audio hanya saat aplikasi sedang berada di mode konfigurasi Wi-Fi.
+            // 检查Application状态，只有在WiFi配置模式下才处理音频
             if (app->GetDeviceState() != kDeviceStateWifiConfiguring) {
-                // Jika belum berada di mode itu, tunggu sebentar lalu periksa lagi.
+                // 不在WiFi配置状态，休眠100ms后再检查
                 vTaskDelay(pdMS_TO_TICKS(100));
                 continue;
             }
             
-            if (!app->GetAudioService().ReadAudioData(audio_data, 16000, 480)) { // Pada 16 kHz, 480 sampel setara sekitar 30 ms audio.
-                // Jika pembacaan audio gagal, tunggu singkat lalu coba lagi.
+            if (!app->GetAudioService().ReadAudioData(audio_data, 16000, 480)) { // 16kHz, 480 samples corresponds to 30ms data
+                // 读取音频失败，短暂延迟后重试
                 ESP_LOGI(kLogTag, "Failed to read audio data, retrying.");
                 vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
             }
 
-            if (input_channels == 2) { // Jika masukannya stereo, ubah menjadi mono.
+            if (input_channels == 2) { // 如果是双声道输入，转换为单声道
                 auto mono_data = std::vector<int16_t>(audio_data.size() / 2);
                 for (size_t i = 0, j = 0; i < mono_data.size(); ++i, j += 2) {
                     mono_data[i] = audio_data[j];
@@ -49,7 +49,7 @@ namespace audio_wifi_config
                 audio_data = std::move(mono_data);
             }
             
-            // Lakukan downsampling pada data audio.
+            // Downsample the audio data
             std::vector<float> downsampled_data;
             size_t last_index = 0;
 
@@ -69,17 +69,17 @@ namespace audio_wifi_config
                 }
             }
             
-            // Olah sampel audio menjadi data probabilitas.
+            // Process audio samples to get probability data
             auto probabilities = signal_processor.ProcessAudioSamples(downsampled_data);
             
-            // Masukkan data probabilitas ke penyangga penerimaan.
+            // Feed probability data to the data buffer
             if (data_buffer.ProcessProbabilityData(probabilities, 0.5f)) {
-                // Jika data lengkap sudah diterima, ambil kredensial Wi-Fi.
+                // If complete data was received, extract WiFi credentials
                 if (data_buffer.decoded_text.has_value()) {
                     ESP_LOGI(kLogTag, "Received text data: %s", data_buffer.decoded_text->c_str());
                     display->SetChatMessage("system", data_buffer.decoded_text->c_str());
                     
-                    // Pisahkan SSID dan kata sandi dengan karakter baris baru.
+                    // Split SSID and password by newline character
                     std::string wifi_ssid, wifi_password;
                     size_t newline_position = data_buffer.decoded_text->find('\n');
                     if (newline_position != std::string::npos) {
@@ -91,23 +91,23 @@ namespace audio_wifi_config
                         continue;
                     }
                     
-                    // Simpan kredensial Wi-Fi melalui SsidManager.
+                    // Save WiFi credentials using SsidManager
                     auto& ssid_manager = SsidManager::GetInstance();
                     ssid_manager.AddSsid(wifi_ssid, wifi_password);
                     ESP_LOGI(kLogTag, "WiFi credentials saved successfully");
                     
-                    // Keluar dari mode konfigurasi dan picu kejadian keluar.
+                    // Exit config mode (triggers ConfigModeExit event)
                     wifi_manager->StopConfigAp();
                     
-                    data_buffer.decoded_text.reset();  // Bersihkan data yang sudah diproses.
-                    return;  // Akhiri fungsi setelah kredensial berhasil diterima.
+                    data_buffer.decoded_text.reset();  // Clear processed data
+                    return;  // Exit the function
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(1));  // Jeda singkat 1 ms.
+            vTaskDelay(pdMS_TO_TICKS(1));  // 1ms delay
         }
     }
 
-    // Pola penanda awal dan akhir transmisi bawaan.
+    // Default start and end transmission identifiers
     // \x01\x02 = 00000001 00000010
     const std::vector<uint8_t> kDefaultStartTransmissionPattern = {
         0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0};
@@ -116,7 +116,7 @@ namespace audio_wifi_config
     const std::vector<uint8_t> kDefaultEndTransmissionPattern = {
         0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0};
 
-    // Implementasi FrequencyDetector.
+    // FrequencyDetector implementation
     FrequencyDetector::FrequencyDetector(float frequency, size_t window_size)
         : frequency_(frequency), window_size_(window_size) {
         frequency_bin_ = std::floor(frequency_ * static_cast<float>(window_size_));
@@ -125,7 +125,7 @@ namespace audio_wifi_config
         sin_coefficient_ = std::sin(angular_frequency_);
         filter_coefficient_ = 2.0f * cos_coefficient_;
 
-        // Inisialisasi penyangga status awal.
+        // Initialize state buffer
         state_buffer_.push_back(0.0f);
         state_buffer_.push_back(0.0f);
     }
@@ -141,15 +141,15 @@ namespace audio_wifi_config
             return;
         }
 
-        float s_minus_2 = state_buffer_.front();  // Nilai S[-2].
+        float s_minus_2 = state_buffer_.front();  // S[-2]
         state_buffer_.pop_front();
-        float s_minus_1 = state_buffer_.front();  // Nilai S[-1].
+        float s_minus_1 = state_buffer_.front();  // S[-1]
         state_buffer_.pop_front();
 
         float s_current = sample + filter_coefficient_ * s_minus_1 - s_minus_2;
 
-        state_buffer_.push_back(s_minus_1);  // Masukkan kembali nilai S[-1].
-        state_buffer_.push_back(s_current);  // Tambahkan nilai baru sebagai S[0].
+        state_buffer_.push_back(s_minus_1);  // Put S[-1] back
+        state_buffer_.push_back(s_current);  // Add new S[0]
     }
 
     float FrequencyDetector::GetAmplitude() const {
@@ -157,21 +157,21 @@ namespace audio_wifi_config
             return 0.0f;
         }
 
-        float s_minus_1 = state_buffer_[1];                      // Nilai S[-1].
-        float s_minus_2 = state_buffer_[0];                      // Nilai S[-2].
-        float real_part = cos_coefficient_ * s_minus_1 - s_minus_2;  // Komponen riil.
-        float imaginary_part = sin_coefficient_ * s_minus_1;         // Komponen imajiner.
+        float s_minus_1 = state_buffer_[1];                      // S[-1]
+        float s_minus_2 = state_buffer_[0];                      // S[-2]
+        float real_part = cos_coefficient_ * s_minus_1 - s_minus_2;  // Real part
+        float imaginary_part = sin_coefficient_ * s_minus_1;         // Imaginary part
 
         return std::sqrt(real_part * real_part + imaginary_part * imaginary_part) / 
                (static_cast<float>(window_size_) / 2.0f);
     }
 
-    // Implementasi AudioSignalProcessor.
+    // AudioSignalProcessor implementation
     AudioSignalProcessor::AudioSignalProcessor(size_t sample_rate, size_t mark_frequency, size_t space_frequency,
                                              size_t bit_rate, size_t window_size)
         : input_buffer_size_(window_size), output_sample_count_(0) {
         if (sample_rate % bit_rate != 0) {
-            // Pada ESP32 proses masih bisa lanjut, tetapi kondisi ini tetap dicatat.
+            // On ESP32 we can continue execution, but log the error
             ESP_LOGW(kLogTag, "Sample rate %zu is not divisible by bit rate %zu", sample_rate, bit_rate);
         }
 
@@ -181,7 +181,7 @@ namespace audio_wifi_config
         mark_detector_ = std::make_unique<FrequencyDetector>(normalized_mark_freq, window_size);
         space_detector_ = std::make_unique<FrequencyDetector>(normalized_space_freq, window_size);
 
-        samples_per_bit_ = sample_rate / bit_rate;  // Jumlah sampel per bit.
+        samples_per_bit_ = sample_rate / bit_rate;  // Number of samples per bit
     }
 
     std::vector<float> AudioSignalProcessor::ProcessAudioSamples(const std::vector<float> &samples) {
@@ -189,32 +189,32 @@ namespace audio_wifi_config
 
         for (float sample : samples) {
             if (input_buffer_.size() < input_buffer_size_) {
-                input_buffer_.push_back(sample);  // Tambahkan dulu tanpa diproses.
+                input_buffer_.push_back(sample);  // Just add, don't process yet
             } else {
-                // Saat penyangga penuh, geser data dan proses jendela terbaru.
-                input_buffer_.pop_front();   // Hapus sampel paling lama.
-                input_buffer_.push_back(sample);  // Tambahkan sampel baru.
+                // Input buffer is full, process the data
+                input_buffer_.pop_front();   // Remove oldest sample
+                input_buffer_.push_back(sample);  // Add new sample
                 output_sample_count_++;
 
                 if (output_sample_count_ >= samples_per_bit_) {
-                    // Proses seluruh sampel di jendela dengan algoritma Goertzel.
+                    // Process all samples in the window using Goertzel algorithm
                     for (float window_sample : input_buffer_) {
                         mark_detector_->ProcessSample(window_sample);
                         space_detector_->ProcessSample(window_sample);
                     }
 
-                    float mark_amplitude = mark_detector_->GetAmplitude();   // Amplitudo frekuensi mark.
-                    float space_amplitude = space_detector_->GetAmplitude(); // Amplitudo frekuensi space.
+                    float mark_amplitude = mark_detector_->GetAmplitude();   // Mark amplitude
+                    float space_amplitude = space_detector_->GetAmplitude(); // Space amplitude
 
-                    // Hindari pembagian dengan nol.
+                    // Avoid division by zero
                     float mark_probability = mark_amplitude / 
                                            (space_amplitude + mark_amplitude + std::numeric_limits<float>::epsilon());
                     result.push_back(mark_probability);
 
-                    // Reset jendela detektor.
+                    // Reset detector windows
                     mark_detector_->Reset();
                     space_detector_->Reset();
-                    output_sample_count_ = 0;  // Reset penghitung keluaran.
+                    output_sample_count_ = 0;  // Reset output counter
                 }
             }
         }
@@ -222,14 +222,14 @@ namespace audio_wifi_config
         return result;
     }
 
-    // Implementasi AudioDataBuffer.
+    // AudioDataBuffer implementation
     AudioDataBuffer::AudioDataBuffer()
         : current_state_(DataReceptionState::kInactive),
           start_of_transmission_(kDefaultStartTransmissionPattern),
           end_of_transmission_(kDefaultEndTransmissionPattern),
           enable_checksum_validation_(true) {
         identifier_buffer_size_ = std::max(start_of_transmission_.size(), end_of_transmission_.size());
-        max_bit_buffer_size_ = 776;  // Ukuran buffer bit bawaan, setara 776 bit.
+        max_bit_buffer_size_ = 776;  // Preset bit buffer size, 776 bits = (32 + 1 + 63 + 1) * 8 = 776
 
         bit_buffer_.reserve(max_bit_buffer_size_);
     }
@@ -241,7 +241,7 @@ namespace audio_wifi_config
           end_of_transmission_(end_identifier),
           enable_checksum_validation_(enable_checksum) {
         identifier_buffer_size_ = std::max(start_of_transmission_.size(), end_of_transmission_.size());
-        max_bit_buffer_size_ = max_byte_size * 8;  // Ukuran buffer bit dalam satuan bit.
+        max_bit_buffer_size_ = max_byte_size * 8;  // Bit buffer size in bytes
 
         bit_buffer_.reserve(max_bit_buffer_size_);
     }
@@ -264,27 +264,27 @@ namespace audio_wifi_config
             uint8_t bit = (probability > threshold) ? 1 : 0;
 
             if (identifier_buffer_.size() >= identifier_buffer_size_) {
-                identifier_buffer_.pop_front();  // Jaga ukuran buffer tetap sesuai batas
+                identifier_buffer_.pop_front();  // Maintain buffer size
             }
             identifier_buffer_.push_back(bit);
 
-            // Proses bit yang diterima berdasarkan mesin status
+            // Process received bit based on state machine
             switch (current_state_) {
             case DataReceptionState::kInactive:
                 if (identifier_buffer_.size() >= start_of_transmission_.size()) {
-                    current_state_ = DataReceptionState::kWaiting;  // Masuk ke status menunggu
+                    current_state_ = DataReceptionState::kWaiting;  // Enter waiting state
                     ESP_LOGI(kLogTag, "Entering Waiting state");
                 }
                 break;
 
             case DataReceptionState::kWaiting:
-                // Status menunggu, kemungkinan masih menanti akhir transmisi
+                // Waiting state, possibly waiting for transmission end
                 if (identifier_buffer_.size() >= start_of_transmission_.size()) {
                     std::vector<uint8_t> identifier_snapshot(identifier_buffer_.begin(), identifier_buffer_.end());
                     if (identifier_snapshot == start_of_transmission_)
                     {
-                        ClearBuffers();                                   // Bersihkan buffer
-                        current_state_ = DataReceptionState::kReceiving;  // Masuk ke status menerima
+                        ClearBuffers();                                // Clear buffers
+                        current_state_ = DataReceptionState::kReceiving;  // Enter receiving state
                         ESP_LOGI(kLogTag, "Entering Receiving state");
                     }
                 }
@@ -295,16 +295,16 @@ namespace audio_wifi_config
                 if (identifier_buffer_.size() >= end_of_transmission_.size()) {
                     std::vector<uint8_t> identifier_snapshot(identifier_buffer_.begin(), identifier_buffer_.end());
                     if (identifier_snapshot == end_of_transmission_) {
-                        current_state_ = DataReceptionState::kInactive;  // Kembali ke status tidak aktif
+                        current_state_ = DataReceptionState::kInactive;  // Enter inactive state
 
-                        // Ubah bit menjadi byte
+                        // Convert bits to bytes
                         std::vector<uint8_t> bytes = ConvertBitsToBytes(bit_buffer_);
 
                         uint8_t received_checksum = 0;
                         size_t minimum_length = 0;
 
                         if (enable_checksum_validation_) {
-                            // Jika checksum diperlukan, byte terakhir adalah checksum
+                            // If checksum is required, last byte is checksum
                             minimum_length = 1 + start_of_transmission_.size() / 8;
                             if (bytes.size() >= minimum_length)
                             {
@@ -317,20 +317,20 @@ namespace audio_wifi_config
                         if (bytes.size() < minimum_length) {
                             ClearBuffers();
                             ESP_LOGW(kLogTag, "Data too short, clearing buffer");
-                            return false;  // Data terlalu pendek, kembalikan gagal
+                            return false;  // Data too short, return failure
                         }
 
-                        // Ambil data teks dengan membuang bagian penanda di akhir
+                        // Extract text data (remove trailing identifier part)
                         std::vector<uint8_t> text_bytes(
                             bytes.begin(), bytes.begin() + bytes.size() - minimum_length);
 
                         std::string result(text_bytes.begin(), text_bytes.end());
 
-                        // Validasi checksum bila diperlukan
+                        // Validate checksum if required
                         if (enable_checksum_validation_) {
                             uint8_t calculated_checksum = CalculateChecksum(result);
                             if (calculated_checksum != received_checksum) {
-                                // Checksum tidak cocok
+                                // Checksum mismatch
                                 ESP_LOGW(kLogTag, "Checksum mismatch: expected %d, got %d", 
                                         received_checksum, calculated_checksum);
                                 ClearBuffers();
@@ -340,12 +340,12 @@ namespace audio_wifi_config
 
                         ClearBuffers();
                         decoded_text = result;
-                        return true;  // Kembalikan status berhasil
+                        return true;  // Return success
                     } else if (bit_buffer_.size() >= max_bit_buffer_size_) {
-                        // Jika belum mencapai penanda akhir dan penyangga bit sudah penuh, lakukan setel ulang
+                        // If not end identifier and bit buffer is full, reset
                         ClearBuffers();
                         ESP_LOGW(kLogTag, "Buffer overflow, clearing buffer");
-                        current_state_ = DataReceptionState::kInactive;  // Reset mesin status
+                        current_state_ = DataReceptionState::kInactive;  // Reset state machine
                     }
                 }
                 break;
@@ -358,7 +358,7 @@ namespace audio_wifi_config
     std::vector<uint8_t> AudioDataBuffer::ConvertBitsToBytes(const std::vector<uint8_t> &bits) const {
         std::vector<uint8_t> bytes;
 
-        // Pastikan jumlah bit merupakan kelipatan delapan
+        // Ensure number of bits is a multiple of 8
         size_t complete_bytes_count = bits.size() / 8;
         bytes.reserve(complete_bytes_count);
 

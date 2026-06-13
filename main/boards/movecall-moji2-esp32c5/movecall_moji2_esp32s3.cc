@@ -250,7 +250,7 @@ private:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -266,7 +266,7 @@ private:
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
     }
 
-    // Inisialisasi SPI
+    // SPI初始化
     void InitializeSpi() {
         ESP_LOGI(TAG, "Initialize SPI bus");
         const spi_bus_config_t bus_config = MOJI2_ST77916_PANEL_BUS_QSPI_CONFIG(DISPLAY_QSPI_SCLK_PIN,
@@ -278,7 +278,7 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(DISPLAY_QSPI_HOST, &bus_config, SPI_DMA_CH_AUTO));
     }
 
-    // Inisialisasi ST77916
+    // St77916 初始化
     void InitializeSt77916Display() {
         ESP_LOGI(TAG, "Init St77916 display");
         esp_lcd_panel_io_handle_t panel_io = nullptr;
@@ -319,7 +319,7 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            // Saat startup, sebelum terhubung, menekan tombol BOOT akan masuk ke mode konfigurasi tanpa reboot
+            // During startup (before connected), pressing BOOT enters config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;

@@ -32,7 +32,7 @@ private:
     LcdDisplay *display_;
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -50,7 +50,7 @@ private:
 
     static esp_err_t bsp_enable_dsi_phy_power(void) {
 #if MIPI_DSI_PHY_PWR_LDO_CHAN > 0
-        // Nyalakan daya PHY MIPI DSI agar status berubah dari "tanpa daya" ke "siaga mati".
+        // Turn on the power for MIPI DSI PHY, so it can go from "No Power" state to "Shutdown" state
         static esp_ldo_channel_handle_t phy_pwr_chan = NULL;
         esp_ldo_channel_config_t ldo_cfg = {
             .chan_id = MIPI_DSI_PHY_PWR_LDO_CHAN,
@@ -77,7 +77,7 @@ private:
         esp_lcd_new_dsi_bus(&bus_config, &mipi_dsi_bus);
 
         ESP_LOGI(TAG, "Install MIPI DSI LCD control panel");
-        // Gunakan antarmuka DBI untuk mengirim perintah dan parameter LCD.
+        // we use DBI interface to send LCD commands and parameters
         esp_lcd_dbi_io_config_t dbi_config = EK79007_PANEL_IO_DBI_CONFIG();
         esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_config, &io);
 
@@ -152,7 +152,16 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS, 
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 16,                            
+            .flags =
+            {
+                .disable_control_phase = 1,
+            }
+	    };
         tp_io_config.scl_speed_hz = 400 * 1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_LOGI(TAG, "Initialize touch controller");
@@ -168,8 +177,7 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            // Saat perangkat baru menyala dan belum terhubung, menekan tombol BOOT akan
-            // masuk ke mode konfigurasi Wi-Fi tanpa menyalakan ulang perangkat.
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -189,7 +197,7 @@ private:
         }
         sdmmc_host_t host = SDMMC_HOST_DEFAULT();
         sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-        // Petakan pin melalui matriks GPIO jika diperlukan
+        // Map pins via GPIO matrix if needed
         slot_config.clk = SDCARD_SDMMC_CLK_PIN;
         slot_config.cmd = SDCARD_SDMMC_CMD_PIN;
         slot_config.d0 = SDCARD_SDMMC_D0_PIN;

@@ -117,9 +117,9 @@ private:
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
             rtc_gpio_set_level(GPIO_NUM_21, 0);
-            // Aktifkan fungsi tahan level agar kondisi pin tetap selama perangkat tidur
+            // 启用保持功能，确保睡眠期间电平不变
             rtc_gpio_hold_en(GPIO_NUM_21);
-            esp_lcd_panel_disp_on_off(panel_, false); // Matikan tampilan
+            esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
             esp_deep_sleep_start();
         });
         power_save_timer_->SetEnabled(true);
@@ -150,7 +150,7 @@ private:
 
         ESP_LOGD(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
-        nv3023_vendor_config_t vendor_config = {  // Hapus komentar pada baris ini jika ingin memakai perintah inisialisasi kustom
+        nv3023_vendor_config_t vendor_config = {  // Uncomment these lines if use custom initialization commands
             .init_cmds = lcd_init_cmds,
             .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(nv3023_lcd_init_cmd_t),
         };
@@ -192,7 +192,7 @@ public:
         boot_button_(BOOT_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
-        Initializegpio21_45(); // Saat awal, naikkan level pin 21 agar modul 4G bekerja normal
+        Initializegpio21_45(); // 初始时，拉高21引脚，保证4g模块正常工作
         InitializePowerManager();
         InitializePowerSaveTimer();
         InitializeSpi();

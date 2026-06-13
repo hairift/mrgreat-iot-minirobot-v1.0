@@ -1,73 +1,49 @@
-# Penggunaan MCP untuk Kontrol Perangkat
+# Penggunaan MCP
 
-Dokumen ini menjelaskan cara memakai MCP untuk menemukan dan memanggil alat pada perangkat.
+Dokumen ini merangkum cara memakai alat MCP yang tersedia di firmware Mr Great.
 
-## Ringkasan
+## Data Kampus
 
-MCP memungkinkan peladen:
+Gunakan `self.campus.query` untuk pertanyaan tentang UCIC, dosen, jurusan, biaya, akreditasi, kurikulum, fasilitas, dan kontak.
 
-- membaca daftar alat dari perangkat
-- memahami parameter alat
-- menjalankan alat tertentu
-- menerima hasil dalam format yang konsisten
-
-## Registrasi Alat di Perangkat
-
-Alat biasanya didaftarkan melalui peladen MCP di sisi firmware. Setiap alat sebaiknya memiliki:
-
-- nama yang jelas
-- deskripsi singkat
-- daftar parameter
-- fungsi panggil balik eksekusi
-
-## Contoh Pola Registrasi
-
-```cpp
-mcp_server.AddTool(
-    "self.audio_speaker.set_volume",
-    "Mengatur volume speaker",
-    PropertyList({
-        Property("volume", kPropertyTypeInteger, 0, 100)
-    }),
-    [this](const PropertyList& properties) -> ReturnValue {
-        return true;
-    }
-);
-```
-
-## Contoh Permintaan
-
-### Mengambil daftar alat
+Contoh:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "tools/list",
-  "params": { "cursor": "" },
-  "id": 1
+  "keyword": "siapa rektor UCIC"
 }
 ```
 
-### Menjalankan alat
+## Pencarian Web
+
+Gunakan `self.web.search` untuk pertanyaan yang membutuhkan data terbaru, misalnya pejabat aktif, berita, jadwal, harga, atau informasi yang mudah berubah.
+
+Contoh:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {
-    "name": "self.audio_speaker.set_volume",
-    "arguments": {
-      "volume": 80
-    }
-  },
-  "id": 2
+  "query": "siapa gubernur Jawa Barat saat ini"
 }
 ```
 
-## Rekomendasi
+## Servo
 
-- gunakan nama alat yang stabil
-- batasi argumen agar tetap sederhana
-- pastikan deskripsi alat jelas untuk model
-- kembalikan hasil dalam bentuk yang ringkas dan tegas
-- pisahkan alat internal pengguna jika tidak ingin dibaca AI
+Gunakan `self.servo.power` untuk daya servo dan `self.servo.action` untuk aksi.
+
+Contoh:
+
+```json
+{
+  "action": "wave_right"
+}
+```
+
+## Layar dan Audio
+
+Volume speaker dapat diatur melalui `self.audio_speaker.set_volume`. Tema layar dapat diubah melalui `self.screen.set_theme` jika board mendukung.
+
+## Prinsip Aman
+
+- Jangan memanggil servo terus-menerus tanpa jeda.
+- Jangan memakai web search untuk data kampus yang sudah ada di `campus_data.cc`.
+- Jika hasil alat tidak sesuai, minta klarifikasi atau jawab bahwa data belum cukup.

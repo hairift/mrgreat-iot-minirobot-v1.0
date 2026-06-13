@@ -13,9 +13,9 @@ Tdisplays3promvsrloraAudioCodec::Tdisplays3promvsrloraAudioCodec(int input_sampl
     gpio_num_t mic_bclk, gpio_num_t mic_ws, gpio_num_t mic_data,
     gpio_num_t spkr_bclk, gpio_num_t spkr_lrclk, gpio_num_t spkr_data,
     bool input_reference) {
-    duplex_ = true;                             // Apakah memakai mode dupleks
-    input_reference_ = input_reference;         // Apakah memakai masukan referensi untuk peredam gema
-    input_channels_ = input_reference_ ? 2 : 1; // Jumlah kanal masukan
+    duplex_ = true;                             // 是否双工
+    input_reference_ = input_reference;         // 是否使用参考输入，实现回声消除
+    input_channels_ = input_reference_ ? 2 : 1; // 输入通道数
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
 
@@ -61,16 +61,16 @@ void Tdisplays3promvsrloraAudioCodec::CreateVoiceHardware(gpio_num_t mic_bclk, g
     gpio_num_t spkr_bclk, gpio_num_t spkr_lrclk, gpio_num_t spkr_data) {
     
     i2s_chan_config_t mic_chan_config = I2S_CHANNEL_DEFAULT_CONFIG(i2s_port_t(0), I2S_ROLE_MASTER);
-    mic_chan_config.auto_clear = true; // Bersihkan otomatis data lama di buffer DMA
+    mic_chan_config.auto_clear = true; // Auto clear the legacy data in the DMA buffer
     i2s_chan_config_t spkr_chan_config = I2S_CHANNEL_DEFAULT_CONFIG(i2s_port_t(1), I2S_ROLE_MASTER);
-    spkr_chan_config.auto_clear = true; // Bersihkan otomatis data lama di buffer DMA
+    spkr_chan_config.auto_clear = true; // Auto clear the legacy data in the DMA buffer
 
     ESP_ERROR_CHECK(i2s_new_channel(&mic_chan_config, NULL, &rx_handle_));
     ESP_ERROR_CHECK(i2s_new_channel(&spkr_chan_config, &tx_handle_, NULL));
 
     i2s_pdm_rx_config_t mic_config = {
         .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(static_cast<uint32_t>(input_sample_rate_)),
-        /* Lebar bit data pada mode PDM tetap 16 */
+        /* The data bit-width of PDM mode is fixed to 16 */
         .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .clk = mic_ws,

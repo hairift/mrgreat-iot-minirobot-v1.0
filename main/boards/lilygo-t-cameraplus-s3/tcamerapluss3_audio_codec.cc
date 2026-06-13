@@ -13,9 +13,9 @@ Tcamerapluss3AudioCodec::Tcamerapluss3AudioCodec(int input_sample_rate, int outp
     gpio_num_t mic_bclk, gpio_num_t mic_ws, gpio_num_t mic_data,
     gpio_num_t spkr_bclk, gpio_num_t spkr_lrclk, gpio_num_t spkr_data,
     bool input_reference) {
-    duplex_ = true;                             // Apakah memakai mode dupleks
-    input_reference_ = input_reference;         // Apakah memakai masukan referensi untuk peredam gema
-    input_channels_ = input_reference_ ? 2 : 1; // Jumlah kanal masukan
+    duplex_ = true;                             // 是否双工
+    input_reference_ = input_reference;         // 是否使用参考输入，实现回声消除
+    input_channels_ = input_reference_ ? 2 : 1; // 输入通道数
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
 
@@ -51,9 +51,9 @@ void Tcamerapluss3AudioCodec::CreateVoiceHardware(gpio_num_t mic_bclk, gpio_num_
     gpio_num_t spkr_bclk, gpio_num_t spkr_lrclk, gpio_num_t spkr_data) {
     
     i2s_chan_config_t mic_chan_config = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    mic_chan_config.auto_clear = true; // Bersihkan otomatis data lama di buffer DMA
+    mic_chan_config.auto_clear = true; // Auto clear the legacy data in the DMA buffer
     i2s_chan_config_t spkr_chan_config = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
-    spkr_chan_config.auto_clear = true; // Bersihkan otomatis data lama di buffer DMA
+    spkr_chan_config.auto_clear = true; // Auto clear the legacy data in the DMA buffer
 
     ESP_ERROR_CHECK(i2s_new_channel(&mic_chan_config, NULL, &rx_handle_));
     ESP_ERROR_CHECK(i2s_new_channel(&spkr_chan_config, &tx_handle_, NULL));
@@ -78,7 +78,7 @@ void Tcamerapluss3AudioCodec::CreateVoiceHardware(gpio_num_t mic_bclk, gpio_num_
             .invert_flags = {
                 .mclk_inv = false,
                 .bclk_inv = false,
-                .ws_inv = true // Kanal kanan sebagai bawaan
+                .ws_inv = true // 默认右通道
             }
         }
     };
@@ -87,7 +87,7 @@ void Tcamerapluss3AudioCodec::CreateVoiceHardware(gpio_num_t mic_bclk, gpio_num_
 #elif defined CONFIG_BOARD_TYPE_LILYGO_T_CAMERAPLUS_S3_V1_2
     i2s_pdm_rx_config_t mic_config = {
         .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(static_cast<uint32_t>(input_sample_rate_)),
-        /* Lebar bit data pada mode PDM tetap 16 */
+        /* The data bit-width of PDM mode is fixed to 16 */
         .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
         .gpio_cfg = {
             .clk = mic_ws,
@@ -145,7 +145,7 @@ int Tcamerapluss3AudioCodec::Read(int16_t *dest, int samples) {
         size_t bytes_read;
         i2s_channel_read(rx_handle_, dest, samples * sizeof(int16_t), &bytes_read, portMAX_DELAY);
         
-        // Besarkan volume mikrofon 20 kali dengan tetap membatasi pada rentang int16_t agar tidak overflow
+        // 麦克风接收音量放大20倍（限制在 int16_t 范围内防止溢出）
         int16_t *ptr = dest;
         for (int i = 0; i < samples; i++) {
             int32_t amplified = *ptr * 20;

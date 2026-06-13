@@ -76,18 +76,17 @@ OledDisplay::OledDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handl
         return;
     }
 
-    // Catatan: SetupUI() sebaiknya dipanggil oleh Application::Initialize(), bukan di konstruktor,
-    // agar objek LVGL dibuat setelah layar selesai diinisialisasi sepenuhnya.
+    // SetupUI() dipanggil dari Application::Initialize() agar objek LVGL dibuat setelah layar siap.
 }
 
 void OledDisplay::SetupUI() {
-    // Cegah pemanggilan ganda; jika sudah pernah dipanggil, keluar lebih awal
+    // Cegah pembuatan UI ganda karena objek LVGL hanya boleh dibuat satu kali.
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
         return;
     }
     
-    Display::SetupUI();  // Tandai bahwa SetupUI sudah dipanggil
+    Display::SetupUI();  // Tandai bahwa SetupUI sudah dipanggil.
     if (height_ == 64) {
         SetupUI_128x64();
     } else {
@@ -110,6 +109,7 @@ OledDisplay::~OledDisplay() {
         network_label_ = nullptr;
         mute_label_ = nullptr;
         battery_label_ = nullptr;
+        battery_percent_label_ = nullptr;
         lv_obj_del(top_bar_);
     }
     if (side_bar_ != nullptr) {
@@ -119,6 +119,7 @@ OledDisplay::~OledDisplay() {
             network_label_ = nullptr;
             mute_label_ = nullptr;
             battery_label_ = nullptr;
+            battery_percent_label_ = nullptr;
         }
         lv_obj_del(side_bar_);
     }
@@ -151,7 +152,7 @@ void OledDisplay::SetChatMessage(const char* role, const char* content) {
 
     (void)role;
 
-    // Ganti semua baris baru menjadi spasi
+    // Amankan konten kosong agar tampilan OLED tidak crash saat pesan dibersihkan.
     std::string content_str = content != nullptr ? content : "";
     std::replace(content_str.begin(), content_str.end(), '\n', ' ');
     std::replace(content_str.begin(), content_str.end(), '\r', ' ');
@@ -180,16 +181,13 @@ void OledDisplay::SetupUI_128x64() {
     auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
     auto text_font = lvgl_theme->text_font()->font();
     auto icon_font = lvgl_theme->icon_font()->font();
-    auto large_icon_font = lvgl_theme->large_icon_font()->font(); (void)large_icon_font;
-
-    // Gunakan font lebih kecil untuk OLED 0,96 inci (10 px, bukan 14 px)
-    const lv_font_t* small_font = &lv_font_montserrat_10;
+    auto large_icon_font = lvgl_theme->large_icon_font()->font();
 
     auto screen = lv_screen_active();
-    lv_obj_set_style_text_font(screen, small_font, 0);
+    lv_obj_set_style_text_font(screen, text_font, 0);
     lv_obj_set_style_text_color(screen, lv_color_black(), 0);
 
-    /* Wadah */
+    /* Wadah utama */
     container_ = lv_obj_create(screen);
     lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
@@ -197,9 +195,9 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
 
-    /* Lapisan 1: bilah atas untuk ikon status */
+    /* Lapisan atas untuk ikon status. */
     top_bar_ = lv_obj_create(container_);
-    lv_obj_set_size(top_bar_, LV_HOR_RES, 10);
+    lv_obj_set_size(top_bar_, LV_HOR_RES, 16);
     lv_obj_set_style_radius(top_bar_, 0, 0);
     lv_obj_set_style_bg_opa(top_bar_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(top_bar_, 0, 0);
@@ -210,7 +208,7 @@ void OledDisplay::SetupUI_128x64() {
 
     network_label_ = lv_label_create(top_bar_);
     lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, small_font, 0);
+    lv_obj_set_style_text_font(network_label_, icon_font, 0);
 
     lv_obj_t* right_icons = lv_obj_create(top_bar_);
     lv_obj_set_size(right_icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -222,22 +220,26 @@ void OledDisplay::SetupUI_128x64() {
 
     mute_label_ = lv_label_create(right_icons);
     lv_label_set_text(mute_label_, "");
-    lv_obj_set_style_text_font(mute_label_, small_font, 0);
+    lv_obj_set_style_text_font(mute_label_, icon_font, 0);
 
     battery_label_ = lv_label_create(right_icons);
     lv_label_set_text(battery_label_, "");
-    lv_obj_set_style_text_font(battery_label_, small_font, 0);
+    lv_obj_set_style_text_font(battery_label_, icon_font, 0);
 
-    /* Lapisan 2: bilah status untuk teks di tengah */
+    battery_percent_label_ = lv_label_create(right_icons);
+    lv_label_set_text(battery_percent_label_, "");
+    lv_obj_set_style_text_font(battery_percent_label_, text_font, 0);
+
+    /* Lapisan status untuk teks di tengah. */
     status_bar_ = lv_obj_create(screen);
-    lv_obj_set_size(status_bar_, LV_HOR_RES, 10);
+    lv_obj_set_size(status_bar_, LV_HOR_RES, 16);
     lv_obj_set_style_radius(status_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);  // Latar belakang transparan
+    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);  // Latar belakang transparan.
     lv_obj_set_style_border_width(status_bar_, 0, 0);
     lv_obj_set_style_pad_all(status_bar_, 0, 0);
     lv_obj_set_scrollbar_mode(status_bar_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_layout(status_bar_, LV_LAYOUT_NONE, 0);  // Gunakan posisi absolut
-    lv_obj_align(status_bar_, LV_ALIGN_TOP_MID, 0, 0);  // Tumpang tindih dengan top_bar_
+    lv_obj_set_style_layout(status_bar_, LV_LAYOUT_NONE, 0);  // Gunakan posisi absolut.
+    lv_obj_align(status_bar_, LV_ALIGN_TOP_MID, 0, 0);  // Tumpangkan dengan top_bar_.
 
     notification_label_ = lv_label_create(status_bar_);
     lv_obj_set_width(notification_label_, LV_HOR_RES);
@@ -264,28 +266,24 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_flex_main_place(content_, LV_FLEX_ALIGN_CENTER, 0);
 
     content_left_ = lv_obj_create(content_);
-    lv_obj_set_size(content_left_, 46, LV_SIZE_CONTENT);
+    lv_obj_set_size(content_left_, 48, 48);
     lv_obj_set_style_pad_all(content_left_, 0, 0);
     lv_obj_set_style_border_width(content_left_, 0, 0);
 
-    emotion_label_ = lv_label_create(content_left_);
-    lv_obj_set_style_text_font(emotion_label_, icon_font, 0);
-    lv_label_set_text(emotion_label_, "");
-    lv_obj_center(emotion_label_);
-    lv_obj_set_style_pad_top(emotion_label_, 4, 0);
-    lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);  // Disembunyikan secara bawaan, gambar emoji yang ditampilkan
-
-    // Gambar bitmap emoji, ditampilkan secara bawaan
-    emoji_image_ = lv_image_create(content_left_);
-    lv_obj_set_size(emoji_image_, 44, 44);
-    lv_image_set_inner_align(emoji_image_, LV_IMAGE_ALIGN_CENTER);
-    lv_image_set_scale(emoji_image_, 176);  // 44/64*256 = 176
-    lv_obj_center(emoji_image_);
-    // Atur emoji bawaan ke kondisi netral
-    auto neutral = emoji_collection_.GetEmojiImage("neutral");
-    if (neutral) {
-        lv_image_set_src(emoji_image_, neutral->image_dsc());
+    emotion_image_ = lv_image_create(content_left_);
+    lv_obj_set_size(emotion_image_, 44, 44);
+    lv_image_set_inner_align(emotion_image_, LV_IMAGE_ALIGN_CENTER);
+    lv_image_set_scale(emotion_image_, 176);
+    lv_obj_align(emotion_image_, LV_ALIGN_CENTER, 0, -2);
+    if (auto neutral = emoji_collection_.GetEmojiImage("neutral")) {
+        lv_image_set_src(emotion_image_, neutral->image_dsc());
     }
+
+    emotion_label_ = lv_label_create(content_left_);
+    lv_obj_set_style_text_font(emotion_label_, large_icon_font, 0);
+    lv_label_set_text(emotion_label_, FONT_AWESOME_MICROCHIP_AI);
+    lv_obj_center(emotion_label_);
+    lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
 
     content_right_ = lv_obj_create(content_);
     lv_obj_set_size(content_right_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -298,10 +296,10 @@ void OledDisplay::SetupUI_128x64() {
     lv_label_set_text(chat_message_label_, "");
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(chat_message_label_, width_ - 46);
-    lv_obj_set_style_pad_top(chat_message_label_, 4, 0);
+    lv_obj_set_width(chat_message_label_, width_ - 48);
+    lv_obj_set_style_pad_top(chat_message_label_, 14, 0);
 
-    // Mulai menggulir subtitle setelah jeda singkat
+    // Mulai menggulir subtitle setelah jeda singkat.
     static lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_delay(&a, 1000);
@@ -333,7 +331,7 @@ void OledDisplay::SetupUI_128x32() {
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
 
-    /* Container */
+    /* Wadah utama */
     container_ = lv_obj_create(screen);
     lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_ROW);
@@ -341,27 +339,27 @@ void OledDisplay::SetupUI_128x32() {
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_column(container_, 0, 0);
 
-    /* Label emosi di sisi kiri */
+    /* Gambar emosi custom di sisi kiri. */
     content_ = lv_obj_create(container_);
     lv_obj_set_size(content_, 32, 32);
     lv_obj_set_style_pad_all(content_, 0, 0);
     lv_obj_set_style_border_width(content_, 0, 0);
     lv_obj_set_style_radius(content_, 0, 0);
 
+    emotion_image_ = lv_image_create(content_);
+    lv_obj_set_size(emotion_image_, 32, 32);
+    lv_image_set_inner_align(emotion_image_, LV_IMAGE_ALIGN_CENTER);
+    lv_image_set_scale(emotion_image_, LV_SCALE_NONE * 32 / 64);
+    lv_obj_align(emotion_image_, LV_ALIGN_CENTER, 0, 0);
+    if (auto neutral = emoji_collection_.GetEmojiImage("neutral")) {
+        lv_image_set_src(emotion_image_, neutral->image_dsc());
+    }
+
     emotion_label_ = lv_label_create(content_);
     lv_obj_set_style_text_font(emotion_label_, large_icon_font, 0);
-    lv_label_set_text(emotion_label_, "");
+    lv_label_set_text(emotion_label_, FONT_AWESOME_MICROCHIP_AI);
     lv_obj_center(emotion_label_);
     lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
-
-    // Gambar bitmap emoji yang ditampilkan secara bawaan
-    emoji_image_ = lv_image_create(content_);
-    lv_obj_set_size(emoji_image_, 32, 32);
-    lv_obj_center(emoji_image_);
-    auto neutral = emoji_collection_.GetEmojiImage("neutral");
-    if (neutral) {
-        lv_image_set_src(emoji_image_, neutral->image_dsc());
-    }
 
     /* Sisi kanan */
     side_bar_ = lv_obj_create(container_);
@@ -404,13 +402,17 @@ void OledDisplay::SetupUI_128x32() {
     lv_label_set_text(battery_label_, "");
     lv_obj_set_style_text_font(battery_label_, icon_font, 0);
 
+    battery_percent_label_ = lv_label_create(status_bar_);
+    lv_label_set_text(battery_percent_label_, "");
+    lv_obj_set_style_text_font(battery_percent_label_, text_font, 0);
+
     chat_message_label_ = lv_label_create(side_bar_);
     lv_obj_set_size(chat_message_label_, width_ - 32, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_left(chat_message_label_, 2, 0);
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_label_set_text(chat_message_label_, "");
 
-    // Mulai menggulir subtitle setelah jeda
+    // Mulai menggulir subtitle setelah jeda singkat.
     static lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_delay(&a, 1000);
@@ -419,30 +421,44 @@ void OledDisplay::SetupUI_128x32() {
     lv_obj_set_style_anim_duration(chat_message_label_, lv_anim_speed_clamped(60, 300, 60000), LV_PART_MAIN);
 }
 
-
 void OledDisplay::SetEmotion(const char* emotion) {
     DisplayLockGuard lock(this);
-    if (emoji_image_ == nullptr) {
-        return;
+
+    if (emotion == nullptr) {
+        emotion = "neutral";
     }
-    
-    // Cari bitmap emoji dari koleksi
+
+    // Ekspresi wajah selalu mengutamakan aset kustom 64 piksel.
     const LvglImage* emoji = emoji_collection_.GetEmojiImage(emotion);
-    if (emoji != nullptr) {
-        // Tampilkan bitmap emoji dan sembunyikan ikon font
-        lv_image_set_src(emoji_image_, emoji->image_dsc());
-        lv_obj_remove_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
-        if (emotion_label_) {
+    if (emoji != nullptr && emotion_image_ != nullptr) {
+        lv_image_set_src(emotion_image_, emoji->image_dsc());
+        lv_obj_remove_flag(emotion_image_, LV_OBJ_FLAG_HIDDEN);
+        if (emotion_label_ != nullptr) {
             lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
         }
-    } else {
-        // Cadangan: tampilkan ikon font awesome jika emoji tidak ditemukan
-        const char* utf8 = font_awesome_get_utf8(emotion);
-        if (utf8 != nullptr && emotion_label_) {
-            lv_label_set_text(emotion_label_, utf8);
-            lv_obj_remove_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_invalidate(emotion_image_);
+        return;
+    }
+
+    // Nama selain ekspresi wajah, misalnya ikon sistem, memakai Font Awesome.
+    const char* font_icon = font_awesome_get_utf8(emotion);
+    if (font_icon != nullptr && emotion_label_ != nullptr) {
+        lv_label_set_text(emotion_label_, font_icon);
+        lv_obj_remove_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+        if (emotion_image_ != nullptr) {
+            lv_obj_add_flag(emotion_image_, LV_OBJ_FLAG_HIDDEN);
         }
+        return;
+    }
+
+    if (emotion_label_ == nullptr) {
+        return;
+    }
+
+    lv_label_set_text(emotion_label_, FONT_AWESOME_MICROCHIP_AI);
+    lv_obj_remove_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+    if (emotion_image_ != nullptr) {
+        lv_obj_add_flag(emotion_image_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 

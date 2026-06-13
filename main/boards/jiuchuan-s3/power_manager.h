@@ -40,7 +40,7 @@ private:
     
 
     void CheckBatteryStatus() {
-        // Ambil status pengisian
+        // Get charging status
         bool new_charging_status = gpio_get_level(charging_pin_) == 1;
         if (new_charging_status != is_charging_) {
             is_charging_ = new_charging_status;
@@ -51,13 +51,13 @@ private:
             return;
         }
 
-        // Jika data baterai belum cukup, baca ulang data baterai
+        // 如果电池电量数据不足，则读取电池电量数据
         if (adc_values_.size() < kBatteryAdcDataCount) {
             ReadBatteryAdcData();
             return;
         }
 
-        // Jika data baterai sudah cukup, baca ulang setiap interval kBatteryAdcInterval
+        // 如果电池电量数据充足，则每 kBatteryAdcInterval 个 tick 读取一次电池电量数据
         ticks_++;
         if (ticks_ % kBatteryAdcInterval == 0) {
             ReadBatteryAdcData();
@@ -67,7 +67,7 @@ private:
     void ReadBatteryAdcData() {
         float battery_capacity_temp = 0;
         adc_battery_estimation_get_capacity(adc_battery_estimation_handle, &battery_capacity_temp);
-        ESP_LOGI("PowerManager", "Level baterai: %.1f%%", battery_capacity_temp);
+        ESP_LOGI("PowerManager", "Battery level: %.1f%%", battery_capacity_temp);
         if(battery_capacity_temp > -10 && battery_capacity_temp <= 0){
             battery_level_ = 0;
         }else{
@@ -78,7 +78,7 @@ private:
 public:
     PowerManager(gpio_num_t pin) : charging_pin_(pin) {
         power_controller_ = &PowerController::Instance();
-        // Inisialisasi pin indikator pengisian
+        // 初始化充电引脚
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_INPUT;
@@ -87,7 +87,7 @@ public:
         io_conf.pull_up_en = GPIO_PULLUP_DISABLE;     
         gpio_config(&io_conf);
 
-        // Buat pewaktu pemeriksaan level baterai
+        // 创建电池电量检查定时器
         esp_timer_create_args_t timer_args = {
             .callback = [](void* arg) {
                 PowerManager* self = static_cast<PowerManager*>(arg);
@@ -140,16 +140,16 @@ public:
     }
 
     bool IsCharging() {
-        // Jika baterai sudah penuh, jangan tampilkan status mengisi
+        // 如果电量已经满了，则不再显示充电中
         if (battery_level_ == 100) {
-            // ESP_LOGI(TAG, "Baterai sudah penuh, status mengisi tidak ditampilkan");
+            //ESP_LOGI(TAG, "电量已满，不再显示充电中");
             return false;
         }
         return is_charging_;
     }
 
     bool IsDischarging() {
-        // Karena tidak dibedakan antara isi dan lepas daya, kembalikan status kebalikannya
+        // 没有区分充电和放电，所以直接返回相反状态
         return !is_charging_;
     }
 
@@ -158,31 +158,31 @@ public:
     }
 
     void RegisterAllCallbacks() {
-        // Daftarkan fungsi panggil balik perubahan status daya
+        //注册电源状态变更回调函数（优化版）
         power_controller_->OnStateChange([this](PowerState newState) {
             switch(newState) {
                 case PowerState::SHUTDOWN: {
 
-                    ESP_LOGD(TAG, "Mematikan perangkat");
+                    ESP_LOGD(TAG, "关机");
                     
-                // Nonaktifkan PWR_EN
-                    /* Cegah perangkat terbangun tidak sengaja setelah mati */
+                //取消 PWR_EN 使能
+                    /* 防止关机后误唤醒 */
                     ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(PWR_BUTTON_GPIO, 0));
-                    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(PWR_BUTTON_GPIO)); // Pull-down internal
+                    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(PWR_BUTTON_GPIO)); // 内部下拉
                     ESP_ERROR_CHECK(rtc_gpio_pullup_dis(PWR_BUTTON_GPIO));
-                    /* Matikan sinyal pengaktif daya */
+                    /* 关闭电源使能 */
                     rtc_gpio_set_level(PWR_EN_GPIO, 0);
                     rtc_gpio_hold_dis(PWR_EN_GPIO);
                     
-                    // Pastikan semua periferal sudah dimatikan
+                    // 确保所有外设已关闭
                     vTaskDelay(200 / portTICK_PERIOD_MS);
-                    ESP_LOGI(TAG, "Memulai mode deep sleep");
+                    ESP_LOGI(TAG, "Initiating deep sleep");
 
                     esp_deep_sleep_start();
                     break;
                 }   
                 default:
-                    ESP_LOGD(TAG, "Status daya berubah menjadi %d", static_cast<int>(newState));
+                    ESP_LOGD(TAG, "State changed to %d", static_cast<int>(newState));
                     break;
             }
         });  

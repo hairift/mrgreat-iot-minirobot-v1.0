@@ -36,7 +36,7 @@ esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
     
-    /* Atur max_len = 0 untuk mengambil panjang bingkai */
+    /* Set max_len = 0 to get the frame len */
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
@@ -45,14 +45,14 @@ esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
     
     if (ws_pkt.len) {
-        /* ws_pkt.len + 1 dipakai untuk terminasi NULL karena data yang diharapkan berupa string */
+        /* ws_pkt.len + 1 is for NULL termination as we are expecting a string */
         buf = (uint8_t*)calloc(1, ws_pkt.len + 1);
         if (buf == NULL) {
             ESP_LOGE(TAG, "Failed to calloc memory for buf");
             return ESP_ERR_NO_MEM;
         }
         ws_pkt.payload = buf;
-        /* Atur max_len = ws_pkt.len untuk mengambil muatan bingkai */
+        /* Set max_len = ws_pkt.len to get the frame payload */
         ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
@@ -144,9 +144,9 @@ void WebSocketControlServer::HandleMessage(httpd_req_t *req, const char* data, s
         return;
     }
 
-    // Mendukung dua format:
-    // 1. Format lengkap: {"type":"mcp","payload":{...}}
-    // 2. Format ringkas: langsung berupa objek payload MCP
+    // 支持两种格式：
+    // 1. 完整格式：{"type":"mcp","payload":{...}}
+    // 2. 简化格式：直接是MCP payload对象
     
     cJSON* payload = nullptr;
     cJSON* type = cJSON_GetObjectItem(root, "type");
@@ -189,4 +189,62 @@ void WebSocketControlServer::RemoveClient(httpd_req_t *req) {
 
 size_t WebSocketControlServer::GetClientCount() const {
     return clients_.size();
+}
+
+struct WsBroadcastJob {
+    httpd_handle_t server;
+    int fd;
+    char* payload;
+    size_t len;
+};
+
+static void ws_broadcast_send_job(void* arg) {
+    WsBroadcastJob* job = static_cast<WsBroadcastJob*>(arg);
+
+    httpd_ws_frame_t ws_pkt = {};
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.payload = reinterpret_cast<uint8_t*>(job->payload);
+    ws_pkt.len = job->len;
+    ws_pkt.final = true;
+
+    esp_err_t ret = httpd_ws_send_frame_async(job->server, job->fd, &ws_pkt);
+    if (ret != ESP_OK) {
+        ESP_LOGE("WSControl", "BroadcastMessage: send failed fd=%d err=%d", job->fd, ret);
+    }
+
+    free(job->payload);
+    free(job);
+}
+
+void WebSocketControlServer::BroadcastMessage(const std::string& message) {
+    if (!server_handle_ || clients_.empty()) {
+        return;
+    }
+
+    for (auto& [fd, req] : clients_) {
+        WsBroadcastJob* job = static_cast<WsBroadcastJob*>(malloc(sizeof(WsBroadcastJob)));
+        if (!job) {
+            ESP_LOGE(TAG, "BroadcastMessage: failed to allocate job");
+            continue;
+        }
+
+        job->server = server_handle_;
+        job->fd = fd;
+        job->len = message.length();
+        job->payload = static_cast<char*>(malloc(message.length() + 1));
+        if (!job->payload) {
+            ESP_LOGE(TAG, "BroadcastMessage: failed to allocate payload");
+            free(job);
+            continue;
+        }
+        memcpy(job->payload, message.c_str(), message.length());
+        job->payload[message.length()] = '\0';
+
+        esp_err_t ret = httpd_queue_work(server_handle_, ws_broadcast_send_job, job);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "BroadcastMessage: httpd_queue_work failed fd=%d err=%d", fd, ret);
+            free(job->payload);
+            free(job);
+        }
+    }
 }

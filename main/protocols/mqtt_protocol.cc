@@ -4,25 +4,36 @@
 #include "settings.h"
 
 #include <esp_log.h>
-#include <cstring>
 #include <cctype>
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+#include <cstring>
 #include <arpa/inet.h>
 #include "assets/lang_config.h"
 
 #define TAG "MQTT"
 
+namespace {
+
+constexpr int kServerHelloTimeoutMs = 10000;
+constexpr size_t kAesNonceSize = 16;
+constexpr int64_t kSequenceWarningIntervalUs = 1000000;
+
+}  // namespace
+
 MqttProtocol::MqttProtocol() {
     event_group_handle_ = xEventGroupCreate();
     mbedtls_aes_init(&aes_ctx_);
 
-    // Inisialisasi pewaktu sambung ulang
+    // Siapkan pewaktu untuk mencoba kembali MQTT tanpa menahan tugas utama.
     esp_timer_create_args_t reconnect_timer_args = {
         .callback = [](void* arg) {
             MqttProtocol* protocol = (MqttProtocol*)arg;
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateIdle) {
-                ESP_LOGI(TAG, "Menghubungkan kembali ke server MQTT");
-                auto alive = protocol->alive_;  // Simpan status hidup saat ini
+                ESP_LOGI(TAG, "Reconnecting to MQTT server");
+                auto alive = protocol->alive_;
                 app.Schedule([protocol, alive]() {
                     if (*alive) {
                         protocol->StartMqttClient(false);
@@ -38,7 +49,7 @@ MqttProtocol::MqttProtocol() {
 MqttProtocol::~MqttProtocol() {
     ESP_LOGI(TAG, "MqttProtocol deinit");
     
-    // Tandai sebagai mati terlebih dahulu untuk mencegah tugas terjadwal yang tertunda dari eksekusi
+    // Tandai objek tidak aktif sebelum membatalkan pekerjaan terjadwal.
     *alive_ = false;
     
     if (reconnect_timer_ != nullptr) {
@@ -61,7 +72,7 @@ bool MqttProtocol::Start() {
 
 bool MqttProtocol::StartMqttClient(bool report_error) {
     if (mqtt_ != nullptr) {
-        ESP_LOGW(TAG, "Client MQTT sudah dimulai");
+        ESP_LOGW(TAG, "Mqtt client already started");
         mqtt_.reset();
     }
 
@@ -74,7 +85,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     publish_topic_ = settings.GetString("publish_topic");
 
     if (endpoint.empty()) {
-        ESP_LOGW(TAG, "Endpoint MQTT tidak ditentukan");
+        ESP_LOGW(TAG, "MQTT endpoint is not specified");
         if (report_error) {
             SetError(Lang::Strings::SERVER_NOT_FOUND);
         }
@@ -83,12 +94,18 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
 
     auto network = Board::GetInstance().GetNetwork();
     if (network == nullptr) {
-        ESP_LOGE(TAG, "Network interface tidak tersedia");
+        ESP_LOGE(TAG, "Antarmuka jaringan tidak tersedia");
+        if (report_error) {
+            SetError(Lang::Strings::SERVER_NOT_CONNECTED);
+        }
         return false;
     }
     mqtt_ = network->CreateMqtt(0);
     if (mqtt_ == nullptr) {
-        ESP_LOGE(TAG, "Gagal membuat client MQTT");
+        ESP_LOGE(TAG, "Gagal membuat klien MQTT");
+        if (report_error) {
+            SetError(Lang::Strings::SERVER_ERROR);
+        }
         return false;
     }
     mqtt_->SetKeepAlive(keepalive_interval);
@@ -97,7 +114,10 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         if (on_disconnected_ != nullptr) {
             on_disconnected_();
         }
-        ESP_LOGI(TAG, "MQTT terputus, jadwalkan reconnect dalam %d detik", MQTT_RECONNECT_INTERVAL_MS / 1000);
+        ESP_LOGI(TAG, "MQTT disconnected, schedule reconnect in %d seconds", MQTT_RECONNECT_INTERVAL_MS / 1000);
+        if (esp_timer_is_active(reconnect_timer_)) {
+            esp_timer_stop(reconnect_timer_);
+        }
         esp_timer_start_once(reconnect_timer_, MQTT_RECONNECT_INTERVAL_MS * 1000);
     });
 
@@ -105,18 +125,20 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         if (on_connected_ != nullptr) {
             on_connected_();
         }
-        esp_timer_stop(reconnect_timer_);
+        if (esp_timer_is_active(reconnect_timer_)) {
+            esp_timer_stop(reconnect_timer_);
+        }
     });
 
     mqtt_->OnMessage([this](const std::string& topic, const std::string& payload) {
         cJSON* root = cJSON_Parse(payload.c_str());
         if (root == nullptr) {
-            ESP_LOGE(TAG, "Gagal mengurai pesan json %s", payload.c_str());
+            ESP_LOGE(TAG, "Failed to parse json message %s", payload.c_str());
             return;
         }
         cJSON* type = cJSON_GetObjectItem(root, "type");
         if (!cJSON_IsString(type)) {
-            ESP_LOGE(TAG, "Tipe pesan tidak valid");
+            ESP_LOGE(TAG, "Message type is invalid");
             cJSON_Delete(root);
             return;
         }
@@ -125,13 +147,14 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
             ParseServerHello(root);
         } else if (strcmp(type->valuestring, "goodbye") == 0) {
             auto session_id = cJSON_GetObjectItem(root, "session_id");
-            const char* received_session_id = cJSON_IsString(session_id) ? session_id->valuestring : nullptr;
-            ESP_LOGI(TAG, "Menerima pesan goodbye, session_id: %s", received_session_id ? received_session_id : "null");
-            if (received_session_id == nullptr || session_id_ == received_session_id) {
-                auto alive = alive_;  // Simpan status hidup saat ini
+            ESP_LOGI(TAG, "Menerima goodbye, session_id: %s",
+                cJSON_IsString(session_id) ? session_id->valuestring : "tidak valid");
+            if (cJSON_IsString(session_id) && !session_id_.empty() &&
+                session_id_ == session_id->valuestring) {
+                auto alive = alive_;
                 Application::GetInstance().Schedule([this, alive]() {
                     if (*alive) {
-                        // Server memulai goodbye, jangan kirim goodbye balik untuk menghindari ping-pong
+                        // Server memulai penutupan, jadi jangan mengirim goodbye balasan.
                         CloseAudioChannel(false);
                     }
                 });
@@ -143,44 +166,54 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         last_incoming_time_ = std::chrono::steady_clock::now();
     });
 
-    ESP_LOGI(TAG, "Menghubungkan ke endpoint %s", endpoint.c_str());
+    ESP_LOGI(TAG, "Connecting to endpoint %s", endpoint.c_str());
     std::string broker_address;
     int broker_port = 8883;
     size_t pos = endpoint.find(':');
     if (pos != std::string::npos) {
         broker_address = endpoint.substr(0, pos);
-        try {
-            broker_port = std::stoi(endpoint.substr(pos + 1));
-        } catch (const std::exception&) {
-            ESP_LOGE(TAG, "Port MQTT tidak valid: %s", endpoint.c_str());
-            SetError(Lang::Strings::SERVER_NOT_FOUND);
+        const std::string port_text = endpoint.substr(pos + 1);
+        char* end = nullptr;
+        errno = 0;
+        long parsed_port = std::strtol(port_text.c_str(), &end, 10);
+        if (errno != 0 || end == port_text.c_str() || *end != '\0' ||
+            parsed_port <= 0 || parsed_port > 65535) {
+            ESP_LOGE(TAG, "Port MQTT tidak valid pada endpoint %s", endpoint.c_str());
+            if (report_error) {
+                SetError(Lang::Strings::SERVER_NOT_FOUND);
+            }
             return false;
         }
+        broker_port = static_cast<int>(parsed_port);
     } else {
         broker_address = endpoint;
     }
     if (!mqtt_->Connect(broker_address, broker_port, client_id, username, password)) {
-        ESP_LOGE(TAG, "Gagal terhubung ke endpoint, code=%d", mqtt_->GetLastError());
-        SetError(Lang::Strings::SERVER_NOT_CONNECTED);
+        ESP_LOGE(TAG, "Failed to connect to endpoint, code=%d", mqtt_->GetLastError());
+        if (report_error) {
+            SetError(Lang::Strings::SERVER_NOT_CONNECTED);
+        }
         return false;
     }
 
-    ESP_LOGI(TAG, "Terhubung ke endpoint");
+    ESP_LOGI(TAG, "Connected to endpoint");
     return true;
 }
 
 bool MqttProtocol::SendText(const std::string& text) {
+    return PublishText(text, true);
+}
+
+bool MqttProtocol::PublishText(const std::string& text, bool report_error) {
     if (publish_topic_.empty()) {
         return false;
     }
-    if (mqtt_ == nullptr || !mqtt_->IsConnected()) {
-        ESP_LOGW(TAG, "Klien MQTT tidak terhubung");
-        return false;
-    }
-    if (!mqtt_->Publish(publish_topic_, text)) {
-        ESP_LOGE(TAG, "Gagal mempublikasikan pesan, panjang payload=%u byte",
-                 static_cast<unsigned>(text.size()));
-        SetError(Lang::Strings::SERVER_ERROR);
+    if (mqtt_ == nullptr || !mqtt_->IsConnected() || !mqtt_->Publish(publish_topic_, text)) {
+        ESP_LOGE(TAG, "Gagal mempublikasikan pesan MQTT sepanjang %u byte",
+            static_cast<unsigned>(text.size()));
+        if (report_error) {
+            SetError(Lang::Strings::SERVER_ERROR);
+        }
         return false;
     }
     return true;
@@ -191,22 +224,24 @@ bool MqttProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
     if (udp_ == nullptr) {
         return false;
     }
-    if (aes_nonce_.size() < 16) {
-        ESP_LOGE(TAG, "AES nonce belum valid");
+    if (aes_nonce_.size() != kAesNonceSize) {
+        ESP_LOGE(TAG, "Nonce AES kanal audio tidak valid");
         return false;
     }
-    if (packet->payload.size() > UINT16_MAX) {
-        ESP_LOGE(TAG, "Payload audio terlalu besar: %u", packet->payload.size());
+    if (packet == nullptr ||
+        packet->payload.size() > std::numeric_limits<uint16_t>::max()) {
+        ESP_LOGE(TAG, "Payload audio keluar dari batas protokol");
         return false;
     }
 
     std::string nonce(aes_nonce_);
-    uint16_t payload_size_be = htons(static_cast<uint16_t>(packet->payload.size()));
-    uint32_t timestamp_be = htonl(packet->timestamp);
-    uint32_t sequence_be = htonl(++local_sequence_);
-    memcpy(&nonce[2], &payload_size_be, sizeof(payload_size_be));
-    memcpy(&nonce[8], &timestamp_be, sizeof(timestamp_be));
-    memcpy(&nonce[12], &sequence_be, sizeof(sequence_be));
+    const uint16_t payload_size_be =
+        htons(static_cast<uint16_t>(packet->payload.size()));
+    const uint32_t timestamp_be = htonl(packet->timestamp);
+    const uint32_t sequence_be = htonl(++local_sequence_);
+    memcpy(nonce.data() + 2, &payload_size_be, sizeof(payload_size_be));
+    memcpy(nonce.data() + 8, &timestamp_be, sizeof(timestamp_be));
+    memcpy(nonce.data() + 12, &sequence_be, sizeof(sequence_be));
 
     std::string encrypted;
     encrypted.resize(aes_nonce_.size() + packet->payload.size());
@@ -214,10 +249,11 @@ bool MqttProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
 
     size_t nc_off = 0;
     uint8_t stream_block[16] = {0};
-    if (mbedtls_aes_crypt_ctr(&aes_ctx_, packet->payload.size(), &nc_off,
-        reinterpret_cast<unsigned char*>(nonce.data()), stream_block,
-        reinterpret_cast<const unsigned char*>(packet->payload.data()),
-        reinterpret_cast<unsigned char*>(&encrypted[nonce.size()])) != 0) {
+    if (mbedtls_aes_crypt_ctr(
+            &aes_ctx_, packet->payload.size(), &nc_off,
+            reinterpret_cast<unsigned char*>(nonce.data()), stream_block,
+            reinterpret_cast<const unsigned char*>(packet->payload.data()),
+            reinterpret_cast<unsigned char*>(encrypted.data() + nonce.size())) != 0) {
         ESP_LOGE(TAG, "Gagal mengenkripsi data audio");
         return false;
     }
@@ -231,20 +267,14 @@ void MqttProtocol::CloseAudioChannel(bool send_goodbye) {
         udp_.reset();
     }
 
-    ESP_LOGI(TAG, "Menutup channel audio, send_goodbye: %d", send_goodbye);
+    ESP_LOGI(TAG, "Menutup kanal audio, kirim goodbye: %d", send_goodbye);
 
-    // Hanya kirim goodbye saat client memulai penutupan
-    // Jangan kirim jika server sudah mengirim goodbye (untuk menghindari ping-pong)
-    if (send_goodbye) {
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-        cJSON_AddStringToObject(root, "type", "goodbye");
-        char* json_str = cJSON_PrintUnformatted(root);
-        std::string message = json_str ? json_str : "{}";
-        if (json_str != nullptr) {
-            cJSON_free(json_str);
-        }
-        cJSON_Delete(root);
+    // Hanya kirim goodbye ketika perangkat yang memulai penutupan.
+    if (send_goodbye && !session_id_.empty()) {
+        std::string message = "{";
+        message += "\"session_id\":\"" + session_id_ + "\",";
+        message += "\"type\":\"goodbye\"";
+        message += "}";
         SendText(message);
     }
 
@@ -255,26 +285,29 @@ void MqttProtocol::CloseAudioChannel(bool send_goodbye) {
 
 bool MqttProtocol::OpenAudioChannel() {
     if (mqtt_ == nullptr || !mqtt_->IsConnected()) {
-        ESP_LOGI(TAG, "MQTT tidak terhubung, coba hubungkan sekarang");
+        ESP_LOGI(TAG, "MQTT belum terhubung, mencoba menghubungkan sekarang");
         if (!StartMqttClient(true)) {
             return false;
         }
     }
 
     error_occurred_ = false;
-    session_id_ = "";
+    session_id_.clear();
     last_incoming_time_ = std::chrono::steady_clock::now();
     xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
 
-    auto message = GetHelloMessage();
-    if (!SendText(message)) {
+    if (!PublishText(GetHelloMessage(), true)) {
         return false;
     }
 
-    // Tunggu respons server
-    EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+    EventBits_t bits = xEventGroupWaitBits(
+        event_group_handle_,
+        MQTT_PROTOCOL_SERVER_HELLO_EVENT,
+        pdTRUE,
+        pdFALSE,
+        pdMS_TO_TICKS(kServerHelloTimeoutMs));
     if (!(bits & MQTT_PROTOCOL_SERVER_HELLO_EVENT)) {
-        ESP_LOGE(TAG, "Gagal menerima server hello");
+        ESP_LOGE(TAG, "Waktu tunggu server hello habis");
         SetError(Lang::Strings::SERVER_TIMEOUT);
         return false;
     }
@@ -282,12 +315,13 @@ bool MqttProtocol::OpenAudioChannel() {
     std::lock_guard<std::mutex> lock(channel_mutex_);
     auto network = Board::GetInstance().GetNetwork();
     if (network == nullptr) {
-        ESP_LOGE(TAG, "Network interface tidak tersedia untuk UDP");
+        ESP_LOGE(TAG, "Antarmuka jaringan UDP tidak tersedia");
+        SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
     udp_ = network->CreateUdp(2);
     if (udp_ == nullptr) {
-        ESP_LOGE(TAG, "Gagal membuat socket UDP");
+        ESP_LOGE(TAG, "Gagal membuat soket UDP");
         SetError(Lang::Strings::SERVER_ERROR);
         return false;
     }
@@ -297,70 +331,87 @@ bool MqttProtocol::OpenAudioChannel() {
          * |type 1u|flags 1u|payload_len 2u|ssrc 4u|timestamp 4u|sequence 4u|
          * |payload payload_len|
          */
-        if (data.size() < aes_nonce_.size() || aes_nonce_.size() < 16) {
-            ESP_LOGE(TAG, "Ukuran paket audio tidak valid: %u", data.size());
+        if (aes_nonce_.size() != kAesNonceSize ||
+            data.size() < kAesNonceSize) {
+            ESP_LOGE(TAG, "Ukuran paket audio tidak valid: %u",
+                static_cast<unsigned>(data.size()));
             return;
         }
-        if (data[0] != 0x01) {
-            ESP_LOGE(TAG, "Tipe paket audio tidak valid: %x", data[0]);
+        if (static_cast<uint8_t>(data[0]) != 0x01) {
+            ESP_LOGE(TAG, "Tipe paket audio tidak valid: %02x",
+                static_cast<unsigned>(static_cast<uint8_t>(data[0])));
             return;
         }
+
         uint16_t payload_size_be = 0;
         uint32_t timestamp_be = 0;
         uint32_t sequence_be = 0;
         memcpy(&payload_size_be, data.data() + 2, sizeof(payload_size_be));
         memcpy(&timestamp_be, data.data() + 8, sizeof(timestamp_be));
         memcpy(&sequence_be, data.data() + 12, sizeof(sequence_be));
-        uint16_t declared_payload_size = ntohs(payload_size_be);
-        size_t decrypted_size = data.size() - aes_nonce_.size();
-        if (declared_payload_size != decrypted_size) {
-            ESP_LOGW(TAG, "Ukuran payload audio tidak cocok: header=%u aktual=%u",
-                declared_payload_size, static_cast<unsigned>(decrypted_size));
+        const size_t payload_size = ntohs(payload_size_be);
+        if (data.size() != kAesNonceSize + payload_size) {
+            ESP_LOGW(TAG, "Ukuran payload UDP tidak cocok: header=%u aktual=%u",
+                static_cast<unsigned>(payload_size),
+                static_cast<unsigned>(data.size() - kAesNonceSize));
             return;
         }
-        uint32_t timestamp = ntohl(timestamp_be);
-        uint32_t sequence = ntohl(sequence_be);
-        if (sequence < remote_sequence_) {
-            int64_t now_us = esp_timer_get_time();
-            if (now_us - last_sequence_warning_us_ > 1000000) {
+
+        const uint32_t timestamp = ntohl(timestamp_be);
+        const uint32_t sequence = ntohl(sequence_be);
+        if (remote_sequence_ != 0 && sequence <= remote_sequence_) {
+            const int64_t now_us = esp_timer_get_time();
+            if (now_us - last_sequence_warning_us_ >= kSequenceWarningIntervalUs) {
                 last_sequence_warning_us_ = now_us;
-                ESP_LOGW(TAG, "Menerima paket audio dengan sequence lama: %lu, yang diharapkan: %lu", sequence, remote_sequence_);
+                ESP_LOGW(TAG, "Paket audio lama: %lu, terakhir: %lu",
+                    sequence, remote_sequence_);
             }
             return;
         }
         if (sequence != remote_sequence_ + 1) {
-            int64_t now_us = esp_timer_get_time();
-            if (now_us - last_sequence_warning_us_ > 1000000) {
+            const int64_t now_us = esp_timer_get_time();
+            if (now_us - last_sequence_warning_us_ >= kSequenceWarningIntervalUs) {
                 last_sequence_warning_us_ = now_us;
-                ESP_LOGW(TAG, "Menerima paket audio dengan sequence salah: %lu, yang diharapkan: %lu", sequence, remote_sequence_ + 1);
+                ESP_LOGW(TAG, "Paket audio terlewat: diterima=%lu diharapkan=%lu",
+                    sequence, remote_sequence_ + 1);
             }
         }
 
+        const size_t decrypted_size = payload_size;
         size_t nc_off = 0;
         uint8_t stream_block[16] = {0};
-        std::string nonce(data.data(), aes_nonce_.size());
-        auto encrypted = reinterpret_cast<const unsigned char*>(data.data() + aes_nonce_.size());
+        std::string nonce(data.data(), kAesNonceSize);
         auto packet = std::make_unique<AudioStreamPacket>();
         packet->sample_rate = server_sample_rate_;
         packet->frame_duration = server_frame_duration_;
         packet->timestamp = timestamp;
         packet->payload.resize(decrypted_size);
-        int ret = mbedtls_aes_crypt_ctr(&aes_ctx_, decrypted_size, &nc_off,
-            reinterpret_cast<unsigned char*>(nonce.data()), stream_block, encrypted,
+
+        int ret = mbedtls_aes_crypt_ctr(
+            &aes_ctx_, decrypted_size, &nc_off,
+            reinterpret_cast<unsigned char*>(nonce.data()), stream_block,
+            reinterpret_cast<const unsigned char*>(data.data() + kAesNonceSize),
             reinterpret_cast<unsigned char*>(packet->payload.data()));
         if (ret != 0) {
-                ESP_LOGE(TAG, "Gagal mendekripsi data audio, ret: %d", ret);
+            ESP_LOGE(TAG, "Gagal mendekripsi data audio, kode: %d", ret);
             return;
         }
+        remote_sequence_ = sequence;
+
         if (on_incoming_audio_ != nullptr) {
             on_incoming_audio_(std::move(packet));
         }
-        remote_sequence_ = sequence;
         last_incoming_time_ = std::chrono::steady_clock::now();
     });
 
-    udp_->Connect(udp_server_, udp_port_);
+    if (!udp_->Connect(udp_server_, udp_port_)) {
+        ESP_LOGE(TAG, "Gagal menghubungkan UDP ke %s:%d", udp_server_.c_str(), udp_port_);
+        udp_.reset();
+        SetError(Lang::Strings::SERVER_NOT_CONNECTED);
+        return false;
+    }
 
+    last_incoming_time_ = std::chrono::steady_clock::now();
     if (on_audio_channel_opened_ != nullptr) {
         on_audio_channel_opened_();
     }
@@ -368,7 +419,7 @@ bool MqttProtocol::OpenAudioChannel() {
 }
 
 std::string MqttProtocol::GetHelloMessage() {
-    // Kirim pesan hello untuk meminta kanal UDP
+    // Kirim pesan hello untuk meminta kanal audio UDP.
     cJSON* root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "hello");
     cJSON_AddNumberToObject(root, "version", 3);
@@ -393,19 +444,27 @@ std::string MqttProtocol::GetHelloMessage() {
 }
 
 void MqttProtocol::ParseServerHello(const cJSON* root) {
+    std::lock_guard<std::mutex> lock(channel_mutex_);
+    if (udp_ != nullptr) {
+        ESP_LOGW(TAG, "Server hello tambahan diabaikan karena kanal audio sudah terbuka");
+        return;
+    }
+
     auto transport = cJSON_GetObjectItem(root, "transport");
     if (!cJSON_IsString(transport) || strcmp(transport->valuestring, "udp") != 0) {
-        ESP_LOGE(TAG, "Transport tidak didukung: %s", cJSON_IsString(transport) ? transport->valuestring : "(invalid)");
+        ESP_LOGE(TAG, "Transport server tidak valid");
         return;
     }
 
     auto session_id = cJSON_GetObjectItem(root, "session_id");
-    if (cJSON_IsString(session_id)) {
-        session_id_ = session_id->valuestring;
-        ESP_LOGI(TAG, "ID Sesi: %s", session_id_.c_str());
+    if (!cJSON_IsString(session_id) || session_id->valuestring[0] == '\0') {
+        ESP_LOGE(TAG, "Session ID server tidak valid");
+        return;
     }
+    session_id_ = session_id->valuestring;
+    ESP_LOGI(TAG, "Session ID: %s", session_id_.c_str());
 
-    // Dapatkan sample rate dari pesan hello
+    // Ambil parameter audio dari pesan hello.
     auto audio_params = cJSON_GetObjectItem(root, "audio_params");
     if (cJSON_IsObject(audio_params)) {
         auto sample_rate = cJSON_GetObjectItem(audio_params, "sample_rate");
@@ -420,37 +479,29 @@ void MqttProtocol::ParseServerHello(const cJSON* root) {
 
     auto udp = cJSON_GetObjectItem(root, "udp");
     if (!cJSON_IsObject(udp)) {
-        ESP_LOGE(TAG, "UDP tidak ditentukan");
+        ESP_LOGE(TAG, "Konfigurasi UDP tidak tersedia");
         return;
     }
     auto server = cJSON_GetObjectItem(udp, "server");
     auto port = cJSON_GetObjectItem(udp, "port");
     auto key = cJSON_GetObjectItem(udp, "key");
     auto nonce = cJSON_GetObjectItem(udp, "nonce");
-    if (!cJSON_IsString(server) || !cJSON_IsNumber(port) || !cJSON_IsString(key) || !cJSON_IsString(nonce)) {
-        ESP_LOGE(TAG, "UDP config tidak lengkap atau tidak valid");
-        return;
-    }
-    if (port->valueint <= 0 || port->valueint > 65535) {
-        ESP_LOGE(TAG, "UDP port tidak valid: %d", port->valueint);
-        return;
-    }
-
-    // auto encryption = cJSON_GetObjectItem(udp, "encryption")->valuestring;
-    // ESP_LOGI(TAG, "UDP server: %s, port: %d, encryption: %s", udp_server_.c_str(), udp_port_, encryption);
-    std::string decoded_key = DecodeHexString(key->valuestring);
-    aes_nonce_ = DecodeHexString(nonce->valuestring);
-    if (decoded_key.size() != 16 || aes_nonce_.size() < 16) {
-        ESP_LOGE(TAG, "UDP crypto key/nonce tidak valid");
+    if (!cJSON_IsString(server) || !cJSON_IsNumber(port) ||
+        !cJSON_IsString(key) || !cJSON_IsString(nonce) ||
+        port->valueint <= 0 || port->valueint > 65535 ||
+        strlen(key->valuestring) != 32 || strlen(nonce->valuestring) != 32) {
+        ESP_LOGE(TAG, "Konfigurasi UDP atau AES dari server tidak valid");
         return;
     }
 
     udp_server_ = server->valuestring;
     udp_port_ = port->valueint;
-    mbedtls_aes_free(&aes_ctx_);
-    mbedtls_aes_init(&aes_ctx_);
-    if (mbedtls_aes_setkey_enc(&aes_ctx_, reinterpret_cast<const unsigned char*>(decoded_key.data()), decoded_key.size() * 8) != 0) {
-        ESP_LOGE(TAG, "Gagal menginisialisasi AES context");
+    aes_nonce_ = DecodeHexString(nonce->valuestring);
+    std::string aes_key = DecodeHexString(key->valuestring);
+    if (aes_nonce_.size() != 16 || aes_key.size() != 16 ||
+        mbedtls_aes_setkey_enc(&aes_ctx_,
+            reinterpret_cast<const unsigned char*>(aes_key.data()), 128) != 0) {
+        ESP_LOGE(TAG, "Gagal menyiapkan kunci AES kanal audio");
         return;
     }
     local_sequence_ = 0;
@@ -459,26 +510,25 @@ void MqttProtocol::ParseServerHello(const cJSON* root) {
     xEventGroupSetBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
 }
 
-static const char hex_chars[] = "0123456789ABCDEF";
-// Fungsi pembantu, mengonversi karakter heksadesimal tunggal ke nilai numerik yang sesuai
+// Ubah satu karakter heksadesimal menjadi nilai binernya.
 static inline uint8_t CharToHex(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return 0;  // Untuk input tidak valid, kembalikan 0
+    return 0;
 }
 
 std::string MqttProtocol::DecodeHexString(const std::string& hex_string) {
-    if (hex_string.size() % 2 != 0) {
-        return "";
-    }
-
     std::string decoded;
+    if ((hex_string.size() & 1U) != 0U) {
+        return decoded;
+    }
     decoded.reserve(hex_string.size() / 2);
     for (size_t i = 0; i < hex_string.size(); i += 2) {
         if (!std::isxdigit(static_cast<unsigned char>(hex_string[i])) ||
             !std::isxdigit(static_cast<unsigned char>(hex_string[i + 1]))) {
-            return "";
+            decoded.clear();
+            return decoded;
         }
         char byte = (CharToHex(hex_string[i]) << 4) | CharToHex(hex_string[i + 1]);
         decoded.push_back(byte);

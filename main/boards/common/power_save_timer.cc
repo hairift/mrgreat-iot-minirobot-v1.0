@@ -76,14 +76,14 @@ void PowerSaveTimer::PowerSaveCheck() {
             }
 
             if (cpu_max_freq_ != -1) {
-                // Nonaktifkan deteksi kata pemicu
+                // Disable wake word detection
                 auto& audio_service = app.GetAudioService();
                 is_wake_word_running_ = audio_service.IsWakeWordRunning();
                 if (is_wake_word_running_) {
                     audio_service.EnableWakeWordDetection(false);
                     vTaskDelay(pdMS_TO_TICKS(100));
                 }
-                // Nonaktifkan masukan audio
+                // Disable audio input
                 auto codec = Board::GetInstance().GetAudioCodec();
                 if (codec) {
                     codec->EnableInput(false);
@@ -117,7 +117,7 @@ void PowerSaveTimer::WakeUp() {
             };
             esp_pm_configure(&pm_config);
 
-            // Aktifkan deteksi kata pemicu
+            // Enable wake word detection
             auto& app = Application::GetInstance();
             auto& audio_service = app.GetAudioService();
             if (is_wake_word_running_) {

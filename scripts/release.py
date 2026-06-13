@@ -3,19 +3,19 @@ import os
 import json
 import zipfile
 import argparse
+import re
 from pathlib import Path
 from typing import Optional
 
-# Pindah ke akar proyek agar semua perintah menggunakan jalur yang konsisten.
+# Switch to project root directory
 os.chdir(Path(__file__).resolve().parent.parent)
 
 ################################################################################
-# Fungsi utilitas umum
+# Common utility functions
 ################################################################################
 
-
 def get_board_type_from_compile_commands() -> Optional[str]:
-    """Baca BOARD_TYPE hasil kompilasi saat ini dari build/compile_commands.json."""
+    """Parse the current compiled BOARD_TYPE from build/compile_commands.json"""
     compile_file = Path("build/compile_commands.json")
     if not compile_file.exists():
         return None
@@ -31,7 +31,7 @@ def get_board_type_from_compile_commands() -> Optional[str]:
 
 
 def get_project_version() -> Optional[str]:
-    """Baca set(PROJECT_VER "x.y.z") dari CMakeLists.txt akar proyek."""
+    """Read set(PROJECT_VER "x.y.z") from root CMakeLists.txt"""
     with Path("CMakeLists.txt").open(encoding='utf-8') as f:
         for line in f:
             if line.startswith("set(PROJECT_VER"):
@@ -41,12 +41,12 @@ def get_project_version() -> Optional[str]:
 
 def merge_bin() -> None:
     if os.system("idf.py merge-bin") != 0:
-        print("merge-bin gagal", file=sys.stderr)
+        print("merge-bin failed", file=sys.stderr)
         sys.exit(1)
 
 
 def zip_bin(name: str, version: str) -> None:
-    """Kemas build/merged-binary.bin ke releases/v{version}_{name}.zip."""
+    """Zip build/merged-binary.bin to releases/v{version}_{name}.zip"""
     out_dir = Path("releases")
     out_dir.mkdir(exist_ok=True)
     output_path = out_dir / f"v{version}_{name}.zip"
@@ -56,31 +56,27 @@ def zip_bin(name: str, version: str) -> None:
 
     with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
         zipf.write("build/merged-binary.bin", arcname="merged-binary.bin")
-    print(f"berhasil membuat arsip biner di {output_path}")
-
+    print(f"zip bin to {output_path} done")
 
 def _get_manufacturer(cfg: dict) -> Optional[str]:
-    """Baca nama pabrikan dari config.json."""
-    manufacturer = cfg.get("manufacturer")
-    if isinstance(manufacturer, str) and manufacturer.strip():
-        return manufacturer.strip()
+    """Read manufacturer from config.json"""
+    m = cfg.get("manufacturer")
+    if isinstance(m, str) and m.strip():
+        return m.strip()
     return None
 
-
 ################################################################################
-# Fungsi terkait board dan varian
+# board / variant related functions
 ################################################################################
 
 _BOARDS_DIR = Path("main/boards")
 
-
 def _collect_variants(config_filename: str = "config.json") -> list[dict[str, str]]:
-    """
-    Telusuri seluruh board di main/boards lalu kumpulkan informasi variannya.
+    """Traverse all boards under main/boards, collect variant information.
 
-    Contoh hasil:
-        [{"board": "bread-compact-ml307", "name": "bread-compact-ml307", "full_name": "bread-compact-ml307"}]
-        [{"board": "waveshare/esp32-p4-nano", "name": "esp32-p4-nano-10.1-a", "full_name": "waveshare-esp32-p4-nano-10.1-a"}]
+    Return example:
+        [{"board": "bread-compact-ml307", "name": "bread-compact-ml307", "full_name": "bread-compact-ml307"}, ...]
+        [{"board": "waveshare/esp32-p4-nano", "name": "esp32-p4-nano-10.1-a", "full_name": "waveshare-esp32-p4-nano-10.1-a"}, ...]
     """
     variants: list[dict[str, str]] = []
     errors: list[str] = []
@@ -97,42 +93,44 @@ def _collect_variants(config_filename: str = "config.json") -> list[dict[str, st
 
             manufacturer = _get_manufacturer(cfg)
 
-            # Pastikan nilai manufacturer konsisten dengan struktur direktori.
+            # Check manufacturer consistency with directory structure
             if "/" in board:
+                # Board is in a subdirectory (e.g., waveshare/esp32-p4-nano)
                 expected_manufacturer = board.split("/")[0]
                 if not manufacturer:
                     errors.append(
-                        f"{cfg_path}: board berada di subdirektori '{expected_manufacturer}/', "
-                        f"tetapi config.json tidak memiliki \"manufacturer\": \"{expected_manufacturer}\""
+                        f"{cfg_path}: Board is in '{expected_manufacturer}/' subdirectory, "
+                        f"but config.json is missing \"manufacturer\": \"{expected_manufacturer}\""
                     )
                 elif manufacturer != expected_manufacturer:
                     errors.append(
-                        f"{cfg_path}: nilai manufacturer tidak cocok, "
-                        f"direktori memakai '{expected_manufacturer}' tetapi config.json berisi \"{manufacturer}\""
+                        f"{cfg_path}: manufacturer mismatch, "
+                        f"directory is '{expected_manufacturer}/' but config.json has \"{manufacturer}\""
                     )
             else:
+                # Board is directly under boards/ directory
                 if manufacturer:
                     errors.append(
-                        f"{cfg_path}: board tidak berada di subdirektori pabrikan, "
-                        f"tetapi config.json mendefinisikan manufacturer \"{manufacturer}\", "
-                        f"silakan pindahkan board ke main/boards/{manufacturer}/{board}/"
+                        f"{cfg_path}: Board is not in a manufacturer subdirectory, "
+                        f"but config.json defines manufacturer \"{manufacturer}\", "
+                        f"please move board to main/boards/{manufacturer}/{board}/"
                     )
 
             for build in cfg.get("builds", []):
                 name = build["name"]
                 full_name = f"{manufacturer}-{name}" if manufacturer else name
                 variants.append({
-                    "board": board,
+                    "board": board, 
                     "name": name,
                     "full_name": full_name
                 })
 
         except Exception as e:
-            print(f"[ERROR] gagal mem-parsing {cfg_path}: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to parse {cfg_path}: {e}", file=sys.stderr)
 
-    # Laporkan semua masalah sekaligus agar lebih mudah diperbaiki.
+    # Report all errors at once
     if errors:
-        print("\n[ERROR] ditemukan masalah konfigurasi manufacturer:", file=sys.stderr)
+        print("\n[ERROR] Found manufacturer configuration issues:", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         print(file=sys.stderr)
@@ -141,32 +139,119 @@ def _collect_variants(config_filename: str = "config.json") -> list[dict[str, st
     return variants
 
 
-def _find_board_config(board_type: str) -> Optional[str]:
-    """
-    Cari CONFIG_BOARD_TYPE_xxx yang sesuai untuk board_type tertentu.
 
-    Pencarian dilakukan mundur dari baris `set(BOARD_TYPE "xxx")` menuju
-    blok `if(CONFIG_BOARD_TYPE_...)` terdekat.
-    """
+def _find_board_config_candidates(board_type: str) -> list[str]:
+    """Find all CONFIG_BOARD_TYPE_xxx candidates for the given board_type."""
     board_leaf = board_type.split("/")[-1]
     pattern = f'set(BOARD_TYPE "{board_leaf}")'
 
     cmake_file = Path("main/CMakeLists.txt")
     lines = cmake_file.read_text(encoding="utf-8").splitlines()
+    candidates: list[str] = []
 
     for idx, line in enumerate(lines):
         if pattern in line:
+            # Found the BOARD_TYPE line, search backwards for the nearest config guard
             for back_idx in range(idx - 1, -1, -1):
                 back_line = lines[back_idx]
                 if "if(CONFIG_BOARD_TYPE_" in back_line:
-                    return back_line.strip().split("if(")[1].split(")")[0]
+                    candidates.append(back_line.strip().split("if(")[1].split(")")[0])
+                    break
+    return candidates
+
+
+def _extract_board_config_from_sdkconfig_append(sdkconfig_append: list[str]) -> Optional[str]:
+    """Extract explicit CONFIG_BOARD_TYPE_xxx=y from sdkconfig_append, if present."""
+    pattern = re.compile(r"^(CONFIG_BOARD_TYPE_[A-Z0-9_]+)=y$")
+    matches = []
+    for item in sdkconfig_append:
+        m = pattern.match(item.strip())
+        if m:
+            matches.append(m.group(1))
+    if not matches:
+        return None
+    uniq = list(dict.fromkeys(matches))
+    if len(uniq) > 1:
+        raise ValueError(f"Multiple board type configs found in sdkconfig_append: {uniq}")
+    return uniq[0]
+
+
+def _symbol_supports_target(symbol: str, target: str) -> bool:
+    """Check whether Kconfig symbol depends on given target (e.g. esp32c5)."""
+    kconfig_file = Path("main/Kconfig.projbuild")
+    if not kconfig_file.exists():
+        return False
+
+    target_flag = f"IDF_TARGET_{target.upper()}"
+    lines = kconfig_file.read_text(encoding="utf-8").splitlines()
+
+    in_symbol = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("config "):
+            curr_symbol = stripped.split("config ", 1)[1].strip()
+            in_symbol = curr_symbol == symbol
+            continue
+        if in_symbol and stripped.startswith(("config ", "choice ", "endchoice", "menu ", "endmenu")):
             break
-    return None
+        if in_symbol and "depends on" in stripped and target_flag in stripped:
+            return True
+    return False
 
 
-# Entri "select" pada Kconfig tidak otomatis diterapkan saat kita hanya
-# menambahkan baris ke sdkconfig, jadi dependensi wajibnya kita tambahkan di sini
-# agar perilakunya mendekati menuconfig.
+def _resolve_board_config(board_type: str, target: str, sdkconfig_append: list[str]) -> str:
+    """Resolve CONFIG_BOARD_TYPE_xxx for current board build."""
+    explicit = _extract_board_config_from_sdkconfig_append(sdkconfig_append)
+    if explicit:
+        return explicit
+
+    candidates = _find_board_config_candidates(board_type)
+    if not candidates:
+        raise ValueError(f"Cannot find board config symbol for {board_type}")
+    if len(candidates) == 1:
+        return candidates[0]
+
+    by_target = [c for c in candidates if _symbol_supports_target(c, target)]
+    if len(by_target) == 1:
+        return by_target[0]
+    if len(by_target) > 1:
+        selected = by_target[0]
+        print(
+            f"[WARN] Ambiguous board config for {board_type} (target={target}), "
+            f"target-matched candidates={by_target}, selecting first: {selected}",
+            file=sys.stderr,
+        )
+        return selected
+
+    target_u = target.upper()
+    target_short = target_u.replace("ESP32", "")
+    by_name = [
+        c for c in candidates
+        if target_u in c or f"_{target_short}" in c
+    ]
+    if len(by_name) == 1:
+        return by_name[0]
+    if len(by_name) > 1:
+        selected = by_name[0]
+        print(
+            f"[WARN] Ambiguous board config for {board_type} (target={target}), "
+            f"name-matched candidates={by_name}, selecting first: {selected}",
+            file=sys.stderr,
+        )
+        return selected
+
+    selected = candidates[0]
+    print(
+        f"[WARN] Ambiguous board config for {board_type} (target={target}), "
+        f"candidates={candidates}, selecting first: {selected}",
+        file=sys.stderr,
+    )
+    return selected
+
+
+# Kconfig "select" entries are not automatically applied when we simply append
+# sdkconfig lines from config.json, so add the required dependencies here to
+# mimic menuconfig behaviour.
 _AUTO_SELECT_RULES: dict[str, list[str]] = {
     "CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING": [
         "CONFIG_BT_ENABLED=y",
@@ -180,7 +265,7 @@ _AUTO_SELECT_RULES: dict[str, list[str]] = {
 
 
 def _apply_auto_selects(sdkconfig_append: list[str]) -> list[str]:
-    """Terapkan aturan auto-select yang dipetakan secara statis."""
+    """Apply hardcoded auto-select rules to sdkconfig_append."""
     items: list[str] = []
     existing_keys: set[str] = set()
 
@@ -190,11 +275,11 @@ def _apply_auto_selects(sdkconfig_append: list[str]) -> list[str]:
             items.append(entry)
             existing_keys.add(key)
 
-    # Pertahankan urutan asli sambil melacak key yang sudah ditambahkan.
+    # Preserve original order while tracking keys
     for entry in sdkconfig_append:
         _append_if_missing(entry)
 
-    # Tambahkan dependensi otomatis saat fitur utama diaktifkan.
+    # Apply auto-select rules
     for key, deps in _AUTO_SELECT_RULES.items():
         for entry in sdkconfig_append:
             name, _, value = entry.partition("=")
@@ -205,11 +290,9 @@ def _apply_auto_selects(sdkconfig_append: list[str]) -> list[str]:
 
     return items
 
-
 ################################################################################
-# Pemeriksaan board_type di CMakeLists
+# Check board_type in CMakeLists
 ################################################################################
-
 
 def _board_type_exists(board_type: str) -> bool:
     cmake_file = Path("main/CMakeLists.txt").read_text(encoding="utf-8")
@@ -217,28 +300,25 @@ def _board_type_exists(board_type: str) -> bool:
     pattern = f'set(BOARD_TYPE "{board_leaf}")'
     return pattern in cmake_file
 
-
 ################################################################################
-# Implementasi kompilasi
+# Compile implementation
 ################################################################################
-
 
 def release(board_type: str, config_filename: str = "config.json", *, filter_name: Optional[str] = None) -> None:
-    """
-    Kompilasi dan kemas semua varian, atau satu varian tertentu, untuk board_type.
+    """Compile and package all/specified variants of the specified board_type
 
-    Argumen:
-        board_type: nama direktori di bawah main/boards.
-        config_filename: nama file config.json yang dipakai.
-        filter_name: jika diisi, hanya build["name"] yang sama yang akan dikompilasi.
+    Args:
+        board_type: directory name under main/boards
+        config_filename: config.json name (default: config.json)
+        filter_name: if specified, only compile the build["name"] that matches
     """
     cfg_path = _BOARDS_DIR / Path(board_type) / config_filename
     if not cfg_path.exists():
-        print(f"[WARN] {cfg_path} tidak ada, melewati {board_type}")
+        print(f"[WARN] {cfg_path} does not exist, skipping {board_type}")
         return
 
     project_version = get_project_version()
-    print(f"Versi proyek: {project_version} ({cfg_path})")
+    print(f"Project Version: {project_version} ({cfg_path})")
 
     with cfg_path.open(encoding='utf-8') as f:
         cfg = json.load(f)
@@ -249,7 +329,7 @@ def release(board_type: str, config_filename: str = "config.json", *, filter_nam
     if filter_name:
         builds = [b for b in builds if b["name"] == filter_name]
         if not builds:
-            print(f"[ERROR] varian {filter_name} tidak ditemukan pada {board_type} di {config_filename}", file=sys.stderr)
+            print(f"[ERROR] Variant {filter_name} not found in {board_type}'s {config_filename}", file=sys.stderr)
             sys.exit(1)
 
     for build in builds:
@@ -257,22 +337,31 @@ def release(board_type: str, config_filename: str = "config.json", *, filter_nam
         board_leaf = board_type.split("/")[-1]
 
         if board_leaf not in name:
-            raise ValueError(f"build.name {name} harus memuat {board_leaf}")
-
+            raise ValueError(f"build.name {name} must contain {board_leaf}")
+        
         final_name = f"{manufacturer}-{name}" if manufacturer else name
         output_path = Path("releases") / f"v{project_version}_{final_name}.zip"
         if output_path.exists():
-            print(f"Melewati {final_name} karena {output_path} sudah ada")
+            print(f"Skipping {final_name} because {output_path} already exists")
             continue
 
-        # Proses daftar tambahan sdkconfig.
-        board_type_config = _find_board_config(board_type)
-        sdkconfig_append = [f"{board_type_config}=y"]
-        sdkconfig_append.extend(build.get("sdkconfig_append", []))
+        # Process sdkconfig_append
+        build_sdkconfig_append = build.get("sdkconfig_append", [])
+        explicit_board_cfg = _extract_board_config_from_sdkconfig_append(build_sdkconfig_append)
+        if explicit_board_cfg:
+            print(
+                f"[INFO] Board config explicitly set in config.json: {explicit_board_cfg}, "
+                "skip auto-select.",
+            )
+            sdkconfig_append = list(build_sdkconfig_append)
+        else:
+            board_type_config = _resolve_board_config(board_type, target, build_sdkconfig_append)
+            sdkconfig_append = [f"{board_type_config}=y"]
+            sdkconfig_append.extend(build_sdkconfig_append)
         sdkconfig_append = _apply_auto_selects(sdkconfig_append)
 
         print("-" * 80)
-        print(f"nama: {final_name}")
+        print(f"name: {final_name}")
         print(f"target: {target}")
         if manufacturer:
             print(f"manufacturer: {manufacturer}")
@@ -281,84 +370,87 @@ def release(board_type: str, config_filename: str = "config.json", *, filter_nam
 
         os.environ.pop("IDF_TARGET", None)
 
+        # Call set-target
         if os.system(f"idf.py set-target {target}") != 0:
-            print("set-target gagal", file=sys.stderr)
+            print("set-target failed", file=sys.stderr)
             sys.exit(1)
 
-        # Tambahkan konfigurasi board ke sdkconfig.
+        # Append sdkconfig
         with Path("sdkconfig").open("a", encoding='utf-8') as f:
             f.write("\n")
-            f.write("# Ditambahkan oleh release.py\n")
+            f.write("# Append by release.py\n")
             for append in sdkconfig_append:
                 f.write(f"{append}\n")
-
-        # Bangun firmware dengan BOARD_NAME dan BOARD_TYPE yang sesuai.
+        # Build with macro BOARD_NAME defined to name
         if os.system(f"idf.py -DBOARD_NAME={name} -DBOARD_TYPE={board_type} build") != 0:
-            print("build gagal")
+            print("build failed")
             sys.exit(1)
 
+        # merge-bin
         merge_bin()
+
+        # Zip
         zip_bin(final_name, project_version)
 
-
 ################################################################################
-# Titik masuk CLI
+# CLI entry
 ################################################################################
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("board", nargs="?", default=None, help="Jenis board atau 'all'")
-    parser.add_argument("-c", "--config", default="config.json", help="Nama file config (bawaan: config.json)")
-    parser.add_argument("--list-boards", action="store_true", help="Tampilkan semua board dan variannya")
-    parser.add_argument("--json", action="store_true", help="Keluarkan hasil JSON saat dipakai dengan --list-boards")
-    parser.add_argument("--name", help="Nama varian yang akan dikompilasi tanpa awalan manufacturer")
+    parser.add_argument("board", nargs="?", default=None, help="Board type or 'all'")
+    parser.add_argument("-c", "--config", default="config.json", help="Config filename (default: config.json)")
+    parser.add_argument("--list-boards", action="store_true", help="List all supported boards and variants")
+    parser.add_argument("--json", action="store_true", help="Output in JSON format (use with --list-boards)")
+    parser.add_argument("--name", help="Variant name to compile (original name without manufacturer prefix)")
 
     args = parser.parse_args()
 
-    # Mode daftar board.
+    # List mode
     if args.list_boards:
         variants = _collect_variants(config_filename=args.config)
         if args.json:
             print(json.dumps(variants))
         else:
-            for variant in variants:
-                print(f"{variant['board']}: {variant['name']}")
+            for v in variants:
+                print(f"{v['board']}: {v['name']}")
         sys.exit(0)
 
-    # Mode pengemasan firmware dari hasil build direktori saat ini.
+    # Current directory firmware packaging mode
     if args.board is None:
         merge_bin()
         curr_board_type = get_board_type_from_compile_commands()
         if curr_board_type is None:
-            print("gagal membaca board_type dari compile_commands.json", file=sys.stderr)
+            print("Failed to parse board_type from compile_commands.json", file=sys.stderr)
             sys.exit(1)
         project_ver = get_project_version()
         zip_bin(curr_board_type, project_ver)
         sys.exit(0)
 
+    # Compile mode
     board_type_input: str = args.board
     name_filter: Optional[str] = args.name
 
-    # Pastikan board_type benar-benar ada di CMakeLists.
+    # Check board_type in CMakeLists
     if board_type_input != "all" and not _board_type_exists(board_type_input):
-        print(f"[ERROR] board_type {board_type_input} tidak ditemukan di main/CMakeLists.txt", file=sys.stderr)
+        print(f"[ERROR] board_type {board_type_input} not found in main/CMakeLists.txt", file=sys.stderr)
         sys.exit(1)
 
     variants_all = _collect_variants(config_filename=args.config)
 
-    # Siapkan daftar board_type yang akan diproses.
+    # Filter board_type list
     target_board_types: set[str]
     if board_type_input == "all":
-        target_board_types = {variant["board"] for variant in variants_all}
+        target_board_types = {v["board"] for v in variants_all}
     else:
         target_board_types = {board_type_input}
 
-    for board_type in sorted(target_board_types):
-        if not _board_type_exists(board_type):
-            print(f"[ERROR] board_type {board_type} tidak ditemukan di main/CMakeLists.txt", file=sys.stderr)
+    for bt in sorted(target_board_types):
+        if not _board_type_exists(bt):
+            print(f"[ERROR] board_type {bt} not found in main/CMakeLists.txt", file=sys.stderr)
             sys.exit(1)
-        cfg_path = _BOARDS_DIR / board_type / args.config
-        if board_type == board_type_input and not cfg_path.exists():
-            print(f"Board {board_type} tidak memiliki file {args.config}, dilewati")
+        cfg_path = _BOARDS_DIR / bt / args.config
+        if bt == board_type_input and not cfg_path.exists():
+            print(f"Board {bt} has no {args.config} config file, skipping")
             sys.exit(0)
-        release(board_type, config_filename=args.config, filter_name=name_filter if board_type == board_type_input else None)
+        release(bt, config_filename=args.config, filter_name=name_filter if bt == board_type_input else None)

@@ -7,51 +7,51 @@ extern "C" {
 #endif
 
 /**
- * @brief Perintah inisialisasi panel LCD.
+ * @brief LCD panel initialization commands.
  *
  */
 typedef struct {
-    int cmd;                /*<! Perintah LCD yang dipakai */
-    const void *data;       /*<! Buffer yang menyimpan data khusus untuk perintah tersebut */
-    size_t data_bytes;      /*<! Ukuran `data` di memori dalam byte */
-    unsigned int delay_ms;  /*<! Jeda dalam milidetik setelah perintah ini */
+    int cmd;                /*<! The specific LCD command */
+    const void *data;       /*<! Buffer that holds the command specific data */
+    size_t data_bytes;      /*<! Size of `data` in memory, in bytes */
+    unsigned int delay_ms;  /*<! Delay in milliseconds after this command */
 } gc9d01n_lcd_init_cmd_t;
 
 /**
- * @brief Konfigurasi vendor panel LCD.
+ * @brief LCD panel vendor configuration.
  *
- * @note  Struktur ini perlu diberikan ke field `vendor_config` pada `esp_lcd_panel_dev_config_t`.
+ * @note  This structure needs to be passed to the `vendor_config` field in `esp_lcd_panel_dev_config_t`.
  *
  */
 typedef struct {
-    const gc9d01n_lcd_init_cmd_t *init_cmds;     /*!< Penunjuk ke larik perintah inisialisasi. Isi NULL jika memakai perintah bawaan.
-                                                 *   Larik sebaiknya dideklarasikan sebagai `static const` dan ditempatkan di luar fungsi.
-                                                 *   Lihat `vendor_specific_init_default` pada file sumber.
+    const gc9d01n_lcd_init_cmd_t *init_cmds;     /*!< Pointer to initialization commands array. Set to NULL if using default commands.
+                                                 *   The array should be declared as `static const` and positioned outside the function.
+                                                 *   Please refer to `vendor_specific_init_default` in source file.
                                                  */
-    uint16_t init_cmds_size;                    /*<! Jumlah perintah pada larik di atas */
+    uint16_t init_cmds_size;                    /*<! Number of commands in above array */
 } gc9d01n_vendor_config_t;
 
 /**
- * @brief Membuat panel LCD untuk model GC9D01N.
+ * @brief Create LCD panel for model GC9D01N
  *
- * @note  Inisialisasi khusus vendor bisa berbeda antar pabrikan, jadi urutan inisialisasinya perlu dikonfirmasi ke pemasok LCD.
+ * @note  Vendor specific initialization can be different between manufacturers, should consult the LCD supplier for initialization sequence code.
  *
- * @param[in] io Objek IO panel LCD
- * @param[in] panel_dev_config Konfigurasi umum perangkat panel
- * @param[out] ret_panel Objek panel LCD yang dihasilkan
+ * @param[in] io LCD panel IO handle
+ * @param[in] panel_dev_config general panel device configuration
+ * @param[out] ret_panel Returned LCD panel handle
  * @return
- *          - ESP_ERR_INVALID_ARG   jika parameter tidak valid
- *          - ESP_ERR_NO_MEM        jika memori tidak cukup
- *          - ESP_OK                jika berhasil
+ *          - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *          - ESP_ERR_NO_MEM        if out of memory
+ *          - ESP_OK                on success
  */
 esp_err_t esp_lcd_new_panel_gc9d01n(const esp_lcd_panel_io_handle_t io, const esp_lcd_panel_dev_config_t *panel_dev_config, esp_lcd_panel_handle_t *ret_panel);
 
 /**
- * @brief Struktur konfigurasi bus panel LCD.
+ * @brief LCD panel bus configuration structure
  *
- * @param[in] sclk Nomor pin clock SPI
- * @param[in] mosi Nomor pin MOSI SPI
- * @param[in] max_trans_sz Ukuran transfer maksimum dalam byte
+ * @param[in] sclk SPI clock pin number
+ * @param[in] mosi SPI MOSI pin number
+ * @param[in] max_trans_sz Maximum transfer size in bytes
  *
  */
 #define GC9D01N_PANEL_BUS_SPI_CONFIG(sclk, mosi, max_trans_sz)   \
@@ -72,12 +72,12 @@ esp_err_t esp_lcd_new_panel_gc9d01n(const esp_lcd_panel_io_handle_t io, const es
     }
 
 /**
- * @brief Struktur konfigurasi IO panel LCD.
+ * @brief LCD panel IO configuration structure
  *
- * @param[in] cs Nomor pin chip select SPI
- * @param[in] dc Nomor pin data/perintah SPI
- * @param[in] cb Fungsi callback saat transfer SPI selesai
- * @param[in] cb_ctx Konteks untuk fungsi callback
+ * @param[in] cs SPI chip select pin number
+ * @param[in] dc SPI data/command pin number
+ * @param[in] cb Callback function when SPI transfer is done
+ * @param[in] cb_ctx Callback function context
  *
  */
 #define GC9D01N_PANEL_IO_SPI_CONFIG(cs, dc, callback, callback_ctx)  \

@@ -41,7 +41,7 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 
-/* Pin kamera DFRobot K10 */
+/* DFRobot K10 Camera pins */
 #define PWDN_GPIO_NUM       GPIO_NUM_NC
 #define RESET_GPIO_NUM      GPIO_NUM_NC
 #define XCLK_GPIO_NUM       GPIO_NUM_7
@@ -52,7 +52,7 @@
 #define SIOD_GPIO_NUM        GPIO_NUM_20
 #define SIOC_GPIO_NUM        GPIO_NUM_19
 
-/* Pin kamera */
+/* Camera pins */
 #define CAMERA_PIN_PWDN     PWDN_GPIO_NUM
 #define CAMERA_PIN_RESET    RESET_GPIO_NUM
 #define CAMERA_PIN_XCLK     XCLK_GPIO_NUM

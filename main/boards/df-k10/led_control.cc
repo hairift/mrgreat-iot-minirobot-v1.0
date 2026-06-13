@@ -18,9 +18,9 @@ StripColor LedStripControl::RGBToColor(int red, int green, int blue) {
 
 LedStripControl::LedStripControl(CircularStrip* led_strip) 
     : led_strip_(led_strip) {
-    // Baca tingkat kecerahan dari pengaturan
+    // 从设置中读取亮度等级
     Settings settings("led_strip");
-    brightness_level_ = settings.GetInt("brightness", 4);  // Tingkat bawaan 4
+    brightness_level_ = settings.GetInt("brightness", 4);  // 默认等级4
     led_strip_->SetBrightness(LevelToBrightness(brightness_level_), 4);
 
     auto& mcp_server = McpServer::GetInstance();
@@ -40,7 +40,7 @@ LedStripControl::LedStripControl(CircularStrip* led_strip)
             brightness_level_ = level;
             led_strip_->SetBrightness(LevelToBrightness(brightness_level_), 4);
 
-            // Simpan pengaturan
+            // 保存设置
             Settings settings("led_strip", true);
             settings.SetInt("brightness", brightness_level_);
 
@@ -82,7 +82,7 @@ LedStripControl::LedStripControl(CircularStrip* led_strip)
         });
 
     mcp_server.AddTool("self.led_strip.blink", 
-        "Buat strip LED berkedip.", 
+        "Blink the led strip. (闪烁)", 
         PropertyList({
             Property("red", kPropertyTypeInteger, 0, 255),
             Property("green", kPropertyTypeInteger, 0, 255),
@@ -100,7 +100,7 @@ LedStripControl::LedStripControl(CircularStrip* led_strip)
         });
 
     mcp_server.AddTool("self.led_strip.scroll", 
-        "Buat strip LED bergerak seperti lampu berjalan.", 
+        "Scroll the led strip. (跑马灯)", 
         PropertyList({
             Property("red", kPropertyTypeInteger, 0, 255),
             Property("green", kPropertyTypeInteger, 0, 255),

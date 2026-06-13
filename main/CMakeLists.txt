@@ -843,6 +843,14 @@ if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND SOURCES "boards/common/esp32_camera.cc")
 endif()
 
+set(MAIN_PRIV_REQUIRES_EXTRA "")
+if(CONFIG_BOARD_TYPE_ESP_VOCAT)
+    list(APPEND MAIN_PRIV_REQUIRES_EXTRA
+        espressif__touch_slider_sensor
+        espressif__touch_button_sensor
+    )
+endif()
+
 set(CAMPUS_INDEX_HEADER "${CMAKE_CURRENT_BINARY_DIR}/campus_index_generated.h")
 if(NOT CMAKE_SCRIPT_MODE_FILE)
     add_custom_command(
@@ -884,6 +892,7 @@ idf_component_register(SRCS ${SOURCES}
                         efuse
                         bt
                         fatfs
+                        ${MAIN_PRIV_REQUIRES_EXTRA}
                     )
 
 # Gunakan target_compile_definitions untuk mendefinisikan BOARD_TYPE dan BOARD_NAME

@@ -8,15 +8,15 @@ PressToTalkMcpTool::PressToTalkMcpTool()
 }
 
 void PressToTalkMcpTool::Initialize() {
-    // Baca status saat ini dari pengaturan.
+    // 从设置中读取当前状态
     Settings settings("vendor");
     press_to_talk_enabled_ = settings.GetInt("press_to_talk", 0) != 0;
 
-    // Daftarkan alat MCP.
+    // 注册MCP工具
     auto& mcp_server = McpServer::GetInstance();
     mcp_server.AddTool("self.set_press_to_talk",
-        "Beralih antara mode tekan untuk bicara dan mode klik untuk bicara.\n"
-        "Nilai mode dapat berupa `press_to_talk` atau `click_to_talk`.",
+        "Switch between press to talk mode (长按说话) and click to talk mode (单击说话).\n"
+        "The mode can be `press_to_talk` or `click_to_talk`.",
         PropertyList({
             Property("mode", kPropertyTypeString)
         }),
@@ -24,7 +24,7 @@ void PressToTalkMcpTool::Initialize() {
             return HandleSetPressToTalk(properties);
         });
 
-    ESP_LOGI(TAG, "PressToTalkMcpTool diinisialisasi, mode saat ini: %s",
+    ESP_LOGI(TAG, "PressToTalkMcpTool initialized, current mode: %s", 
         press_to_talk_enabled_ ? "press_to_talk" : "click_to_talk");
 }
 
@@ -34,24 +34,24 @@ bool PressToTalkMcpTool::IsPressToTalkEnabled() const {
 
 ReturnValue PressToTalkMcpTool::HandleSetPressToTalk(const PropertyList& properties) {
     auto mode = properties["mode"].value<std::string>();
-
+    
     if (mode == "press_to_talk") {
         SetPressToTalkEnabled(true);
-        ESP_LOGI(TAG, "Beralih ke mode tekan untuk bicara");
+        ESP_LOGI(TAG, "Switched to press to talk mode");
         return true;
     } else if (mode == "click_to_talk") {
         SetPressToTalkEnabled(false);
-        ESP_LOGI(TAG, "Beralih ke mode klik untuk bicara");
+        ESP_LOGI(TAG, "Switched to click to talk mode");
         return true;
     }
-
-    throw std::runtime_error("Mode tidak valid: " + mode);
+    
+    throw std::runtime_error("Invalid mode: " + mode);
 }
 
 void PressToTalkMcpTool::SetPressToTalkEnabled(bool enabled) {
     press_to_talk_enabled_ = enabled;
-
+    
     Settings settings("vendor", true);
     settings.SetInt("press_to_talk", enabled ? 1 : 0);
-    ESP_LOGI(TAG, "Mode tekan untuk bicara aktif: %d", enabled);
-}
+    ESP_LOGI(TAG, "Press to talk enabled: %d", enabled);
+} 

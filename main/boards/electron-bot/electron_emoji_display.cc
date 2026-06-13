@@ -18,31 +18,31 @@ ElectronEmojiDisplay::ElectronEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, e
 }
 
 void ElectronEmojiDisplay::SetupUI() {
-    // Cegah pemanggilan ganda; SetupUI() milik induk juga memeriksa hal ini
+    // Prevent duplicate calls - parent SetupUI() will also check, but check here for early return
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
         return;
     }
     
-    // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL sudah dibuat
+    // Call parent SetupUI() first to create all lvgl objects (including container_)
     SpiLcdDisplay::SetupUI();
 
-    // Siapkan label chat setelah UI induk selesai diinisialisasi agar container_ valid
+    // Setup chat label after parent UI is initialized so that container_ is valid
     SetupChatLabel();
 
-    // Tetapkan emosi bawaan setelah UI selesai diinisialisasi
+    // Set default emotion after UI is initialized
     SetEmotion("staticstate");
 }
 
 void ElectronEmojiDisplay::InitializeElectronEmojis() {
-    ESP_LOGI(TAG, "Inisialisasi emosi Electron ditangani oleh sistem Assets");
-    // Inisialisasi emosi dipindahkan ke sistem assets melalui konfigurasi DEFAULT_EMOJI_COLLECTION=otto-gif
-    // assets.cc akan memuat GIF emosi dari partisi assets lalu memasangnya ke tema
-    // Emosi bawaan kini diatur di SetupUI() setelah objek LVGL selesai dibuat
+    ESP_LOGI(TAG, "Electron表情初始化将由Assets系统处理");
+    // 表情初始化已移至assets系统,通过DEFAULT_EMOJI_COLLECTION=otto-gif配置
+    // assets.cc会从assets分区加载GIF表情并设置到theme
+    // Note: Default emotion is now set in SetupUI() after LVGL objects are created
 }
 
 void ElectronEmojiDisplay::SetupChatLabel() {
-    // Buat atau buat ulang label chat di bawah kunci tampilan
+    // Create/recreate the chat label under the display lock
     {
         DisplayLockGuard lock(this);
 
@@ -57,7 +57,7 @@ void ElectronEmojiDisplay::SetupChatLabel() {
         lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_color(chat_message_label_, lv_color_white(), 0);
     }
-    // SetTheme memakai DisplayLockGuard di dalamnya, jadi panggil setelah kunci di atas dilepas
+    // SetTheme acquires DisplayLockGuard internally, so call it after releasing the lock above
     SetTheme(LvglThemeManager::GetInstance().GetTheme("dark"));
 }
 
@@ -73,21 +73,21 @@ void ElectronEmojiDisplay::SetStatus(const char* status) {
 
     if (strcmp(status, Lang::Strings::LISTENING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x84\xB0");  // U+F130 ikon mikrofon
+        lv_label_set_text(status_label_, "\xEF\x84\xB0");  // U+F130 麦克风图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x80\xA8");  // U+F028 ikon berbicara
+        lv_label_set_text(status_label_, "\xEF\x80\xA8");  // U+F028 说话图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::CONNECTING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x83\x81");  // U+F0c1 ikon koneksi
+        lv_label_set_text(status_label_, "\xEF\x83\x81");  // U+F0c1 连接图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {

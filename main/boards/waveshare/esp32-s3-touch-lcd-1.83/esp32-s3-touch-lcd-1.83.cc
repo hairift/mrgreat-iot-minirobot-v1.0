@@ -28,19 +28,19 @@ public:
         WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
         WriteReg(0x27, 0x10);  // hold 4s to power off
 
-        // Nonaktifkan semua DC kecuali DC1
+        // Disable All DCs but DC1
         WriteReg(0x80, 0x01);
-        // Nonaktifkan semua LDO
+        // Disable All LDOs
         WriteReg(0x90, 0x00);
         WriteReg(0x91, 0x00);
 
-        // Atur DC1 ke 3,3 V
+        // Set DC1 to 3.3V
         WriteReg(0x82, (3300 - 1500) / 100);
 
-        // Atur ALDO1 ke 3,3 V
+        // Set ALDO1 to 3.3V
         WriteReg(0x92, (3300 - 500) / 100);
 
-        // Aktifkan ALDO1 untuk mikrofon
+        // Enable ALDO1(MIC)
         WriteReg(0x90, 0x01);
 
         WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
@@ -73,7 +73,7 @@ private:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -126,7 +126,7 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_CS_PIN;
@@ -138,7 +138,7 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = DISPLAY_RST_PIN;
@@ -172,7 +172,20 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_CST816S_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_CST816S_ADDRESS,
+            .on_color_trans_done = 0,
+            .user_ctx = 0,
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 8,
+            .lcd_param_bits = 0,
+            .flags =
+            {
+                .dc_low_on_data = 0,
+                .disable_control_phase = 1,
+            },
+        };
         tp_io_config.scl_speed_hz = 400*  1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_LOGI(TAG, "Initialize touch controller");
@@ -185,7 +198,7 @@ private:
         ESP_LOGI(TAG, "Touch panel initialized successfully");
     }
 
-    // Inisialisasi alat
+    // 初始化工具
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",

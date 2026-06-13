@@ -34,14 +34,14 @@ protected:
     lv_obj_t* chat_message_label_ = nullptr;
     esp_timer_handle_t preview_timer_ = nullptr;
     std::unique_ptr<LvglImage> preview_image_cached_ = nullptr;
-    bool hide_subtitle_ = false;  // Kontrol apakah menyembunyikan pesan obrolan atau subjudul
+    bool hide_subtitle_ = false;  // Control whether to hide chat messages/subtitles
 
     void InitializeLcdThemes();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
 
 protected:
-    // Tambahkan konstruktor protected
+    // Add protected constructor
     LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, int width, int height);
     
 public:
@@ -51,14 +51,14 @@ public:
     virtual void ClearChatMessages() override;
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     virtual void SetupUI() override;
-    // Tambahkan fungsi penggantian tema
+    // Add theme switching function
     virtual void SetTheme(Theme* theme) override;
     
-    // Atur apakah menyembunyikan pesan obrolan atau subjudul
+    // Set whether to hide chat messages/subtitles
     void SetHideSubtitle(bool hide);
 };
 
-// Tampilan LCD berbasis SPI
+// SPI LCD display
 class SpiLcdDisplay : public LcdDisplay {
 public:
     SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -66,7 +66,7 @@ public:
                   bool mirror_x, bool mirror_y, bool swap_xy);
 };
 
-// Tampilan LCD berbasis RGB
+// RGB LCD display
 class RgbLcdDisplay : public LcdDisplay {
 public:
     RgbLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -74,7 +74,7 @@ public:
                   bool mirror_x, bool mirror_y, bool swap_xy);
 };
 
-// Tampilan LCD berbasis MIPI
+// MIPI LCD display
 class MipiLcdDisplay : public LcdDisplay {
 public:
     MipiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,

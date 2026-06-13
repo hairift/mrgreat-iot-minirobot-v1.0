@@ -51,7 +51,7 @@ public:
 protected:
     int width_ = 0;
     int height_ = 0;
-    bool setup_ui_called_ = false;  // Lacak apakah SetupUI() sudah dipanggil
+    bool setup_ui_called_ = false;  // Track if SetupUI() has been called
 
     Theme* current_theme_ = nullptr;
 

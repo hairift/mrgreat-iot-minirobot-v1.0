@@ -8,8 +8,24 @@
 #include <esp_mn_models.h>
 #include <esp_mn_speech_commands.h>
 #include <cJSON.h>
+#include <algorithm>
 
 #define TAG "CustomWakeWord"
+
+namespace {
+
+void NormalizeWakeWordThreshold(float& threshold) {
+    constexpr float kMinThreshold = 0.08f;
+    constexpr float kMaxThreshold = 0.20f;
+
+    if (threshold < kMinThreshold) {
+        threshold = kMinThreshold;
+    } else if (threshold > kMaxThreshold) {
+        threshold = kMaxThreshold;
+    }
+}
+
+}  // namespace
 
 CustomWakeWord::CustomWakeWord()
     : wake_word_pcm_(), wake_word_opus_() {
@@ -35,7 +51,7 @@ CustomWakeWord::~CustomWakeWord() {
 }
 
 void CustomWakeWord::ParseWakenetModelConfig() {
-    // Baca file index.json
+    // Baca konfigurasi wake word dari index.json di partisi aset.
     auto& assets = Assets::GetInstance();
     void* ptr = nullptr;
     size_t size = 0;
@@ -81,6 +97,7 @@ void CustomWakeWord::ParseWakenetModelConfig() {
     cJSON_Delete(root);
 }
 
+
 bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) {
     codec_ = codec;
     commands_.clear();
@@ -90,12 +107,16 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
         models_ = esp_srmodel_init("model");
 #ifdef CONFIG_CUSTOM_WAKE_WORD
         threshold_ = CONFIG_CUSTOM_WAKE_WORD_THRESHOLD / 100.0f;
-        // Kata bangun "Hai Hai" memakai dua suku kata agar lebih stabil
-        commands_.push_back({"hai hai", "Hai Mr Great", "wake"});
+        commands_.push_back({CONFIG_CUSTOM_WAKE_WORD, CONFIG_CUSTOM_WAKE_WORD_DISPLAY, "wake"});
 #endif
     } else {
         models_ = models_list;
         ParseWakenetModelConfig();
+#ifdef CONFIG_CUSTOM_WAKE_WORD
+        // Gunakan nilai firmware secara pasti agar sensitivitas tidak diam-diam
+        // diturunkan oleh nilai lama yang tersimpan di dalam aset.
+        threshold_ = CONFIG_CUSTOM_WAKE_WORD_THRESHOLD / 100.0f;
+#endif
     }
 
     if (models_ == nullptr || models_->num == -1) {
@@ -103,7 +124,7 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
         return false;
     }
 
-    // Inisialisasi multinet untuk pengenalan kata perintah
+    // Inisialisasi MultiNet untuk deteksi perintah wake word.
     mn_name_ = esp_srmodel_filter(models_, ESP_MN_PREFIX, language_.c_str());
     if (mn_name_ == nullptr) {
         ESP_LOGW(TAG, "Language '%s' multinet not found, falling back to any multinet model", language_.c_str());
@@ -111,12 +132,14 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
     }
     if (mn_name_ == nullptr) {
         ESP_LOGE(TAG, "Failed to initialize multinet, mn_name is nullptr");
-        ESP_LOGI(TAG, "Silakan lihat panduan di https://pcn7cs20v8cr.feishu.cn/wiki/CpQjwQsCJiQSWSkYEvrcxcbVnwh untuk menambahkan kata bangun kustom");
+        ESP_LOGI(TAG, "Please refer to https://pcn7cs20v8cr.feishu.cn/wiki/CpQjwQsCJiQSWSkYEvrcxcbVnwh to add custom wake word");
         return false;
     }
 
     multinet_ = esp_mn_handle_from_name(mn_name_);
     multinet_model_data_ = multinet_->create(mn_name_, duration_);
+    NormalizeWakeWordThreshold(threshold_);
+    ESP_LOGI(TAG, "Ambang wake word aktif: %.2f", threshold_);
     multinet_->set_det_threshold(multinet_model_data_, threshold_);
     esp_mn_commands_clear();
     for (int i = 0; i < commands_.size(); i++) {
@@ -149,12 +172,12 @@ void CustomWakeWord::Feed(const std::vector<int16_t>& data) {
     }
 
     std::lock_guard<std::mutex> lock(input_buffer_mutex_);
-    // Periksa status berjalan di dalam lock agar tidak terkena balapan TOCTOU dengan Stop()
+    // Cek status running di dalam lock agar tidak balapan dengan Stop().
     if (!running_) {
         return;
     }
 
-    // Jika kanal masukan berjumlah dua, ambil data kanal kiri
+    // Jika input stereo, ambil kanal kiri yang berisi suara mikrofon.
     if (codec_->input_channels() == 2) {
         for (size_t i = 0; i < data.size(); i += 2) {
             input_buffer_.push_back(data[i]);
@@ -176,6 +199,11 @@ void CustomWakeWord::Feed(const std::vector<int16_t>& data) {
                 int command_id = mn_result->command_id[i];
                 ESP_LOGI(TAG, "Custom wake word detected: command_id=%d, string=%s, prob=%f",
                     command_id, mn_result->string, mn_result->prob[i]);
+                if (mn_result->prob[i] < threshold_) {
+                    ESP_LOGW(TAG, "Mengabaikan kandidat wake word di bawah ambang: %.3f < %.3f",
+                        mn_result->prob[i], threshold_);
+                    continue;
+                }
                 if (command_id <= 0 || command_id > static_cast<int>(commands_.size())) {
                     ESP_LOGW(TAG, "Mengabaikan command_id wake word di luar rentang: %d", command_id);
                     continue;
@@ -212,9 +240,9 @@ size_t CustomWakeWord::GetFeedSize() {
 }
 
 void CustomWakeWord::StoreWakeWordData(const std::vector<int16_t>& data) {
-    // Simpan data audio ke wake_word_pcm_
+    // Simpan audio terbaru untuk dikirim sebagai konteks wake word.
     wake_word_pcm_.push_back(data);
-    // Simpan sekitar dua detik data karena durasi deteksi sekitar 30 milidetik
+    // Simpan sekitar 2 detik audio.
     while (wake_word_pcm_.size() > 2000 / 30) {
         wake_word_pcm_.pop_front();
     }
@@ -236,7 +264,7 @@ void CustomWakeWord::EncodeWakeWordData() {
         auto this_ = (CustomWakeWord*)arg;
         {
             auto start_time = esp_timer_get_time();
-            // Buat encoder
+            // Buat encoder Opus.
             esp_opus_enc_config_t opus_enc_cfg = AS_OPUS_ENC_CONFIG();
             void* encoder_handle = nullptr;
             auto ret = esp_opus_enc_open(&opus_enc_cfg, sizeof(esp_opus_enc_config_t), &encoder_handle);
@@ -247,19 +275,17 @@ void CustomWakeWord::EncodeWakeWordData() {
                 this_->wake_word_cv_.notify_all();
                 return;
             }
-
-            // Ambil ukuran bingkai
+            // Ambil ukuran frame encoder.
             int frame_size = 0;
             int outbuf_size = 0;
             esp_opus_enc_get_frame_size(encoder_handle, &frame_size, &outbuf_size);
             frame_size = frame_size / sizeof(int16_t);
-
-            // Enkode seluruh data PCM
+            // Encode seluruh data PCM wake word.
             int packets = 0;
             std::vector<int16_t> in_buffer;
             esp_audio_enc_in_frame_t in = {};
             esp_audio_enc_out_frame_t out = {};
-            for (auto& pcm : this_->wake_word_pcm_) {
+            for (auto& pcm: this_->wake_word_pcm_) {
                 if (in_buffer.empty()) {
                     in_buffer = std::move(pcm);
                 } else {
@@ -268,7 +294,7 @@ void CustomWakeWord::EncodeWakeWordData() {
                 }
                 while (in_buffer.size() >= frame_size) {
                     std::vector<uint8_t> opus_buf(outbuf_size);
-                    in.buffer = (uint8_t*)(in_buffer.data());
+                    in.buffer = (uint8_t *)(in_buffer.data());
                     in.len = (uint32_t)(frame_size * sizeof(int16_t));
                     out.buffer = opus_buf.data();
                     out.len = outbuf_size;
@@ -286,8 +312,7 @@ void CustomWakeWord::EncodeWakeWordData() {
                 }
             }
             this_->wake_word_pcm_.clear();
-
-            // Tutup encoder
+            // Tutup encoder setelah semua paket selesai.
             esp_opus_enc_close(encoder_handle);
             auto end_time = esp_timer_get_time();
             ESP_LOGI(TAG, "Encode wake word opus %d packets in %ld ms", packets, (long)((end_time - start_time) / 1000));

@@ -3,146 +3,144 @@ import argparse
 import json
 import os
 
-HEADER_TEMPLATE = """// Konfigurasi bahasa yang dibuat otomatis
-// Bahasa: {lang_code} dengan cadangan en-US
+HEADER_TEMPLATE = """// Auto-generated language config
+// Language: {lang_code} with en-US fallback
 #pragma once
 
 #include <string_view>
 
 #ifndef {lang_code_for_font}
-    #define {lang_code_for_font}  // Bahasa bawaan
+    #define {lang_code_for_font}  // 預設語言
 #endif
 
 namespace Lang {{
-    // Metadata bahasa
+    // 语言元数据
     constexpr const char* CODE = "{lang_code}";
 
-    // Sumber daya string, dengan en-US sebagai cadangan jika kunci tidak ada
+    // 字符串资源 (en-US as fallback for missing keys)
     namespace Strings {{
 {strings}
     }}
 
-    // Sumber daya suara, dengan en-US sebagai cadangan jika file audio tidak ada
+    // 音效资源 (en-US as fallback for missing audio files)
     namespace Sounds {{
 {sounds}
     }}
 }}
 """
 
-
 def load_base_language(assets_dir):
-    """Muat data bahasa dasar en-US."""
-    base_lang_path = os.path.join(assets_dir, "locales", "en-US", "language.json")
+    """加载 en-US 基准语言数据"""
+    base_lang_path = os.path.join(assets_dir, 'locales', 'en-US', 'language.json')
     if os.path.exists(base_lang_path):
         try:
-            with open(base_lang_path, "r", encoding="utf-8") as f:
+            with open(base_lang_path, 'r', encoding='utf-8') as f:
                 base_data = json.load(f)
-                print(f"Bahasa dasar en-US dimuat dengan {len(base_data.get('strings', {}))} string")
+                print(f"Loaded base language en-US with {len(base_data.get('strings', {}))} strings")
                 return base_data
         except json.JSONDecodeError as e:
-            print(f"Peringatan: gagal membaca file bahasa en-US: {e}")
+            print(f"Warning: Failed to parse en-US language file: {e}")
     else:
-        print("Peringatan: file bahasa dasar en-US tidak ditemukan, mekanisme cadangan dinonaktifkan")
-    return {"strings": {}}
-
+        print("Warning: en-US base language file not found, fallback mechanism disabled")
+    return {'strings': {}}
 
 def get_sound_files(directory):
-    """Ambil daftar file suara di dalam direktori."""
+    """获取目录中的音效文件列表"""
     if not os.path.exists(directory):
         return []
-    return [f for f in os.listdir(directory) if f.endswith(".ogg")]
-
+    return [f for f in os.listdir(directory) if f.endswith('.ogg')]
 
 def generate_header(lang_code, output_path):
-    # Turunkan struktur proyek dari jalur keluaran
-    # output_path biasanya berupa main/assets/lang_config.h
+    # 从输出路径推导项目结构
+    # output_path 通常是 main/assets/lang_config.h
     main_dir = os.path.dirname(output_path)  # main/assets
-    if os.path.basename(main_dir) == "assets":
+    if os.path.basename(main_dir) == 'assets':
         main_dir = os.path.dirname(main_dir)  # main
-    assets_dir = os.path.join(main_dir, "assets")
-
-    # Susun jalur file JSON bahasa
-    input_path = os.path.join(assets_dir, "locales", lang_code, "language.json")
-
-    print(f"Memproses bahasa: {lang_code}")
-    print(f"Jalur file input: {input_path}")
-    print(f"Jalur file output: {output_path}")
-
+    project_dir = os.path.dirname(main_dir)  # 项目根目录
+    assets_dir = os.path.join(main_dir, 'assets')
+    
+    # 构建语言JSON文件路径
+    input_path = os.path.join(assets_dir, 'locales', lang_code, 'language.json')
+    
+    print(f"Processing language: {lang_code}")
+    print(f"Input file path: {input_path}")
+    print(f"Output file path: {output_path}")
+    
     if not os.path.exists(input_path):
-        raise FileNotFoundError(f"File bahasa tidak ditemukan: {input_path}")
-
-    with open(input_path, "r", encoding="utf-8") as f:
+        raise FileNotFoundError(f"Language file not found: {input_path}")
+    
+    with open(input_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    # Validasi struktur data
-    if "language" not in data or "strings" not in data:
-        raise ValueError("Struktur JSON tidak valid")
+    # 验证数据结构
+    if 'language' not in data or 'strings' not in data:
+        raise ValueError("Invalid JSON structure")
 
-    # Muat data bahasa dasar en-US
+    # 加载 en-US 基准语言数据
     base_data = load_base_language(assets_dir)
-
-    # Gabungkan string: en-US sebagai dasar, bahasa pengguna menimpa isinya
-    base_strings = base_data.get("strings", {})
-    user_strings = data["strings"]
+    
+    # 合并字符串：以 en-US 为基准，用户语言覆盖
+    base_strings = base_data.get('strings', {})
+    user_strings = data['strings']
     merged_strings = base_strings.copy()
     merged_strings.update(user_strings)
-
-    # Statistik
+    
+    # 统计信息
     base_count = len(base_strings)
     user_count = len(user_strings)
     total_count = len(merged_strings)
     fallback_count = total_count - user_count
-
-    print(f"Statistik string bahasa {lang_code}:")
-    print(f"  - Bahasa dasar (en-US): {base_count} string")
-    print(f"  - Bahasa pengguna: {user_count} string")
-    print(f"  - Total: {total_count} string")
+    
+    print(f"Language {lang_code} string statistics:")
+    print(f"  - Base language (en-US): {base_count} strings")
+    print(f"  - User language: {user_count} strings")
+    print(f"  - Total: {total_count} strings")
     if fallback_count > 0:
-        print(f"  - Menggunakan cadangan en-US: {fallback_count} string")
+        print(f"  - Fallback to en-US: {fallback_count} strings")
 
-    # Hasilkan konstanta string
+    # 生成字符串常量
     strings = []
     sounds = []
     for key, value in merged_strings.items():
         value = value.replace('"', '\\"')
         strings.append(f'        constexpr const char* {key.upper()} = "{value}";')
 
-    # Kumpulkan file suara: en-US sebagai dasar, bahasa pengguna menimpa isinya
-    current_lang_dir = os.path.join(assets_dir, "locales", lang_code)
-    base_lang_dir = os.path.join(assets_dir, "locales", "en-US")
-    common_dir = os.path.join(assets_dir, "common")
-
-    # Ambil semua file suara yang mungkin dipakai
+    # 收集音效文件：以 en-US 为基准，用户语言覆盖
+    current_lang_dir = os.path.join(assets_dir, 'locales', lang_code)
+    base_lang_dir = os.path.join(assets_dir, 'locales', 'en-US')
+    common_dir = os.path.join(assets_dir, 'common')
+    
+    # 获取所有可能的音效文件
     base_sounds = get_sound_files(base_lang_dir)
     current_sounds = get_sound_files(current_lang_dir)
     common_sounds = get_sound_files(common_dir)
-
-    # Gabungkan daftar file suara: bahasa pengguna menimpa bahasa dasar
+    
+    # 合并音效文件列表：用户语言覆盖基准语言
     all_sound_files = set(base_sounds)
     all_sound_files.update(current_sounds)
-
-    # Statistik efek suara
+    
+    # 音效统计信息
     base_sound_count = len(base_sounds)
     user_sound_count = len(current_sounds)
     common_sound_count = len(common_sounds)
     sound_fallback_count = len(set(base_sounds) - set(current_sounds))
-
-    print(f"Statistik efek suara untuk bahasa {lang_code}:")
-    print(f"  - Bahasa dasar (en-US): {base_sound_count} efek suara")
-    print(f"  - Bahasa pengguna: {user_sound_count} efek suara")
-    print(f"  - Efek suara umum: {common_sound_count} efek suara")
+    
+    print(f"Language {lang_code} sound statistics:")
+    print(f"  - Base language (en-US): {base_sound_count} sounds")
+    print(f"  - User language: {user_sound_count} sounds")
+    print(f"  - Common sounds: {common_sound_count} sounds")
     if sound_fallback_count > 0:
-        print(f"  - Menggunakan cadangan en-US: {sound_fallback_count} efek suara")
-
-    # Hasilkan konstanta efek suara khusus bahasa
+        print(f"  - Sound fallback to en-US: {sound_fallback_count} sounds")
+    
+    # 生成语言特定音效常量
     for file in sorted(all_sound_files):
         base_name = os.path.splitext(file)[0]
-        # Utamakan efek suara bahasa saat ini, jika tidak ada maka gunakan cadangan en-US
+        # 优先使用当前语言的音效，如果不存在则回退到 en-US
         if file in current_sounds:
-            sound_lang = lang_code.replace("-", "_").lower()
+            sound_lang = lang_code.replace('-', '_').lower()
         else:
-            sound_lang = "en_us"
-
+            sound_lang = 'en_us'
+            
         sounds.append(f'''
         extern const char ogg_{base_name}_start[] asm("_binary_{base_name}_ogg_start");
         extern const char ogg_{base_name}_end[] asm("_binary_{base_name}_ogg_end");
@@ -150,8 +148,8 @@ def generate_header(lang_code, output_path):
         static_cast<const char*>(ogg_{base_name}_start),
         static_cast<size_t>(ogg_{base_name}_end - ogg_{base_name}_start)
         }};''')
-
-    # Hasilkan konstanta efek suara umum
+    
+    # 生成公共音效常量
     for file in sorted(common_sounds):
         base_name = os.path.splitext(file)[0]
         sounds.append(f'''
@@ -162,29 +160,28 @@ def generate_header(lang_code, output_path):
         static_cast<size_t>(ogg_{base_name}_end - ogg_{base_name}_start)
         }};''')
 
-    # Isi template
+    # 填充模板
     content = HEADER_TEMPLATE.format(
         lang_code=lang_code,
-        lang_code_for_font=lang_code.replace("-", "_").lower(),
+        lang_code_for_font=lang_code.replace('-', '_').lower(),
         strings="\n".join(sorted(strings)),
-        sounds="\n".join(sorted(sounds)),
+        sounds="\n".join(sorted(sounds))
     )
 
-    # Tulis file keluaran
+    # 写入文件
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Buat berkas header konfigurasi bahasa dengan cadangan en-US")
-    parser.add_argument("--language", required=True, help="Kode bahasa, misalnya zh-CN, en-US, atau ja-JP")
-    parser.add_argument("--output", required=True, help="Jalur berkas header keluaran")
+    parser = argparse.ArgumentParser(description="Generate language configuration header file with en-US fallback")
+    parser.add_argument("--language", required=True, help="Language code (e.g: zh-CN, en-US, ja-JP)")
+    parser.add_argument("--output", required=True, help="Output header file path")
     args = parser.parse_args()
 
     try:
         generate_header(args.language, args.output)
-        print(f"Berhasil membuat berkas konfigurasi bahasa: {args.output}")
+        print(f"Successfully generated language config file: {args.output}")
     except Exception as e:
-        print(f"Galat: {e}")
+        print(f"Error: {e}")
         exit(1)

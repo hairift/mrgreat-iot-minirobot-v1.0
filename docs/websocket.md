@@ -1,68 +1,25 @@
 # Protokol WebSocket
 
-Dokumen ini merangkum alur komunikasi WebSocket antara perangkat dan peladen.
+WebSocket adalah alternatif jalur komunikasi selain MQTT dan UDP. Pada konfigurasi Mr Great saat ini, jalur utama tetap mengikuti konfigurasi firmware yang dipilih lewat menuconfig.
 
-## Alur Dasar
+## Kapan Dipakai
 
-1. Perangkat melakukan inisialisasi aplikasi dan jaringan.
-2. Perangkat membuka koneksi WebSocket ke peladen.
-3. Perangkat mengirim pesan `hello`.
-4. Peladen membalas `hello` dan memberikan parameter sesi.
-5. Audio dan pesan kendali dipertukarkan selama sesi berjalan.
-6. Koneksi ditutup saat sesi selesai atau saat terjadi gangguan.
+WebSocket berguna bila server AI atau lingkungan pengujian tidak memakai MQTT. Jalur ini dapat menyederhanakan pengujian karena satu koneksi membawa kontrol dan data percakapan.
 
-## Pesan Awal
+## Catatan Implementasi
 
-Contoh `hello` dari perangkat:
+- Pastikan URL server benar.
+- Pastikan sertifikat TLS cocok jika memakai `wss`.
+- Jangan mengaktifkan dua jalur protokol utama secara bersamaan tanpa kebutuhan jelas.
+- Jika audio patah pada WebSocket, cek ukuran buffer, kualitas jaringan, dan log task audio.
 
-```json
-{
-  "type": "hello",
-  "version": 1,
-  "transport": "websocket",
-  "features": {
-    "mcp": true
-  },
-  "audio_params": {
-    "format": "opus",
-    "sample_rate": 16000,
-    "channels": 1,
-    "frame_duration": 60
-  }
-}
+## Validasi
+
+```powershell
+idf.py menuconfig
+idf.py build
+idf.py -p COM3 flash
+idf.py -p COM3 monitor
 ```
 
-## Jenis Data
-
-Selama sesi WebSocket, dua jenis data utama dikirim:
-
-- frame audio biner
-- pesan JSON teks
-
-Pesan teks dipakai untuk:
-
-- status mendengarkan
-- hasil STT
-- kendali TTS
-- ekspresi emosi
-- MCP
-- pesan sistem
-
-## Header Umum
-
-Saat membuka koneksi, perangkat biasanya menyertakan:
-
-- `Authorization`
-- `Protocol-Version`
-- `Device-Id`
-- `Client-Id`
-
-## Penutupan Sesi
-
-Sesi berakhir saat:
-
-- perangkat menutup koneksi
-- peladen memutus koneksi
-- batas waktu atau gangguan jaringan terjadi
-
-Perangkat harus kembali ke status aman setelah kanal audio ditutup.
+Perangkat dianggap stabil jika bisa masuk state `idle`, mendengar kata bangun, menerima respons AI, dan kembali mendengarkan tanpa restart.

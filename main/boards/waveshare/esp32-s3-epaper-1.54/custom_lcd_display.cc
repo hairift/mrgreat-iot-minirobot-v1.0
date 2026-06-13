@@ -98,7 +98,7 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
 
     buffer = (uint8_t *) heap_caps_malloc(lcd_spi_data.buffer_len, MALLOC_CAP_SPIRAM);
     assert(buffer);
-    display_ = lv_display_create(width, height); /* Inisialisasi dasar dengan resolusi horizontal dan vertikal dalam piksel */
+    display_ = lv_display_create(width, height); /* 以水平和垂直分辨率（像素）进行基本初始化 */
     lv_display_set_flush_cb(display_, lvgl_flush_cb);
     lv_display_set_user_data(display_, this);
 
@@ -112,7 +112,7 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
     EPD_Clear();
     EPD_Display();
     EPD_DisplayPartBaseImage();
-    EPD_Init_Partial(); // Inisialisasi penyegaran sebagian
+    EPD_Init_Partial(); // 局部刷新初始化
 
     lvgl_port_unlock();
     if (display_ == nullptr) {
@@ -120,8 +120,8 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
         return;
     }
 
-    // Catatan: SetupUI() sebaiknya dipanggil oleh Application::Initialize(), bukan di konstruktor
-    // agar objek LVGL dibuat setelah layar selesai diinisialisasi sepenuhnya.
+    // Note: SetupUI() should be called by Application::Initialize(), not in constructor
+    // to ensure lvgl objects are created after the display is fully initialized.
 }
 
 CustomLcdDisplay::~CustomLcdDisplay() {

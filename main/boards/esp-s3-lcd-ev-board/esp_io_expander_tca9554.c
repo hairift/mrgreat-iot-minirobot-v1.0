@@ -13,23 +13,23 @@
 #include "esp_io_expander.h"
 #include "esp_io_expander_tca9554.h"
 
-/* Terkait komunikasi I2C */
+/* I2C communication related */
 #define I2C_TIMEOUT_MS          (1000)
 #define I2C_CLK_SPEED           (400000)
 
 #define IO_COUNT                (8)
 
-/* Alamat register */
+/* Register address */
 #define INPUT_REG_ADDR          (0x00)
 #define OUTPUT_REG_ADDR         (0x01)
 #define DIRECTION_REG_ADDR      (0x03)
 
-/* Nilai bawaan register saat perangkat menyala */
+/* Default register value on power-up */
 #define DIR_REG_DEFAULT_VAL     (0xff)
 #define OUT_REG_DEFAULT_VAL     (0xff)
 
 /**
- * @brief Tipe struktur perangkat
+ * @brief Device Structure Type
  *
  */
 typedef struct {
@@ -55,11 +55,11 @@ esp_err_t esp_io_expander_new_i2c_tca9554(i2c_master_bus_handle_t i2c_bus, uint3
 {
     ESP_RETURN_ON_FALSE(handle_ret != NULL, ESP_ERR_INVALID_ARG, TAG, "Invalid handle_ret");
 
-    // Alokasikan memori untuk objek driver
+    // Allocate memory for driver object
     esp_io_expander_tca9554_t *tca9554 = (esp_io_expander_tca9554_t *)calloc(1, sizeof(esp_io_expander_tca9554_t));
     ESP_RETURN_ON_FALSE(tca9554 != NULL, ESP_ERR_NO_MEM, TAG, "Malloc failed");
 
-    // Tambahkan perangkat I2C baru
+    // Add new I2C device
     esp_err_t ret = ESP_OK;
     const i2c_device_config_t i2c_dev_cfg = {
         .device_address = dev_addr,
@@ -77,7 +77,7 @@ esp_err_t esp_io_expander_new_i2c_tca9554(i2c_master_bus_handle_t i2c_bus, uint3
     tca9554->base.del = del;
     tca9554->base.reset = reset;
 
-    /* Atur ulang konfigurasi dan status register */
+    /* Reset configuration and register status */
     ESP_GOTO_ON_ERROR(reset(&tca9554->base), err, TAG, "Reset failed");
 
     *handle_ret = &tca9554->base;

@@ -17,7 +17,7 @@ public:
 
     LvglTheme(const std::string& name);
 
-    // Properti
+    // Properties
     inline lv_color_t background_color() const { return background_color_; }
     inline lv_color_t text_color() const { return text_color_; }
     inline lv_color_t chat_background_color() const { return chat_background_color_; }
@@ -52,7 +52,7 @@ public:
 private:
     int spacing_ = 2;
 
-    // Warna
+    // Colors
     lv_color_t background_color_;
     lv_color_t text_color_;
     lv_color_t chat_background_color_;
@@ -63,15 +63,15 @@ private:
     lv_color_t border_color_;
     lv_color_t low_battery_color_;
 
-    // Gambar latar belakang
+    // Background image
     std::shared_ptr<LvglImage> background_image_ = nullptr;
 
-    // Huruf
+    // fonts
     std::shared_ptr<LvglFont> text_font_ = nullptr;
     std::shared_ptr<LvglFont> icon_font_ = nullptr;
     std::shared_ptr<LvglFont> large_icon_font_ = nullptr;
 
-    // Koleksi emoji
+    // Emoji collection
     std::shared_ptr<EmojiCollection> emoji_collection_ = nullptr;
 };
 

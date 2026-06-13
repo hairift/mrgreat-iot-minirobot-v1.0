@@ -58,7 +58,7 @@ esp_err_t Initialize(i2c_bus_handle_t i2c_bus, uint8_t addr = BMI270_I2C_ADDRESS
     return ESP_OK;
 }
 
-// Hanya dipakai untuk membangunkan dari deep sleep melalui interupsi gestur pergelangan tangan
+// Only used for deep sleep wakeup with wrist gesture interrupt
 esp_err_t EnableImuIntForWakeup() {
     if (!bmi_handle_) {
         return ESP_ERR_INVALID_STATE;
@@ -124,13 +124,13 @@ private:
     SleepTimer* sleep_timer_ = nullptr;
 #ifdef IMU_INT_GPIO
     i2c_bus_handle_t shared_i2c_bus_handle_ = nullptr;
-    static constexpr int kDeepSleepTimeoutSeconds = 10 * 60; // 10 menit
+    static constexpr int kDeepSleepTimeoutSeconds = 10 * 60; // 10 minutes
     bool imu_ready_ = false;
 #endif
 
 #ifdef IMU_INT_GPIO
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_config_t i2c_bus_cfg = {
             .mode = I2C_MODE_MASTER,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -412,7 +412,7 @@ public:
 
         if (adc_calibration_lock_) {
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle_, raw_value, &voltage));
-            voltage = voltage * 3 / 2;  // kompensasi pembagi tegangan
+            voltage = voltage * 3 / 2;  // compensate for voltage divider
             ESP_LOGI(TAG, "Calibrated voltage: %d mV", voltage);
         } else {
             ESP_LOGI(TAG, "Raw ADC value: %d", raw_value);
@@ -422,10 +422,10 @@ public:
         voltage = voltage < EMPTY_BATTERY_VOLTAGE ? EMPTY_BATTERY_VOLTAGE : voltage;
         voltage = voltage > FULL_BATTERY_VOLTAGE ? FULL_BATTERY_VOLTAGE : voltage;
 
-        // Hitung persentase level baterai
+        // Calculate battery level percentage
         level = (voltage - EMPTY_BATTERY_VOLTAGE) * 100 / (FULL_BATTERY_VOLTAGE - EMPTY_BATTERY_VOLTAGE);
 
-        // ESP-Spot tidak mendukung deteksi pengisian daya, jadi gunakan MCU_VCC_CTL untuk menentukan status pengisian
+        // ESP-Spot does not support charging detection, so we use MCU_VCC_CTL to determine charging status
         charging = gpio_get_level(MCU_VCC_CTL);
         discharging = !charging;
         ESP_LOGI(TAG, "Battery Level: %d%%, Charging: %s", level, charging ? "Yes" : "No");

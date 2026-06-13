@@ -12,7 +12,7 @@
 
 
 SystemReset::SystemReset(gpio_num_t reset_nvs_pin, gpio_num_t reset_factory_pin) : reset_nvs_pin_(reset_nvs_pin), reset_factory_pin_(reset_factory_pin) {
-    // Atur GPIO1 dan GPIO2 sebagai masukan, lalu setel ulang NVS flash saat tombol ditekan
+    // Configure GPIO1, GPIO2 as INPUT, reset NVS flash if the button is pressed
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
@@ -50,7 +50,7 @@ void SystemReset::ResetNvsFlash() {
 
 void SystemReset::ResetToFactory() {
     ESP_LOGI(TAG, "Resetting to factory");
-    // Hapus partisi otadata
+    // Erase otadata partition
     const esp_partition_t* partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
     if (partition == NULL) {
         ESP_LOGE(TAG, "Failed to find otadata partition");
@@ -59,7 +59,7 @@ void SystemReset::ResetToFactory() {
     esp_partition_erase_range(partition, 0, partition->size);
     ESP_LOGI(TAG, "Erased otadata partition");
 
-    // Nyalakan ulang dalam 3 detik
+    // Reboot in 3 seconds
     RestartInSeconds(3);
 }
 

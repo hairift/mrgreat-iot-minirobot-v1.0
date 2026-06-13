@@ -15,7 +15,7 @@ void BoardPowerBsp::PowerLedTask(void *arg) {
         gpio_set_level(GPIO_NUM_3, 0);
         vTaskDelay(pdMS_TO_TICKS(200));
         gpio_set_level(GPIO_NUM_3, 1);
-        // Tidak perlu berkedip terlalu sering; jeda panjang memberi indikasi yang lebih jelas
+        // 不需要频繁闪烁，间隔指示效果更好
         vTaskDelay(pdMS_TO_TICKS(4800));
     }
 }

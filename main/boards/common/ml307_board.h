@@ -16,10 +16,10 @@ protected:
 
     virtual std::string GetBoardJson() override;
 
-    // Metode bantu internal untuk memicu fungsi panggil balik kejadian jaringan
+    // Internal helper to trigger network event callback
     void OnNetworkEvent(NetworkEvent event, const std::string& data = "");
     
-    // Tugas inisialisasi jaringan yang berjalan di tugas FreeRTOS
+    // Network initialization task (runs in FreeRTOS task)
     static void NetworkTaskEntry(void* arg);
     void NetworkTask();
 

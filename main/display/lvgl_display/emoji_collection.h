@@ -10,7 +10,7 @@
 #include <memory>
 
 
-// Definisikan antarmuka untuk koleksi emoji
+// Antarmuka dasar untuk kumpulan emoji.
 class EmojiCollection {
 public:
     virtual void AddEmoji(const std::string& name, LvglImage* image);

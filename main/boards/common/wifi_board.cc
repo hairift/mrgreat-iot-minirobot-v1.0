@@ -23,11 +23,11 @@
 
 static const char *TAG = "WifiBoard";
 
-// Batas waktu koneksi dalam detik
+// Connection timeout in seconds
 static constexpr int CONNECT_TIMEOUT_SEC = 60;
 
 WifiBoard::WifiBoard() {
-    // Buat pewaktu batas waktu koneksi
+    // Create connection timeout timer
     esp_timer_create_args_t timer_args = {
         .callback = OnWifiConnectTimeout,
         .arg = this,
@@ -52,13 +52,14 @@ std::string WifiBoard::GetBoardType() {
 void WifiBoard::StartNetwork() {
     auto& wifi_manager = WifiManager::GetInstance();
 
-    // Inisialisasi pengelola WiFi
+    // Initialize WiFi manager
     WifiManagerConfig config;
-    config.ssid_prefix = "MrGreat";
+    config.ssid_prefix = "MrGreat-V1.0";
+    config.append_mac_suffix = false;
     config.language = Lang::CODE;
     wifi_manager.Initialize(config);
 
-    // Atur fungsi panggil balik kejadian terpadu dan teruskan ke NetworkEvent beserta data SSID
+    // Set unified event callback - forward to NetworkEvent with SSID data
     wifi_manager.SetEventCallback([this](WifiEvent event, const std::string& data) {
         switch (event) {
             case WifiEvent::Scanning:
@@ -82,7 +83,7 @@ void WifiBoard::StartNetwork() {
         }
     });
 
-    // Coba tersambung atau masuk ke mode konfigurasi
+    // Try to connect or enter config mode
     TryWifiConnect();
 }
 
@@ -91,13 +92,13 @@ void WifiBoard::TryWifiConnect() {
     bool have_ssid = !ssid_manager.GetSsidList().empty();
 
     if (have_ssid) {
-        // Mulai percobaan koneksi dengan batas waktu
+        // Start connection attempt with timeout
         ESP_LOGI(TAG, "Starting WiFi connection attempt");
         esp_timer_start_once(connect_timer_, CONNECT_TIMEOUT_SEC * 1000000ULL);
         WifiManager::GetInstance().StartStation();
     } else {
-        // Belum ada SSID yang disimpan, masuk ke mode konfigurasi
-        // Tunggu agar versi papan sempat tampil
+        // No SSID configured, enter config mode
+        // Wait for the board version to be shown
         vTaskDelay(pdMS_TO_TICKS(1500));
         StartWifiConfigMode();
     }
@@ -106,30 +107,22 @@ void WifiBoard::TryWifiConnect() {
 void WifiBoard::OnNetworkEvent(NetworkEvent event, const std::string& data) {
     switch (event) {
         case NetworkEvent::Connected:
-            // Hentikan pewaktu batas waktu
+            // Stop timeout timer
             esp_timer_stop(connect_timer_);
 #ifdef CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING
-            // Pastikan sumber daya blufi sudah dilepas
+            // make sure blufi resources has been released
             Blufi::GetInstance().deinit();
 #endif
             in_config_mode_ = false;
-            is_connected_ = true;
             ESP_LOGI(TAG, "Connected to WiFi: %s", data.c_str());
-            // Tutup notifikasi pemindaian jika masih tampil
-            GetDisplay()->ShowNotification("", 0);
             break;
         case NetworkEvent::Scanning:
-            // Lewati kejadian pemindaian jika sudah terhubung agar status tidak berkedip
-            if (is_connected_) {
-                return;
-            }
             ESP_LOGI(TAG, "WiFi scanning");
             break;
         case NetworkEvent::Connecting:
             ESP_LOGI(TAG, "WiFi connecting to %s", data.c_str());
             break;
         case NetworkEvent::Disconnected:
-            is_connected_ = false;
             ESP_LOGW(TAG, "WiFi disconnected");
             break;
         case NetworkEvent::WifiConfigModeEnter:
@@ -139,15 +132,14 @@ void WifiBoard::OnNetworkEvent(NetworkEvent event, const std::string& data) {
         case NetworkEvent::WifiConfigModeExit:
             ESP_LOGI(TAG, "WiFi config mode exited");
             in_config_mode_ = false;
-            is_connected_ = false;  // Reset agar event pemindaian kembali terkirim dengan benar
-            // Coba sambung dengan kredensial baru
+            // Try to connect with the new credentials
             TryWifiConnect();
             break;
         default:
             break;
     }
 
-    // Beri tahu fungsi panggil balik eksternal jika tersedia
+    // Notify external callback if set
     if (network_event_callback_) {
         network_event_callback_(event, data);
     }
@@ -167,14 +159,14 @@ void WifiBoard::OnWifiConnectTimeout(void* arg) {
 
 void WifiBoard::StartWifiConfigMode() {
     in_config_mode_ = true;
-    // Pindah ke status konfigurasi WiFi
+    // Transition to wifi configuring state
     Application::GetInstance().SetDeviceState(kDeviceStateWifiConfiguring);
 #ifdef CONFIG_USE_HOTSPOT_WIFI_PROVISIONING
     auto& wifi_manager = WifiManager::GetInstance();
 
     wifi_manager.StartConfigAp();
 
-    // Tampilkan petunjuk konfigurasi setelah jeda singkat
+    // Show config prompt after a short delay
     Application::GetInstance().Schedule([&wifi_manager]() {
         std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
         hint += wifi_manager.GetApSsid();
@@ -185,11 +177,11 @@ void WifiBoard::StartWifiConfigMode() {
     });
 #elif CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING
     auto &blufi = Blufi::GetInstance();
-    // Inisialisasi protokol ESP-BLUFI
+    // initialize esp-blufi protocol
     blufi.init();
 #endif
 #if CONFIG_USE_ACOUSTIC_WIFI_PROVISIONING
-    // Mulai tugas provisioning akustik
+    // Start acoustic provisioning task
     auto codec = Board::GetInstance().GetAudioCodec();
     int channel = codec ? codec->input_channels() : 1;
     ESP_LOGI(TAG, "Starting acoustic WiFi provisioning, channels: %d", channel);
@@ -213,20 +205,20 @@ void WifiBoard::EnterWifiConfigMode() {
     auto state = app.GetDeviceState();
 
     if (state == kDeviceStateSpeaking || state == kDeviceStateListening || state == kDeviceStateIdle) {
-        // Reset protokol dengan menutup kanal audio lalu mengulang status protokol
+        // Reset protocol (close audio channel, reset protocol)
         Application::GetInstance().ResetProtocol();
 
         xTaskCreate([](void* arg) {
             auto* board = static_cast<WifiBoard*>(arg);
 
-            // Tunggu 1 detik agar proses bicara selesai dengan rapi
+            // Wait for 1 second to allow speaking to finish gracefully
             vTaskDelay(pdMS_TO_TICKS(1000));
 
-            // Hentikan percobaan koneksi yang masih berjalan
+            // Stop any ongoing connection attempt
             esp_timer_stop(board->connect_timer_);
             WifiManager::GetInstance().StopStation();
 
-            // Masuk ke mode konfigurasi
+            // Enter config mode
             board->StartWifiConfigMode();
 
             vTaskDelete(NULL);
@@ -239,7 +231,7 @@ void WifiBoard::EnterWifiConfigMode() {
         return;
     }
 
-    // Hentikan percobaan koneksi yang masih berjalan
+    // Stop any ongoing connection attempt
     esp_timer_stop(connect_timer_);
     WifiManager::GetInstance().StopStation();
 
@@ -311,14 +303,14 @@ std::string WifiBoard::GetDeviceStatusJson() {
     auto& board = Board::GetInstance();
     auto root = cJSON_CreateObject();
 
-    // Speaker audio
+    // Audio speaker
     auto audio_speaker = cJSON_CreateObject();
     if (auto codec = board.GetAudioCodec()) {
         cJSON_AddNumberToObject(audio_speaker, "volume", codec->output_volume());
     }
     cJSON_AddItemToObject(root, "audio_speaker", audio_speaker);
 
-    // Layar
+    // Screen
     auto screen = cJSON_CreateObject();
     if (auto backlight = board.GetBacklight()) {
         cJSON_AddNumberToObject(screen, "brightness", backlight->brightness());
@@ -330,7 +322,7 @@ std::string WifiBoard::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "screen", screen);
 
-    // Baterai
+    // Battery
     int level = 0;
     bool charging = false, discharging = false;
     if (board.GetBatteryLevel(level, charging, discharging)) {
@@ -340,7 +332,7 @@ std::string WifiBoard::GetDeviceStatusJson() {
         cJSON_AddItemToObject(root, "battery", battery);
     }
 
-    // Jaringan
+    // Network
     auto& wifi = WifiManager::GetInstance();
     auto network = cJSON_CreateObject();
     cJSON_AddStringToObject(network, "type", "wifi");
@@ -350,7 +342,7 @@ std::string WifiBoard::GetDeviceStatusJson() {
     cJSON_AddStringToObject(network, "signal", signal);
     cJSON_AddItemToObject(root, "network", network);
 
-    // Suhu chip
+    // Chip temperature
     float temp = 0.0f;
     if (board.GetTemperature(temp)) {
         auto chip = cJSON_CreateObject();

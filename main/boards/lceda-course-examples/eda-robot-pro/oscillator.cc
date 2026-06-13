@@ -1,10 +1,10 @@
 //--------------------------------------------------------------
 //-- Oscillator.pde
-//-- Membuat osilasi sinusoidal pada servo
+//-- Generate sinusoidal oscillations in the servos
 //--------------------------------------------------------------
-//-- (c) Juan Gonzalez-Gomez (Obijuan), Des 2011
-//-- (c) txp666 untuk esp32, 202503
-//-- Lisensi GPL
+//-- (c) Juan Gonzalez-Gomez (Obijuan), Dec 2011
+//-- (c) txp666 for esp32, 202503
+//-- GPL license
 //--------------------------------------------------------------
 #include "oscillator.h"
 

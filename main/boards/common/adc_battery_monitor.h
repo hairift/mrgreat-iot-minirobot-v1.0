@@ -22,9 +22,17 @@ private:
     adc_battery_estimation_handle_t adc_battery_estimation_handle_ = nullptr;
     esp_timer_handle_t timer_handle_ = nullptr;
     bool is_charging_ = false;
+    bool has_level_sample_ = false;
+    float filtered_level_ = 100.0f;
+    uint8_t displayed_level_ = 100;
+    bool has_saved_level_ = false;
+    uint8_t saved_level_ = 100;
+    uint8_t last_persisted_level_ = 100;
+    uint16_t level_sample_count_ = 0;
     std::function<void(bool)> on_charging_status_changed_;
 
     void CheckBatteryStatus();
+    void PersistBatteryLevelIfNeeded();
 };
 
 #endif // ADC_BATTERY_MONITOR_H

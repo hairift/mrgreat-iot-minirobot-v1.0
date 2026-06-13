@@ -8,7 +8,7 @@
 #include "freertos/task.h"
 #include "oscillator.h"
 
-//-- Konstanta
+//-- Constants
 #define FORWARD 1
 #define BACKWARD -1
 #define LEFT 1
@@ -18,10 +18,10 @@
 #define MEDIUM 15
 #define BIG 30
 
-// -- Batas perubahan servo bawaan, derajat per detik
+// -- Servo delta limit default. degree / sec
 #define SERVO_LIMIT_DEFAULT 240
 
-// -- Indeks servo agar mudah diakses
+// -- Servo indexes for easy access
 #define LEFT_LEG 0
 #define RIGHT_LEG 1
 #define LEFT_FOOT 2
@@ -35,29 +35,29 @@ public:
     EdaRobot();
     ~EdaRobot();
 
-    //-- Inisialisasi EdaRobot
+    //-- EdaRobot initialization
     void Init(int left_leg, int right_leg, int left_foot, int right_foot, int left_hand = -1,
               int right_hand = -1);
-    //-- Fungsi pasang dan lepas
+    //-- Attach & detach functions
     void AttachServos();
     void DetachServos();
 
-    //-- Trim osilator
+    //-- Oscillator Trims
     void SetTrims(int left_leg, int right_leg, int left_foot, int right_foot, int left_hand = 0,
                   int right_hand = 0);
 
-    //-- Fungsi gerak dasar
+    //-- Predetermined Motion Functions
     void MoveServos(int time, int servo_target[]);
     void MoveSingle(int position, int servo_number);
     void OscillateServos(int amplitude[SERVO_COUNT], int offset[SERVO_COUNT], int period,
                          double phase_diff[SERVO_COUNT], float cycle);
 
-    //-- Posisi istirahat EdaRobot
+    //-- HOME = EdaRobot at rest position
     void Home(bool hands_down = true);
     bool GetRestState();
     void SetRestState(bool state);
 
-    //-- Fungsi gerakan siap pakai
+    //-- Predetermined Motion Functions
     void Jump(float steps = 1, int period = 2000);
 
     void Walk(float steps = 4, int period = 1000, int dir = FORWARD, int amount = 0);
@@ -75,13 +75,13 @@ public:
     void Crusaito(float steps = 1, int period = 900, int height = 20, int dir = FORWARD);
     void Flapping(float steps = 1, int period = 1000, int height = 20, int dir = FORWARD);
 
-    // -- Gerakan tangan
-    void HandsUp(int period = 1000, int dir = 0);      // Kedua tangan diangkat
-    void HandsDown(int period = 1000, int dir = 0);    // Kedua tangan diturunkan
-    void HandWave(int period = 1000, int dir = LEFT);  // Melambaikan tangan
-    void HandWaveBoth(int period = 1000);              // Kedua tangan melambai bersamaan
+    // -- 手部动作
+    void HandsUp(int period = 1000, int dir = 0);      // 双手举起
+    void HandsDown(int period = 1000, int dir = 0);    // 双手放下
+    void HandWave(int period = 1000, int dir = LEFT);  // 挥手
+    void HandWaveBoth(int period = 1000);              // 双手同时挥手
 
-    // -- Pembatas servo
+    // -- Servo limiter
     void EnableServoLimit(int speed_limit_degree_per_sec = SERVO_LIMIT_DEFAULT);
     void DisableServoLimit();
 
@@ -96,7 +96,7 @@ private:
     float increment_[SERVO_COUNT];
 
     bool is_edarobot_resting_;
-    bool has_hands_;  // Menandakan ada servo tangan atau tidak
+    bool has_hands_;  // 是否有手部舵机
 
     void Execute(int amplitude[SERVO_COUNT], int offset[SERVO_COUNT], int period,
                  double phase_diff[SERVO_COUNT], float steps);

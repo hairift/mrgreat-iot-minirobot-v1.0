@@ -26,11 +26,11 @@ private:
     const int kLowBatteryLevel = 20;
 
     adc_oneshot_unit_handle_t adc_handle_;
-    bool adc_handle_owned_ = false;  // Tandai apakah handle ADC dibuat oleh kelas ini
-    adc_cali_handle_t adc_cali_handle_ = nullptr;  // Objek kalibrasi ADC
+    bool adc_handle_owned_ = false;  // 标记ADC句柄是否由本类创建
+    adc_cali_handle_t adc_cali_handle_ = nullptr;  // ADC校准句柄
 
     void CheckBatteryStatus() {
-        // Ambil status pengisian daya
+        // Get charging status
         bool new_charging_status = gpio_get_level(charging_pin_) == 1;
         if (new_charging_status != is_charging_) {
             is_charging_ = new_charging_status;
@@ -41,14 +41,13 @@ private:
             return;
         }
 
-        // Jika data level baterai belum cukup, baca data baterai lagi
+        // 如果电池电量数据不足，则读取电池电量数据
         if (adc_values_.size() < kBatteryAdcDataCount) {
             ReadBatteryAdcData();
             return;
         }
 
-        // Jika data level baterai sudah cukup, baca ulang setiap
-        // interval kBatteryAdcInterval
+        // 如果电池电量数据充足，则每 kBatteryAdcInterval 个 tick 读取一次电池电量数据
         ticks_++;
         if (ticks_ % kBatteryAdcInterval == 0) {
             ReadBatteryAdcData();
@@ -57,9 +56,9 @@ private:
 
     void ReadBatteryAdcData() {
         int adc_raw = 0;
-        int voltage_mv = 0;  // Tegangan setelah kalibrasi ADC (mV)
+        int voltage_mv = 0;  // ADC校准后的电压（mV）
         
-        // Ambil rata-rata dari beberapa sampel untuk meningkatkan kestabilan
+        // 多次采样取平均，提高稳定性
         uint32_t adc_sum = 0;
         const int sample_count = 10;
         for (int i = 0; i < sample_count; i++) {
@@ -69,20 +68,20 @@ private:
         }
         adc_raw = adc_sum / sample_count;
         
-        // Gunakan kalibrasi ADC untuk memperoleh tegangan yang lebih akurat
+        // 使用ADC校准获取准确电压
         if (adc_cali_handle_) {
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_cali_handle_, adc_raw, &voltage_mv));
         } else {
-            // Jika belum ada kalibrasi, gunakan perhitungan linear
+            // 如果没有校准，使用线性计算
             voltage_mv = (int)(adc_raw * 3300.0f / 4095.0f);
         }
         
-        // Hitung tegangan baterai sebenarnya berdasarkan rasio pembagi tegangan
-        // Rasio pembagi tegangan rangkaian: R21/(R20+R21) = 100K/300K = 1/3
-        // Tegangan baterai sebenarnya = tegangan ADC terukur × 3
+        // 根据分压比计算实际电池电压
+        // 电路分压比: R21/(R20+R21) = 100K/300K = 1/3
+        // 实际电池电压 = ADC测量电压 × 3
         int battery_voltage_mv = voltage_mv * 3;
         
-        // Tambahkan nilai tegangan ke antrean untuk pemulusan
+        // 将电压值添加到队列中用于平滑
         adc_values_.push_back(battery_voltage_mv);
         if (adc_values_.size() > kBatteryAdcDataCount) {
             adc_values_.erase(adc_values_.begin());
@@ -94,10 +93,10 @@ private:
         }
         average_voltage /= adc_values_.size();
 
-        // Definisikan rentang level baterai berdasarkan tegangan aktual dalam mV
+        // 定义电池电量区间（基于实际电池电压，单位mV）
         const struct {
-            uint16_t voltage_mv;  // Tegangan baterai (mV)
-            uint8_t level;        // Persentase baterai
+            uint16_t voltage_mv;  // 电池电压（mV）
+            uint8_t level;        // 电量百分比
         } levels[] = {
             {3500, 0},    // 3.5V
             {3640, 20},   // 3.64V
@@ -107,15 +106,15 @@ private:
             {4200, 100}   // 4.2V
         };
 
-        // Saat nilai berada di bawah batas minimum
+        // 低于最低值时
         if (average_voltage < levels[0].voltage_mv) {
             battery_level_ = 0;
         }
-        // Saat nilai berada di atas batas maksimum
+        // 高于最高值时
         else if (average_voltage >= levels[5].voltage_mv) {
             battery_level_ = 100;
         } else {
-            // Gunakan interpolasi linear untuk menghitung nilai di tengah
+            // 线性插值计算中间值
             for (int i = 0; i < 5; i++) {
                 if (average_voltage >= levels[i].voltage_mv && average_voltage < levels[i+1].voltage_mv) {
                     float ratio = static_cast<float>(average_voltage - levels[i].voltage_mv) / 
@@ -126,7 +125,7 @@ private:
             }
         }
 
-        // Periksa status baterai lemah
+        // Check low battery status
         if (adc_values_.size() >= kBatteryAdcDataCount) {
             bool new_low_battery_status = battery_level_ <= kLowBatteryLevel;
             if (new_low_battery_status != is_low_battery_) {
@@ -142,11 +141,11 @@ private:
     }
 
 public:
-    // Konstruktor yang memakai handle ADC eksternal untuk menggunakan ulang ADC yang sudah ada
+    // 构造函数：使用外部ADC句柄（用于复用已存在的ADC）
     PowerManager(gpio_num_t pin, adc_oneshot_unit_handle_t* external_adc_handle = nullptr) 
         : charging_pin_(pin), adc_handle_owned_(false) {
         if(charging_pin_ != GPIO_NUM_NC){
-            // Inisialisasi pin pengisian daya
+            // 初始化充电引脚
             gpio_config_t io_conf = {};
             io_conf.intr_type = GPIO_INTR_DISABLE;
             io_conf.mode = GPIO_MODE_INPUT;
@@ -156,7 +155,7 @@ public:
             gpio_config(&io_conf);
         }
         
-        // Buat pewaktu pemeriksaan level baterai
+        // 创建电池电量检查定时器
         esp_timer_create_args_t timer_args = {
             .callback = [](void* arg) {
                 PowerManager* self = static_cast<PowerManager*>(arg);
@@ -170,29 +169,29 @@ public:
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer_handle_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(timer_handle_, 1000000));
 
-        // Inisialisasi atau gunakan ulang ADC
+        // 初始化或复用 ADC
         if (external_adc_handle != nullptr && *external_adc_handle != nullptr) {
-            // Gunakan ulang handle ADC eksternal
+            // 复用外部ADC句柄
             adc_handle_ = *external_adc_handle;
             adc_handle_owned_ = false;
         } else {
-            // Buat handle ADC baru
+            // 创建新的ADC句柄
             adc_oneshot_unit_init_cfg_t init_config = {
-                .unit_id = ADC_UNIT_1,  // GPIO6 terhubung ke ADC1
+                .unit_id = ADC_UNIT_1,  // GPIO6 对应 ADC1
                 .ulp_mode = ADC_ULP_MODE_DISABLE,
             };
             ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle_));
             adc_handle_owned_ = true;
         }
         
-        // Konfigurasikan kanal ADC
+        // 配置ADC通道
         adc_oneshot_chan_cfg_t chan_config = {
             .atten = ADC_ATTEN_DB_12,
             .bitwidth = ADC_BITWIDTH_12,
         };
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle_, ADC_CHANNEL_5, &chan_config));  // GPIO6 = ADC1_CHANNEL_5
         
-        // Inisialisasi kalibrasi ADC
+        // 初始化ADC校准
         adc_cali_curve_fitting_config_t cali_config = {
             .unit_id = ADC_UNIT_1,
             .chan = ADC_CHANNEL_5,
@@ -213,18 +212,18 @@ public:
             esp_timer_stop(timer_handle_);
             esp_timer_delete(timer_handle_);
         }
-        // Hapus handle kalibrasi ADC
+        // 删除ADC校准句柄
         if (adc_cali_handle_) {
             adc_cali_delete_scheme_curve_fitting(adc_cali_handle_);
         }
-        // Hanya hapus handle ADC jika memang dibuat oleh kelas ini
+        // 只有当ADC句柄是本类创建的时候才删除
         if (adc_handle_ && adc_handle_owned_) {
             adc_oneshot_del_unit(adc_handle_);
         }
     }
 
     bool IsCharging() {
-        // Jika baterai sudah penuh, jangan tampilkan status mengisi lagi
+        // 如果电量已经满了，则不再显示充电中
         if (battery_level_ == 100) {
             return false;
         }
@@ -232,7 +231,7 @@ public:
     }
 
     bool IsDischarging() {
-        // Status isi dan pakai daya tidak dibedakan, jadi kembalikan kebalikannya
+        // 没有区分充电和放电，所以直接返回相反状态
         return !is_charging_;
     }
 

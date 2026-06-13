@@ -62,16 +62,16 @@ def sort_key(filename):
 
 def download_v8_script(convert_path):
     """
-    Pastikan repositori lvgl_image_converter tersedia di jalur yang diberikan.
-    Jika belum ada, klon repositori lalu pindah ke commit tertentu.
+    Ensure that the lvgl_image_converter repository is present at the specified path.
+    If not, clone the repository. Then, checkout to a specific commit.
 
-    Parameter:
-    - convert_path (str): Jalur direktori tempat lvgl_image_converter harus berada.
+    Parameters:
+    - convert_path (str): The directory path where lvgl_image_converter should be located.
     """
 
-    # Periksa apakah convert_path tidak kosong
+    # Check if convert_path is not empty
     if convert_path:
-        # Jika direktori belum ada, buat lalu klon repositorinya
+        # If the directory does not exist, create it and clone the repository
         if not os.path.exists(convert_path):
             os.makedirs(convert_path, exist_ok=True)
             try:
@@ -85,7 +85,7 @@ def download_v8_script(convert_path):
                 print(f'Git clone failed: {e}')
                 sys.exit(1)
 
-            # Pindah ke commit yang ditentukan
+            # Checkout to the specific commit
             try:
                 subprocess.run(
                     ['git', 'checkout', '9174634e9dcc1b21a63668969406897aad650f35'],
@@ -103,30 +103,30 @@ def download_v8_script(convert_path):
 
 def download_v9_script(url: str, destination: str) -> None:
     """
-    Unduh skrip Python dari URL ke tujuan lokal.
+    Download a Python script from a URL to a local destination.
 
-    Parameter:
-    - url (str): URL sumber skrip.
-    - destination (str): Jalur lokal untuk menyimpan skrip.
+    Parameters:
+    - url (str): URL to download the script from.
+    - destination (str): Local path to save the downloaded script.
 
-    Raise:
-    - Exception: Jika unduhan gagal.
+    Raises:
+    - Exception: If the download fails.
     """
     file_path = Path(destination)
 
-    # Periksa apakah berkas sudah ada
+    # Check if the file already exists
     if file_path.exists():
         if file_path.is_file():
             return
 
     try:
-        # Buat direktori induk jika belum ada
+        # Create the parent directories if they do not exist
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Buka URL lalu ambil datanya
+        # Open the URL and retrieve the data
         with urllib.request.urlopen(url) as response, open(file_path, 'wb') as out_file:
-            data = response.read()  # Baca seluruh respons
-            out_file.write(data)    # Tulis data ke berkas lokal
+            data = response.read()  # Read the entire response
+            out_file.write(data)    # Write data to the local file
 
     except urllib.error.HTTPError as e:
         print(f'HTTP Error: {e.code} - {e.reason} when accessing {url}')
@@ -139,7 +139,7 @@ def download_v9_script(url: str, destination: str) -> None:
         sys.exit(1)
 
 def split_image(im, block_size, input_dir, ext, convert_to_qoi):
-    """Bagi gambar menjadi beberapa blok berdasarkan ukuran blok."""
+    """Splits the image into blocks based on the block size."""
     width, height = im.size
 
     if block_size:
@@ -174,7 +174,7 @@ def split_image(im, block_size, input_dir, ext, convert_to_qoi):
     return width, height, splits
 
 def create_header(width, height, splits, split_height, lenbuf, ext):
-    """Buat header untuk berkas keluaran berdasarkan formatnya."""
+    """Creates the header for the output file based on the format."""
     header = bytearray()
 
     if ext.lower() == '.jpg':
@@ -184,29 +184,29 @@ def create_header(width, height, splits, split_height, lenbuf, ext):
     elif ext.lower() == '.qoi':
         header += bytearray('_SQOI__'.encode('UTF-8'))
 
-    # VERSI 6 BYTE
+    # 6 BYTES VERSION
     header += bytearray(('\x00V1.00\x00').encode('UTF-8'))
 
-    # LEBAR 2 BYTE
+    # WIDTH 2 BYTES
     header += width.to_bytes(2, byteorder='little')
 
-    # TINGGI 2 BYTE
+    # HEIGHT 2 BYTES
     header += height.to_bytes(2, byteorder='little')
 
-    # JUMLAH ITEM 2 BYTE
+    # NUMBER OF ITEMS 2 BYTES
     header += splits.to_bytes(2, byteorder='little')
 
-    # TINGGI POTONGAN 2 BYTE
+    # SPLIT HEIGHT 2 BYTES
     header += split_height.to_bytes(2, byteorder='little')
 
     for item_len in lenbuf:
-        # PANJANG 2 BYTE
+        # LENGTH 2 BYTES
         header += item_len.to_bytes(2, byteorder='little')
 
     return header
 
 def save_image(output_file_path, header, split_data):
-    """Simpan gambar dengan header dan data potongan yang sudah dibentuk."""
+    """Saves the image with the constructed header and split data."""
     with open(output_file_path, 'wb') as f:
         if header is not None:
             f.write(header + split_data)
@@ -216,13 +216,13 @@ def save_image(output_file_path, header, split_data):
 def handle_lvgl_version_v9(input_file: str, input_dir: str,
                                 input_filename: str, convert_path: str) -> None:
     """
-    Tangani konversi untuk LVGL versi di atas 9.0.
+    Handle conversion for LVGL versions greater than 9.0.
 
-    Parameter:
-    - input_file (str): Jalur berkas gambar masukan.
-    - input_dir (str): Direktori berkas masukan.
-    - input_filename (str): Nama berkas masukan.
-    - convert_path (str): Jalur skrip dan keluaran konversi.
+    Parameters:
+    - input_file (str): Path to the input image file.
+    - input_dir (str): Directory of the input file.
+    - input_filename (str): Name of the input file.
+    - convert_path (str): Path for conversion scripts and outputs.
     """
 
     convert_file = os.path.join(convert_path, 'LVGLImage.py')
@@ -257,13 +257,13 @@ def handle_lvgl_version_v9(input_file: str, input_dir: str,
 
 def handle_lvgl_version_v8(input_file: str, input_dir: str, input_filename: str, convert_path: str) -> None:
     """
-    Tangani konversi untuk LVGL versi yang didukung (<= 9.0).
+    Handle conversion for supported LVGL versions (<= 9.0).
 
-    Parameter:
-    - input_file (str): Jalur berkas gambar masukan.
-    - input_dir (str): Direktori berkas masukan.
-    - input_filename (str): Nama berkas masukan.
-    - convert_path (str): Jalur skrip dan keluaran konversi.
+    Parameters:
+    - input_file (str): Path to the input image file.
+    - input_dir (str): Directory of the input file.
+    - input_filename (str): Name of the input file.
+    - convert_path (str): Path for conversion scripts and outputs.
     """
 
     download_v8_script(convert_path=convert_path)
@@ -296,7 +296,7 @@ def handle_lvgl_version_v8(input_file: str, input_dir: str, input_filename: str,
         sys.exit(1)
 
 def process_image(input_file, height_str, output_extension, convert_to_qoi=False):
-    """Fungsi utama untuk memproses gambar dan menyimpannya sebagai .sjpg, .spng, atau .sqoi."""
+    """Main function to process the image and save it as .sjpg, .spng, or .sqoi."""
     try:
         SPLIT_HEIGHT = int(height_str)
         if SPLIT_HEIGHT < 0:
@@ -352,12 +352,12 @@ def convert_image_to_simg(input_file, height_str):
 
 def convert_image_to_raw(input_file: str) -> None:
     """
-    Ubah gambar menjadi format biner mentah yang kompatibel dengan LVGL.
+    Convert an image to raw binary format compatible with LVGL.
 
-    Parameter:
-    - input_file (str): Jalur berkas gambar masukan.
+    Parameters:
+    - input_file (str): Path to the input image file.
 
-    Raise:
+    Raises:
     - FileNotFoundError: If required scripts are not found.
     - subprocess.CalledProcessError: If the external conversion script fails.
     - KeyError: If required keys are missing in config_data.

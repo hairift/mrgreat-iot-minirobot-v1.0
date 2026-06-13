@@ -9,8 +9,8 @@
  #include "sdkconfig.h"
  #include <string.h>
  #if CONFIG_LCD_ENABLE_DEBUG_LOG
- // Level log lokal harus didefinisikan sebelum menyertakan esp_log.h
- // Tetapkan level log maksimum untuk file sumber ini
+ // The local log level must be defined before including esp_log.h
+ // Set the maximum log level for this source file
  #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
  #endif
  
@@ -25,7 +25,7 @@
  #include "esp_log.h"
  #include "esp_check.h"
  #include "esp_compiler.h"
- /* Pengendali LCD GC9309NA untuk ESP-IDF
+ /* GC9309NA LCD controller driver for ESP-IDF
   * SPDX-FileCopyrightText: 2024 Your Name
   * SPDX-License-Identifier: Apache-2.0
   */
@@ -38,7 +38,7 @@
   #include "driver/gpio.h"
   
   
-  // Kumpulan perintah GC9309NA
+  // GC9309NA Command Set
   #define GC9309NA_CMD_SLPIN         0x10
   #define GC9309NA_CMD_SLPOUT        0x11
   #define GC9309NA_CMD_INVOFF        0x20
@@ -55,7 +55,7 @@
   #define GC9309NA_CMD_WRDISBV       0x51
   #define GC9309NA_CMD_WRCTRLD       0x53
   
-  // Perintah khusus pabrikan
+  // Manufacturer Commands
   #define GC9309NA_CMD_SETGAMMA1     0xF0
   #define GC9309NA_CMD_SETGAMMA2     0xF1
   #define GC9309NA_CMD_PWRCTRL1      0x67
@@ -67,7 +67,7 @@
   #define GC9309NA_CMD_REG_ENABLE1   0xFE
   #define GC9309NA_CMD_REG_ENABLE2   0xEF
   
-  // Definisi warna untuk mode uji mandiri
+  // 自检模式颜色定义
  
  
   static const char *TAG = "lcd_panel.gc9309na";
@@ -108,7 +108,7 @@
       ESP_GOTO_ON_FALSE(gc9309, ESP_ERR_NO_MEM, err, TAG, "no mem");
   
 
-         // Konfigurasi GPIO untuk reset perangkat keras
+         // Hardware reset GPIO config
       if (panel_dev_config->reset_gpio_num >= 0) {
           gpio_config_t io_conf = {
               .mode = GPIO_MODE_OUTPUT,
@@ -117,8 +117,8 @@
           ESP_GOTO_ON_ERROR(gpio_config(&io_conf), err, TAG, "GPIO config failed");
       }
   
-      gc9309->colmod_val = 0x55; // Format RGB565
-     // Nilai awal register
+      gc9309->colmod_val = 0x55; // RGB565
+     // Initial register values
     
      gc9309->fb_bits_per_pixel = 16;
       gc9309->io = io;
@@ -127,7 +127,7 @@
       gc9309->x_gap = 0;
       gc9309->y_gap = 0;
   
-      // Penunjuk fungsi
+      // Function pointers
       gc9309->base.del = panel_gc9309na_del;
       gc9309->base.reset = panel_gc9309na_reset;
       gc9309->base.init = panel_gc9309na_init;
@@ -170,13 +170,13 @@
       gc9309na_panel_t *gc9309 = __containerof(panel, gc9309na_panel_t, base);
   
       if (gc9309->reset_gpio_num >= 0) {
-          // Reset perangkat keras
+          // Hardware reset
           gpio_set_level(gc9309->reset_gpio_num, gc9309->reset_level);
           vTaskDelay(pdMS_TO_TICKS(10));
           gpio_set_level(gc9309->reset_gpio_num, !gc9309->reset_level);
           vTaskDelay(pdMS_TO_TICKS(120));
       } else {
-          // Reset perangkat lunak
+          // Software reset
          //  uint8_t unlock_cmd[] = {GC9309NA_CMD_REG_ENABLE1, GC9309NA_CMD_REG_ENABLE2};
          //  ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(gc9309->io, 0xFE, unlock_cmd, 2), 
          //                    TAG, "Unlock failed");
@@ -191,20 +191,20 @@
      gc9309na_panel_t *gc9309 = __containerof(panel, gc9309na_panel_t, base);
      esp_lcd_panel_io_handle_t io = gc9309->io;
  
-     // Buka akses perintah
+     // Unlock commands
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xFE, NULL, 0), TAG, "Unlock cmd1 failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xEF, NULL, 0), TAG, "Unlock cmd2 failed");
  
-     // Perintah keluar dari mode tidur
+     // Sleep out command
      //ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x11, NULL, 0), TAG, "Sleep out failed");
      //vTaskDelay(pdMS_TO_TICKS(80));
  
-     // Perintah kendali timing
+     // Timing control commands
      //ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xE8, (uint8_t[]){0xA0}, 1), TAG, "Timing control failed");
      //ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xE8, (uint8_t[]){0xF0}, 1), TAG, "Timing control failed");
  
-     // Perintah menyalakan layar
-     //ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x29, NULL, 0), TAG, "Menyalakan layar gagal");
+     // Display on command
+     //ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x29, NULL, 0), TAG, "Display on failed");
     // vTaskDelay(pdMS_TO_TICKS(10));
  
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x80, (uint8_t[]){0xC0}, 1), TAG, "DINV failed");
@@ -218,16 +218,16 @@
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x8D, (uint8_t[]){0x51}, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x8E, (uint8_t[]){0x70}, 1), TAG, "DINV failed");
  
-     // Tukar bit tinggi dan rendah
+     //高低位交换 
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xB4, (uint8_t[]){0x80}, 1), TAG, "DINV failed");
  
-     gc9309->colmod_val = 0x05; // Format RGB565
-     gc9309->madctl_val = 0x48;  // Urutan BGR, atur bit3=1 (yaitu 0x08)
+     gc9309->colmod_val = 0x05; // RGB565
+     gc9309->madctl_val = 0x48;  // BGR顺序，设置bit3=1（即0x08）
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, GC9309NA_CMD_COLMOD, &gc9309->colmod_val, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, GC9309NA_CMD_MADCTL, &gc9309->madctl_val, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0XBF, (uint8_t[]){0X1F}, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x7d, (uint8_t[]){0x45,0x06}, 2), TAG, "DINV failed");
-     // Lanjutkan urutan inisialisasi berikutnya
+     // Continue from where you left off
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xEE, (uint8_t[]){0x00,0x06}, 2), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0XF4, (uint8_t[]){0x53}, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xF6, (uint8_t[]){0x17,0x08}, 2), TAG, "DINV failed");
@@ -243,7 +243,7 @@
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xF0, (uint8_t[]){0x0C,0x11,0x0b,0x0a,0x05,0x32,0x44,0x8e,0x9a,0x29,0x2E,0x5f}, 12), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xF1, (uint8_t[]){0x0B,0x11,0x0b,0x07,0x07,0x32,0x45,0xBd,0x8D,0x21,0x28,0xAf}, 12), TAG, "DINV failed");
  
-     // Pengaturan resolusi 240x296
+     // 240x296 resolution settings
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x2a, (uint8_t[]){0x00,0x00,0x00,0xef}, 4), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x2b, (uint8_t[]){0x00,0x00,0x01,0x27}, 4), TAG, "DINV failed");
  
@@ -257,7 +257,7 @@
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xCC, (uint8_t[]){0x33}, 1), TAG, "DINV failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xCD, (uint8_t[]){0x33}, 1), TAG, "DINV failed");
  
-     // Perintah keluar dari mode tidur
+     // Sleep out command
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x11, NULL, 0), TAG, "Sleep out failed");
      vTaskDelay(pdMS_TO_TICKS(80));
  
@@ -267,10 +267,10 @@
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xfe, NULL, 0), TAG, "unlock cmd1 failed");
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0xee, NULL, 0), TAG, "unlock cmd2 failed");
  
-     // Perintah menyalakan layar
+     // Display on command
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x29, NULL, 0), TAG, "Display on failed");
      
-     // Perintah tulis memori
+     // Memory write command
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, 0x2c, NULL, 0), TAG, "Memory write failed");
      vTaskDelay(pdMS_TO_TICKS(10));
      return ESP_OK;
@@ -289,7 +289,7 @@
      y_start += gc9309->y_gap;
      y_end += gc9309->y_gap;
  
-     // Tentukan area memori frame yang dapat diakses MCU
+     // define an area of frame memory where MCU can access
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_CASET, (uint8_t[]) {
          (x_start >> 8) & 0xFF,
          x_start & 0xFF,
@@ -302,7 +302,7 @@
          ((y_end - 1) >> 8) & 0xFF,
          (y_end - 1) & 0xFF,
      }, 4), TAG, "io tx param failed");
-     // Kirim isi frame buffer
+     // transfer frame buffer
      size_t len = (x_end - x_start) * (y_end - y_start) * gc9309->fb_bits_per_pixel / 8;
      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_color(io, LCD_CMD_RAMWR, color_data, len), TAG, "io tx color failed");
  

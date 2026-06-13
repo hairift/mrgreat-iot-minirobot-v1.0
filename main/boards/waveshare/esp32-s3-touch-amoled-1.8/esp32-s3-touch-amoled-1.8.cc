@@ -28,29 +28,29 @@
 class Pmic : public Axp2101 {
 public:
     Pmic(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : Axp2101(i2c_bus, addr) {
-        WriteReg(0x22, 0b110); // Aktifkan sumber mati daya saat PWRON > OFFLEVEL
-        WriteReg(0x27, 0x10);  // Tahan 4 detik untuk mematikan daya
+        WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
+        WriteReg(0x27, 0x10);  // hold 4s to power off
 
-        // Nonaktifkan semua DC kecuali DC1
+        // Disable All DCs but DC1
         WriteReg(0x80, 0x01);
-        // Nonaktifkan semua LDO
+        // Disable All LDOs
         WriteReg(0x90, 0x00);
         WriteReg(0x91, 0x00);
 
-        // Atur DC1 ke 3,3 V
+        // Set DC1 to 3.3V
         WriteReg(0x82, (3300 - 1500) / 100);
 
-        // Atur ALDO1 ke 3,3 V
+        // Set ALDO1 to 3.3V
         WriteReg(0x92, (3300 - 500) / 100);
 
-        // Aktifkan ALDO1 untuk mikrofon
+        // Enable ALDO1(MIC)
         WriteReg(0x90, 0x01);
     
-        WriteReg(0x64, 0x02); // Atur tegangan pengisian CV menjadi 4,1 V
+        WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
         
-        WriteReg(0x61, 0x02); // Atur arus pra-pengisian baterai utama menjadi 50 mA
-        WriteReg(0x62, 0x08); // Atur arus pengisian baterai utama menjadi 400 mA (0x08=200 mA, 0x09=300 mA, 0x0A=400 mA)
-        WriteReg(0x63, 0x01); // Atur arus terminasi pengisian baterai utama menjadi 25 mA
+        WriteReg(0x61, 0x02); // set Main battery precharge current to 50mA
+        WriteReg(0x62, 0x08); // set Main battery charger current to 400mA ( 0x08-200mA, 0x09-300mA, 0x0A-400mA )
+        WriteReg(0x63, 0x01); // set Main battery term charge current to 25mA
     }
 };
 
@@ -69,7 +69,7 @@ static const sh8601_lcd_init_cmd_t vendor_specific_init[] = {
     {0x29, (uint8_t[]){0x00}, 0, 10}
 };
 
-// Tambahkan kelas tampilan baru sebelum kelas waveshare_amoled_1_8
+// 在waveshare_amoled_1_8类之前添加新的显示类
 class CustomLcdDisplay : public SpiLcdDisplay {
 public:
     CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle,
@@ -83,12 +83,12 @@ public:
                     bool swap_xy)
         : SpiLcdDisplay(io_handle, panel_handle,
                     width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
@@ -125,6 +125,17 @@ private:
     CustomBacklight* backlight_;
     esp_io_expander_handle_t io_expander = NULL;
     PowerSaveTimer* power_save_timer_;
+    int last_discharging_ = -1;  // -1 = unknown, 0 = charging (always-on), 1 = discharging
+
+    // Standalone dim-only timer used while charging. PowerSaveTimer is
+    // disabled on the charger so wake word detection isn't disturbed by its
+    // sleep callbacks; this lightweight timer applies just the visual dim
+    // (low brightness + sleepy emoji) on its own.
+    esp_timer_handle_t dim_timer_ = nullptr;
+    int dim_ticks_ = 0;
+    bool dimmed_ = false;
+    bool dim_timer_running_ = false;
+    static constexpr int kDimSeconds = 60;
 
     void InitializePowerSaveTimer() {
         power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
@@ -142,8 +153,69 @@ private:
         power_save_timer_->SetEnabled(true);
     }
 
+    void InitializeDimTimer() {
+        esp_timer_create_args_t args = {
+            .callback = [](void* arg) {
+                auto self = static_cast<WaveshareEsp32s3TouchAMOLED1inch8*>(arg);
+                self->DimTick();
+            },
+            .arg = this,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "dim_tick",
+            .skip_unhandled_events = true,
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&args, &dim_timer_));
+    }
+
+    void ApplyDim(bool on) {
+        Application::GetInstance().Schedule([this, on]() {
+            if (on) {
+                ESP_LOGI(TAG, "Dim mode (always-on)");
+                GetDisplay()->SetPowerSaveMode(true);
+                GetBacklight()->SetBrightness(20);
+            } else {
+                GetDisplay()->SetPowerSaveMode(false);
+                GetBacklight()->RestoreBrightness();
+            }
+        });
+    }
+
+    void DimTick() {
+        if (!Application::GetInstance().CanEnterSleepMode()) {
+            // Activity (conversation, button) — restore display and reset.
+            dim_ticks_ = 0;
+            if (dimmed_) {
+                dimmed_ = false;
+                ApplyDim(false);
+            }
+            return;
+        }
+        dim_ticks_++;
+        if (dim_ticks_ >= kDimSeconds && !dimmed_) {
+            dimmed_ = true;
+            ApplyDim(true);
+        }
+    }
+
+    void StartDimTimer() {
+        if (dim_timer_running_) return;
+        dim_ticks_ = 0;
+        esp_timer_start_periodic(dim_timer_, 1000000);
+        dim_timer_running_ = true;
+    }
+
+    void StopDimTimer() {
+        if (!dim_timer_running_) return;
+        esp_timer_stop(dim_timer_);
+        dim_timer_running_ = false;
+        if (dimmed_) {
+            dimmed_ = false;
+            ApplyDim(false);
+        }
+    }
+
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -208,7 +280,7 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = SH8601_PANEL_IO_QSPI_CONFIG(
             EXAMPLE_PIN_NUM_LCD_CS,
@@ -217,7 +289,7 @@ private:
         );
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         const sh8601_vendor_config_t vendor_config = {
             .init_cmds = &vendor_specific_init[0],
@@ -265,7 +337,16 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_FT5x06_ADDRESS,
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 8,
+            .flags =
+            {
+                .disable_control_phase = 1,
+            }
+        };
         tp_io_config.scl_speed_hz = 400 * 1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(codec_i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_LOGI(TAG, "Initialize touch controller");
@@ -278,7 +359,7 @@ private:
         ESP_LOGI(TAG, "Touch panel initialized successfully");
     }
 
-    // Inisialisasi alat
+    // 初始化工具
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",
@@ -294,6 +375,7 @@ public:
     WaveshareEsp32s3TouchAMOLED1inch8() :
         boot_button_(BOOT_BUTTON_GPIO) {
         InitializePowerSaveTimer();
+        InitializeDimTimer();
         InitializeCodecI2c();
         InitializeTca9554();
         InitializeAxp2101();
@@ -320,12 +402,24 @@ public:
     }
 
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging) override {
-        static bool last_discharging = false;
         charging = pmic_->IsCharging();
         discharging = pmic_->IsDischarging();
-        if (discharging != last_discharging) {
+        int discharging_state = discharging ? 1 : 0;
+        if (discharging_state != last_discharging_) {
+            // On charger: disable PowerSaveTimer so its sleep-mode callbacks
+            // (which on this board appear to disrupt the AFE / audio pipeline)
+            // never fire. Run the standalone dim timer instead for the
+            // brightness + sleepy-emoji UX. On battery: reverse — disable dim
+            // timer, re-enable PowerSaveTimer (60s sleep, 5min auto-shutdown).
             power_save_timer_->SetEnabled(discharging);
-            last_discharging = discharging;
+            if (discharging) {
+                StopDimTimer();
+                ESP_LOGI(TAG, "Always-on disabled (battery)");
+            } else {
+                StartDimTimer();
+                ESP_LOGI(TAG, "Always-on enabled (charging)");
+            }
+            last_discharging_ = discharging_state;
         }
 
         level = pmic_->GetBatteryLevel();

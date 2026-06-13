@@ -4,23 +4,6 @@
 
 #define TAG "Protocol"
 
-namespace {
-
-std::string SerializeJson(cJSON* root) {
-    if (root == nullptr) {
-        return "{}";
-    }
-    char* json_str = cJSON_PrintUnformatted(root);
-    std::string json = json_str ? json_str : "{}";
-    if (json_str != nullptr) {
-        cJSON_free(json_str);
-    }
-    cJSON_Delete(root);
-    return json;
-}
-
-}  // ruang nama lokal
-
 void Protocol::OnIncomingJson(std::function<void(const cJSON* root)> callback) {
     on_incoming_json_ = callback;
 }
@@ -57,63 +40,46 @@ void Protocol::SetError(const std::string& message) {
 }
 
 void Protocol::SendAbortSpeaking(AbortReason reason) {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-    cJSON_AddStringToObject(root, "type", "abort");
+    std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"abort\"";
     if (reason == kAbortReasonWakeWordDetected) {
-        cJSON_AddStringToObject(root, "reason", "wake_word_detected");
+        message += ",\"reason\":\"wake_word_detected\"";
     }
-    SendText(SerializeJson(root));
+    message += "}";
+    SendText(message);
 }
 
 void Protocol::SendWakeWordDetected(const std::string& wake_word) {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-    cJSON_AddStringToObject(root, "type", "listen");
-    cJSON_AddStringToObject(root, "state", "detect");
-    cJSON_AddStringToObject(root, "text", wake_word.c_str());
-    SendText(SerializeJson(root));
+    std::string json = "{\"session_id\":\"" + session_id_ + 
+                      "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
+    SendText(json);
 }
 
 void Protocol::SendStartListening(ListeningMode mode) {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-    cJSON_AddStringToObject(root, "type", "listen");
-    cJSON_AddStringToObject(root, "state", "start");
+    std::string message = "{\"session_id\":\"" + session_id_ + "\"";
+    message += ",\"type\":\"listen\",\"state\":\"start\"";
     if (mode == kListeningModeRealtime) {
-        cJSON_AddStringToObject(root, "mode", "realtime");
+        message += ",\"mode\":\"realtime\"";
     } else if (mode == kListeningModeAutoStop) {
-        cJSON_AddStringToObject(root, "mode", "auto");
+        message += ",\"mode\":\"auto\"";
     } else {
-        cJSON_AddStringToObject(root, "mode", "manual");
+        message += ",\"mode\":\"manual\"";
     }
-    SendText(SerializeJson(root));
+    message += "}";
+    SendText(message);
 }
 
 void Protocol::SendStopListening() {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-    cJSON_AddStringToObject(root, "type", "listen");
-    cJSON_AddStringToObject(root, "state", "stop");
-    SendText(SerializeJson(root));
+    std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"listen\",\"state\":\"stop\"}";
+    SendText(message);
 }
 
 void Protocol::SendMcpMessage(const std::string& payload) {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
-    cJSON_AddStringToObject(root, "type", "mcp");
-    cJSON* parsed_payload = cJSON_Parse(payload.c_str());
-    if (parsed_payload != nullptr) {
-        cJSON_AddItemToObject(root, "payload", parsed_payload);
-    } else {
-        ESP_LOGE(TAG, "Failed to parse MCP payload, sending null");
-        cJSON_AddNullToObject(root, "payload");
-    }
-    SendText(SerializeJson(root));
+    std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"mcp\",\"payload\":" + payload + "}";
+    SendText(message);
 }
 
 bool Protocol::IsTimeout() const {
-    const int kTimeoutSeconds = 180;
+    const int kTimeoutSeconds = 120;
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_incoming_time_);
     bool timeout = duration.count() > kTimeoutSeconds;

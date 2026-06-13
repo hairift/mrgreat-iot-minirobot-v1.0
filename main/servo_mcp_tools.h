@@ -24,7 +24,7 @@ public:
             "Jika user meminta bagian tubuh tertentu, pilih action yang paling spesifik dan jangan gerakkan bagian lain kecuali memang diminta. "
             "Contoh: 'angkat tangan kanan' -> raise_right, 'lambaikan tangan kanan' -> wave_right, 'lihat kiri' -> turn_head_left. "
             "Gunakan action gabungan seperti wave_both, dance, atau menyapa hanya jika user memang meminta gerakan gabungan. "
-            "Action: shake_head, turn_head_right, turn_head_left, head_center, wave_right, raise_right, straight_right, lower_right, wave_left, raise_left, straight_left, lower_left, wave_both, raise_both, dance, salam, hormat, tepuk_tangan, menyapa, reset",
+            "Action: shake_head, turn_head_right, turn_head_left, head_center, wave_right, raise_right, straight_right, lower_right, wave_left, raise_left, straight_left, lower_left, wave_both, raise_both, straight_both, forward_both, dance, salam, hormat, tepuk_tangan, menyapa, reset",
             PropertyList({Property("action", kPropertyTypeString)}),
             [&ctrl](const PropertyList& props) -> ReturnValue {
                 std::string act = props["action"].value<std::string>();
@@ -43,6 +43,8 @@ public:
                 else if (act == "lower_left")       mv = ServoMove::LOWER_LEFT_ARM;
                 else if (act == "wave_both")        mv = ServoMove::WAVE_BOTH_ARMS;
                 else if (act == "raise_both")       mv = ServoMove::RAISE_BOTH_ARMS;
+                else if (act == "straight_both")    mv = ServoMove::STRAIGHT_BOTH_ARMS;
+                else if (act == "forward_both")     mv = ServoMove::STRAIGHT_BOTH_ARMS;
                 else if (act == "dance")            mv = ServoMove::DANCE;
                 else if (act == "salam")            mv = ServoMove::SALAM;
                 else if (act == "hormat")           mv = ServoMove::HORMAT;

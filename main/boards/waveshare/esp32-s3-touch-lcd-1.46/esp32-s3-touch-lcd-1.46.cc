@@ -20,7 +20,7 @@
 
 #define TAG "waveshare_lcd_1_46"
 
-// Tambahkan kelas tampilan baru sebelum kelas waveshare_lcd_1_46
+// 在waveshare_lcd_1_46类之前添加新的显示类
 class CustomLcdDisplay : public SpiLcdDisplay {
 public:
     static void rounder_event_cb(lv_event_t * e) {
@@ -28,8 +28,8 @@ public:
         uint16_t x1 = area->x1;
         uint16_t x2 = area->x2;
 
-        area->x1 = (x1 >> 2) << 2;          // Bulatkan awal koordinat ke bawah ke kelipatan 4 terdekat
-        area->x2 = ((x2 >> 2) << 2) + 3;    // Bulatkan akhir koordinat ke atas ke nilai 4N+3 terdekat
+        area->x1 = (x1 >> 2) << 2;          // round the start of coordinate down to the nearest 4M number
+        area->x2 = ((x2 >> 2) << 2) + 3;    // round the end of coordinate up to the nearest 4N+3 number
     }
 
     CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle, 
@@ -43,12 +43,12 @@ public:
                     bool swap_xy) 
         : SpiLcdDisplay(io_handle, panel_handle,
                     width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
@@ -67,7 +67,7 @@ private:
     static CustomBoard* instance_;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)0,
             .sda_io_num = I2C_SDA_IO,
@@ -83,22 +83,22 @@ private:
             ESP_LOGE(TAG, "TCA9554 create returned error");        
 
         // uint32_t input_level_mask = 0;
-        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_INPUT);               // Atur pin EXIO0 dan EXIO1 sebagai masukan
-        // ret = esp_io_expander_get_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, &input_level_mask);             // Baca level pin EXIO0 dan EXIO1 lalu simpan ke input_level_mask
+        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_INPUT);               // 设置引脚 EXIO0 和 EXIO1 模式为输入 
+        // ret = esp_io_expander_get_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, &input_level_mask);             // 获取引脚 EXIO0 和 EXIO1 的电平状态,存放在 input_level_mask 中
 
-        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, IO_EXPANDER_OUTPUT);              // Atur pin EXIO2 dan EXIO3 sebagai keluaran
-        // ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, 1);                             // Atur level pin menjadi 1
-        // ret = esp_io_expander_print_state(io_expander);                                                                             // Cetak status pin
+        // ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, IO_EXPANDER_OUTPUT);              // 设置引脚 EXIO2 和 EXIO3 模式为输出
+        // ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_2 | IO_EXPANDER_PIN_NUM_3, 1);                             // 将引脚电平设置为 1
+        // ret = esp_io_expander_print_state(io_expander);                                                                             // 打印引脚状态
 
-        ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_OUTPUT);                 // Atur pin EXIO0 dan EXIO1 sebagai keluaran
+        ret = esp_io_expander_set_dir(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, IO_EXPANDER_OUTPUT);                 // 设置引脚 EXIO0 和 EXIO1 模式为输出
         ESP_ERROR_CHECK(ret);
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
         vTaskDelay(pdMS_TO_TICKS(300));
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 0);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 0);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
         vTaskDelay(pdMS_TO_TICKS(300));
-        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // Reset LCD dan panel sentuh
+        ret = esp_io_expander_set_level(io_expander, IO_EXPANDER_PIN_NUM_0 | IO_EXPANDER_PIN_NUM_1, 1);                                // 复位 LCD 与 TouchPad
         ESP_ERROR_CHECK(ret);
     }
 
@@ -162,7 +162,7 @@ private:
         instance_ = this;
         InitializeButtonsCustom();
 
-        // Tombol BOOT
+        // Boot Button
         button_config_t boot_btn_config = {
             .long_press_time = 2000,
             .short_press_time = 0
@@ -183,10 +183,10 @@ private:
             app.ToggleChatState();
         }, this);
         iot_button_register_cb(boot_btn, BUTTON_LONG_PRESS_START, nullptr, [](void* button_handle, void* usr_data) {
-            // Tekan lama tidak memicu aksi
+            // 长按无处理
         }, this);
 
-        // Tombol daya
+        // Power Button
         button_config_t pwr_btn_config = {
             .long_press_time = 5000,
             .short_press_time = 0
@@ -198,7 +198,7 @@ private:
         };
         ESP_ERROR_CHECK(iot_button_create(&pwr_btn_config, pwr_btn_driver_, &pwr_btn));
         iot_button_register_cb(pwr_btn, BUTTON_SINGLE_CLICK, nullptr, [](void* button_handle, void* usr_data) {
-            // Tekan singkat tidak memicu aksi
+            // 短按无处理
         }, this);
         iot_button_register_cb(pwr_btn, BUTTON_LONG_PRESS_START, nullptr, [](void* button_handle, void* usr_data) {
             auto self = static_cast<CustomBoard*>(usr_data);

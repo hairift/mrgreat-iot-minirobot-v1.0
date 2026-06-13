@@ -18,7 +18,7 @@ LvglGif::LvglGif(const lv_img_dsc_t* img_dsc)
         return;
     }
 
-    // Siapkan deskriptor gambar LVGL
+    // Setup LVGL image descriptor
     memset(&img_dsc_, 0, sizeof(img_dsc_));
     img_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
     img_dsc_.header.flags = LV_IMAGE_FLAGS_MODIFIABLE;
@@ -29,7 +29,7 @@ LvglGif::LvglGif(const lv_img_dsc_t* img_dsc)
     img_dsc_.data = gif_->canvas;
     img_dsc_.data_size = gif_->width * gif_->height * 4;
 
-    // Render bingkai pertama
+    // Render first frame
     if (gif_->canvas) {
         gd_render_frame(gif_, gif_->canvas);
     }
@@ -38,12 +38,12 @@ LvglGif::LvglGif(const lv_img_dsc_t* img_dsc)
     ESP_LOGD(TAG, "GIF loaded from image descriptor: %dx%d", gif_->width, gif_->height);
 }
 
-// Destruktor
+// Destructor
 LvglGif::~LvglGif() {
     Cleanup();
 }
 
-// Implementasi antarmuka LvglImage
+// LvglImage interface implementation
 const lv_img_dsc_t* LvglGif::image_dsc() const {
     if (!loaded_) {
         return nullptr;
@@ -51,7 +51,7 @@ const lv_img_dsc_t* LvglGif::image_dsc() const {
     return &img_dsc_;
 }
 
-// Metode kendali animasi
+// Animation control methods
 void LvglGif::Start() {
     if (!loaded_ || !gif_) {
         ESP_LOGW(TAG, "GIF not loaded, cannot start");
@@ -67,12 +67,12 @@ void LvglGif::Start() {
 
     if (timer_) {
         playing_ = true;
-        loop_waiting_ = false;  // Reset status tunggu loop
+        loop_waiting_ = false;  // Reset loop waiting state
         last_call_ = lv_tick_get();
         lv_timer_resume(timer_);
         lv_timer_reset(timer_);
         
-        // Render bingkai pertama
+        // Render first frame
         NextFrame();
         
         ESP_LOGD(TAG, "GIF animation started");
@@ -106,12 +106,12 @@ void LvglGif::Stop() {
         lv_timer_pause(timer_);
     }
 
-    // Reset status tunggu loop
+    // Reset loop waiting state
     loop_waiting_ = false;
 
     if (gif_) {
         gd_rewind(gif_);
-        // Render bingkai pertama tanpa melangkah ke bingkai berikutnya
+        // Render first frame without advancing
         if (gif_->canvas) {
             gd_render_frame(gif_, gif_->canvas);
         }
@@ -174,19 +174,19 @@ void LvglGif::NextFrame() {
         return;
     }
 
-    // Periksa apakah sedang berada di status tunggu loop, khusus untuk GIF loop tak terbatas dengan jeda
+    // Check if we're in loop wait state (only for infinite loop GIFs with delay)
     if (loop_waiting_) {
         uint32_t wait_elapsed = lv_tick_elaps(loop_wait_start_);
         if (wait_elapsed < loop_delay_ms_) {
-            // Masih menunggu jeda loop
+            // Still waiting for loop delay
             return;
         }
-        // Jeda loop selesai, lanjutkan pemutaran
+        // Loop delay completed, continue playing
         loop_waiting_ = false;
         ESP_LOGD(TAG, "Loop delay completed, continuing GIF");
     }
 
-    // Periksa apakah waktu untuk bingkai berikutnya sudah cukup
+    // Check if enough time has passed for the next frame
     uint32_t elapsed = lv_tick_elaps(last_call_);
     if (elapsed < gif_->gce.delay * 10) {
         return;
@@ -194,13 +194,13 @@ void LvglGif::NextFrame() {
 
     last_call_ = lv_tick_get();
 
-    // Simpan posisi berkas sebelum mengambil bingkai berikutnya untuk mendeteksi perulangan
+    // Save file position before getting next frame to detect loop
     uint32_t pos_before = gif_->f_rw_p;
 
-    // Ambil bingkai berikutnya
+    // Get next frame
     int has_next = gd_get_frame(gif_);
     if (has_next == 0) {
-        // Animasi benar-benar selesai, bukan loop tak terbatas
+        // Animation truly finished (non-infinite loop)
         playing_ = false;
         if (timer_) {
             lv_timer_pause(timer_);
@@ -209,22 +209,22 @@ void LvglGif::NextFrame() {
         return;
     }
 
-    // Deteksi loop dengan memeriksa apakah posisi berkas melompat mundur ke awal
-    // Cara ini tetap bekerja untuk GIF berulang tanpa tergantung kapan loop_count diatur
+    // Detect loop by checking if file position jumped back (rewound to start)
+    // This works for looping GIFs regardless of when loop_count is set
     if (loop_delay_ms_ > 0 && gif_->f_rw_p < pos_before) {
-        // Posisi berkas berkurang, artinya GIF kembali ke awal
-        // Mulai menunggu sebelum merender bingkai ini
+        // File position decreased, meaning GIF looped back to beginning
+        // Start waiting before rendering this frame
         loop_waiting_ = true;
         loop_wait_start_ = lv_tick_get();
         ESP_LOGD(TAG, "GIF completed one cycle, waiting %lu ms before next loop", loop_delay_ms_);
         return;
     }
 
-    // Render bingkai saat ini
+    // Render current frame
     if (gif_->canvas) {
         gd_render_frame(gif_, gif_->canvas);
         
-        // Panggil fungsi panggil balik bingkai jika tersedia
+        // Call frame callback if set
         if (frame_callback_) {
             frame_callback_();
         }
@@ -232,13 +232,13 @@ void LvglGif::NextFrame() {
 }
 
 void LvglGif::Cleanup() {
-    // Hentikan dan hapus pengatur waktu
+    // Stop and delete timer
     if (timer_) {
         lv_timer_delete(timer_);
         timer_ = nullptr;
     }
 
-    // Tutup dekoder GIF
+    // Close GIF decoder
     if (gif_) {
         gd_close_gif(gif_);
         gif_ = nullptr;
@@ -247,6 +247,6 @@ void LvglGif::Cleanup() {
     playing_ = false;
     loaded_ = false;
     
-    // Kosongkan deskriptor gambar
+    // Clear image descriptor
     memset(&img_dsc_, 0, sizeof(img_dsc_));
 }

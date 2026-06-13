@@ -45,12 +45,12 @@ class CustomLcdDisplay : public SpiLcdDisplay {
                         bool mirror_y,
                         bool swap_xy) 
             : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-            // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-            // agar objek LVGL sudah terbentuk sebelum diakses
+            // Note: UI customization should be done in SetupUI(), not in constructor
+            // to ensure lvgl objects are created before accessing them
         }
 
         virtual void SetupUI() override {
-            // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+            // Call parent SetupUI() first to create all lvgl objects
             SpiLcdDisplay::SetupUI();
 
             DisplayLockGuard lock(this);
@@ -70,13 +70,13 @@ class CustomLcdDisplay : public SpiLcdDisplay {
             lv_obj_set_y(status_bar_, text_font->line_height);
             lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-            // Pindahkan label mute dan baterai ke top_bar_ agar bisa diposisikan secara absolut
+            // Reparent mute and battery labels to top_bar_ to allow absolute positioning
             lv_obj_set_parent(mute_label_, top_bar_);
             lv_obj_set_parent(battery_label_, top_bar_);
             lv_obj_set_style_margin_left(battery_label_, 0, 0);
 
-            // Sesuaikan posisi untuk layar berbentuk lingkaran
-            //      jaringan  mute  baterai    //
+            // 针对圆形屏幕调整位置
+            //      network  mute  battery     //
             //               status            //
             lv_obj_align(network_label_, LV_ALIGN_TOP_MID, -1.5 * icon_font->line_height, 0);
             lv_obj_align(mute_label_, LV_ALIGN_TOP_MID, 1.0 * icon_font->line_height, 0);
@@ -96,9 +96,9 @@ class CustomLcdDisplay : public SpiLcdDisplay {
             lv_obj_set_width(low_battery_label_, LV_HOR_RES * 0.75);
             lv_label_set_long_mode(low_battery_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-            // Sesuaikan posisi dialog bawah agar tidak tertutup sudut lengkung layar
+            // 针对圆形屏幕调整底部对话框位置，避免被圆角遮挡
             lv_obj_set_style_pad_bottom(bottom_bar_, 30, 0);
-            lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.75); // Batasi lebar agar teks tidak terlalu mepet tepi
+            lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.75); // 限制宽度，避免文字贴边
         }
 };
 
@@ -141,7 +141,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)0,
             .sda_io_num = BSP_GENERAL_I2C_SDA,
@@ -156,7 +156,7 @@ private:
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
 
-        // Tarik level ke bawah untuk jalur I2C dan SPI layar
+        // pulldown for lcd i2c
         const gpio_config_t io_config = {
             .pin_bit_mask = (1ULL << BSP_TOUCH_I2C_SDA) | (1ULL << BSP_TOUCH_I2C_SCL) | (1ULL << BSP_SPI3_HOST_PCLK) | (1ULL << BSP_SPI3_HOST_DATA0) | (1ULL << BSP_SPI3_HOST_DATA1)
                             | (1ULL << BSP_SPI3_HOST_DATA2) | (1ULL << BSP_SPI3_HOST_DATA3) | (1ULL << BSP_LCD_SPI_CS) | (1UL << DISPLAY_BACKLIGHT_PIN),
@@ -215,7 +215,7 @@ private:
         int current_volume = codec->output_volume();
         int new_volume = current_volume + (clockwise ? -5 : 5); 
 
-        // Pastikan volume tetap berada pada rentang yang valid
+        // 确保音量在有效范围内
         if (new_volume > 100) {
             new_volume = 100;
             ESP_LOGW(TAG, "Volume reached maximum limit: %d", new_volume);
@@ -227,7 +227,7 @@ private:
         codec->SetOutputVolume(new_volume);
         ESP_LOGI(TAG, "Volume changed from %d to %d", current_volume, new_volume);
         
-        // Periksa perubahan aktual sebelum menampilkan notifikasi
+        // 显示通知前检查实际变化
         if (new_volume != codec->output_volume()) {
             ESP_LOGE(TAG, "Failed to set volume! Expected:%d Actual:%d", 
                    new_volume, codec->output_volume());
@@ -246,10 +246,10 @@ private:
     }
 
     void InitializeButton() {
-        // Simpan penunjuk instance statis
+        // 设置静态实例指针
         instance_ = this;
         
-        // Perangkat ini menyala lewat tekan lama tombol kenop, jadi perlu menunggu tombol benar-benar dilepas
+        // watcher 是通过长按滚轮进行开机的, 需要等待滚轮释放, 否则用户开机松手时可能会误触成单击
         ESP_LOGI(TAG, "waiting for knob button release");
         while(IoExpanderGetLevel(BSP_KNOB_BTN) == 0) {
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -293,8 +293,8 @@ private:
 
         iot_button_register_cb(btns, BUTTON_LONG_PRESS_HOLD, nullptr, [](void* button_handle, void* usr_data) {
             auto self = static_cast<SensecapWatcher*>(usr_data);
-            self->long_press_cnt_++; // Bertambah satu setiap 20 ms
-            // Tekan lama 10 detik untuk reset pabrik: 2 + 0.02*400 = 10
+            self->long_press_cnt_++; // 每隔20ms加一
+            // 长按10s 恢复出厂设置: 2+0.02*400 = 10
             if (self->long_press_cnt_ > 400) {
                 ESP_LOGI(TAG, "Factory reset");
                 nvs_flash_erase();
@@ -368,14 +368,14 @@ private:
         display_ = new CustomLcdDisplay(panel_io_, panel_,
             DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
         
-        // Pastikan indeks kolom awal dan jumlah total kolom merupakan kelipatan 4 agar sesuai dengan syarat SPD2010
+        // 使每次刷新的起始列数索引是4的倍数且列数总数是4的倍数，以满足SPD2010的要求
         lv_display_add_event_cb(lv_display_get_default(), [](lv_event_t *e) {
             lv_area_t *area = (lv_area_t *)lv_event_get_param(e);
             uint16_t x1 = area->x1;
             uint16_t x2 = area->x2;
-            // Bulatkan awal area ke bawah ke kelipatan 4 terdekat
+            // round the start of area down to the nearest 4N number
             area->x1 = (x1 >> 2) << 2;
-            // Bulatkan akhir area ke atas ke nilai 4N+3 terdekat
+            // round the end of area up to the nearest 4M+3 number
             area->x2 = ((x2 >> 2) << 2) + 3;
         }, LV_EVENT_INVALIDATE_AREA, NULL);
         
@@ -527,10 +527,26 @@ private:
                 auto self = static_cast<SensecapWatcher*>(context);
                 auto app_desc = esp_app_get_description();
                 const char* region = "UNKNOWN";
-                #if defined(CONFIG_LANGUAGE_EN_US)
+                #if defined(CONFIG_LANGUAGE_ZH_CN)
+                    region = "CN";
+                #elif defined(CONFIG_LANGUAGE_EN_US)
                     region = "US";
-                #elif defined(CONFIG_LANGUAGE_ID_ID)
-                    region = "ID";
+                #elif defined(CONFIG_LANGUAGE_JA_JP)
+                    region = "JP";
+                #elif defined(CONFIG_LANGUAGE_ES_ES)
+                    region = "ES";
+                #elif defined(CONFIG_LANGUAGE_DE_DE)
+                    region = "DE";
+                #elif defined(CONFIG_LANGUAGE_FR_FR)
+                    region = "FR";
+                #elif defined(CONFIG_LANGUAGE_IT_IT)
+                    region = "IT";
+                #elif defined(CONFIG_LANGUAGE_PT_PT)
+                    region = "PT";
+                #elif defined(CONFIG_LANGUAGE_RU_RU)
+                    region = "RU";
+                #elif defined(CONFIG_LANGUAGE_KO_KR)
+                    region = "KR";
                 #endif
                 printf("{\"type\":0,\"name\":\"VER?\",\"code\":0,\"data\":{\"software\":\"%s\",\"hardware\":\"watcher xiaozhi agent\",\"camera\":%d,\"region\":\"%s\"}}\n",
                        app_desc->version,
@@ -551,7 +567,7 @@ private:
 
         ESP_LOGI(TAG, "Initialize Camera");
 
-        // Catatan: kartu SD memakai bus SPI yang sama dengan klien SSCMA, jadi pin CS kartu SD harus dimatikan lebih dulu
+        // !!!NOTE: SD Card use same SPI bus as sscma client, so we need to disable SD card CS pin first
         const gpio_config_t io_config = {
             .pin_bit_mask = (1ULL << BSP_SD_SPI_CS),
             .mode = GPIO_MODE_OUTPUT,
@@ -575,11 +591,11 @@ public:
         InitializeI2c();
         InitializeSpi();
         InitializeExpander();
-        InitializeCmd();  // Digunakan untuk pengujian produksi pabrik
+        InitializeCmd();  //工厂生产测试使用
         InitializeButton();
         InitializeKnob();
         Initializespd2010Display();
-        GetBacklight()->RestoreBrightness();  // Pada versi tanpa kamera, InitializeCamera butuh 3 detik, jadi lampu latar dipulihkan lebih dulu
+        GetBacklight()->RestoreBrightness();  // 对于不带摄像头的版本，InitializeCamera需要3s, 所以先恢复背光亮度
         InitializeCamera();
     }
 
@@ -609,9 +625,9 @@ public:
         return &backlight;
     }
 
-    // Mengacu pada skematik resmi SenseCAP Watcher
-    // RGB LED yang dipakai adalah ws2813 mini di GPIO 40 dengan catu 3.3V tanpa jalur BIN
-    // Karena itu perangkat tetap kompatibel dengan SingleLED berbasis ws2812
+    // 根据 https://github.com/Seeed-Studio/OSHW-SenseCAP-Watcher/blob/main/Hardware/SenseCAP_Watcher_v1.0_SCH.pdf
+    // RGB LED型号为 ws2813 mini, 连接在GPIO 40，供电电压 3.3v, 没有连接 BIN 双信号线
+    // 可以直接兼容SingleLED采用的ws2812
     virtual Led* GetLed() override {
         static SingleLed led(BUILTIN_LED_GPIO);
         return &led;
@@ -648,5 +664,5 @@ public:
 
 DECLARE_BOARD(SensecapWatcher);
 
-// Definisikan variabel anggota statis
+// 定义静态成员变量
 SensecapWatcher* SensecapWatcher::instance_ = nullptr;

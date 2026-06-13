@@ -1,37 +1,37 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi papan M5Stack Cardputer Adv
+// M5Stack Cardputer Adv Board configuration
 // MCU: ESP32-S3FN8 (Stamp-S3A)
-// Layar: ST7789V2 1,14 inci 240x135
-// Konfigurasi audio: ES8311 + NS4150B
+// Display: ST7789V2 1.14" 240x135
+// Audio: ES8311 + NS4150B
 
 #include <driver/gpio.h>
 
-// Pengaturan audio
+// Audio settings
 #define AUDIO_INPUT_SAMPLE_RATE  24000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
-// Pin audio I2S (ES8311)
+// I2S Audio pins (ES8311)
 #define AUDIO_I2S_GPIO_MCLK GPIO_NUM_NC
 #define AUDIO_I2S_GPIO_BCLK GPIO_NUM_41   // SCLK
 #define AUDIO_I2S_GPIO_WS   GPIO_NUM_43   // LRCK
 #define AUDIO_I2S_GPIO_DOUT GPIO_NUM_42   // DSDIN (MCU -> ES8311)
 #define AUDIO_I2S_GPIO_DIN  GPIO_NUM_46   // ASDOUT (ES8311 -> MCU)
 
-// Pin I2C (dipakai bersama ES8311, TCA8418, BMI270)
+// I2C pins (shared for ES8311, TCA8418, BMI270)
 #define AUDIO_CODEC_I2C_SDA_PIN  GPIO_NUM_8
 #define AUDIO_CODEC_I2C_SCL_PIN  GPIO_NUM_9
 #define AUDIO_CODEC_ES8311_ADDR  ES8311_CODEC_DEFAULT_ADDR
-#define AUDIO_CODEC_PA_PIN       GPIO_NUM_NC  // NS4150B selalu aktif
+#define AUDIO_CODEC_PA_PIN       GPIO_NUM_NC  // NS4150B is always on
 
-// Tombol
+// Button
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
 #define BUILTIN_LED_GPIO        GPIO_NUM_NC
 #define VOLUME_UP_BUTTON_GPIO   GPIO_NUM_NC
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 
-// Layar ST7789V2 (SPI)
+// Display ST7789V2 (SPI)
 #define DISPLAY_WIDTH   240
 #define DISPLAY_HEIGHT  135
 #define DISPLAY_MIRROR_X true
@@ -39,7 +39,7 @@
 #define DISPLAY_SWAP_XY true
 
 #define DISPLAY_OFFSET_X  40
-#define DISPLAY_OFFSET_Y  52
+#define DISPLAY_OFFSET_Y  53
 
 #define DISPLAY_SPI_MOSI_PIN GPIO_NUM_35
 #define DISPLAY_SPI_SCLK_PIN GPIO_NUM_36
@@ -49,10 +49,11 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_38
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 
-// Alamat I2C keyboard TCA8418
+// Keyboard TCA8418 I2C address and interrupt pin
 #define KEYBOARD_TCA8418_ADDR 0x34
+#define KEYBOARD_INT_PIN      GPIO_NUM_11
 
-// Alamat I2C IMU BMI270
+// IMU BMI270 I2C address
 #define IMU_BMI270_ADDR 0x68
 
 #endif // _BOARD_CONFIG_H_

@@ -8,9 +8,6 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "display/oled_display.h"
-#include "servo_controller.h"
-#include "servo_mcp_tools.h"
-#include "campus_mcp_tools.h"
 
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -47,7 +44,7 @@ private:
     }
 
     void InitializeSsd1306Display() {
-        // Konfigurasi SSD1306
+        // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
             .on_color_trans_done = nullptr,
@@ -65,7 +62,7 @@ private:
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(display_i2c_bus_, &io_config, &panel_io_));
 
-        ESP_LOGI(TAG, "Memasang driver SSD1306");
+        ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = -1;
         panel_config.bits_per_pixel = 1;
@@ -76,18 +73,18 @@ private:
         panel_config.vendor_config = &ssd1306_config;
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(panel_io_, &panel_config, &panel_));
-        ESP_LOGI(TAG, "Driver SSD1306 berhasil dipasang");
+        ESP_LOGI(TAG, "SSD1306 driver installed");
 
-        // Reset tampilan
+        // Reset the display
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
         if (esp_lcd_panel_init(panel_) != ESP_OK) {
-            ESP_LOGE(TAG, "Gagal menginisialisasi layar");
+            ESP_LOGE(TAG, "Failed to initialize display");
             display_ = new NoDisplay();
             return;
         }
 
-        // Nyalakan tampilan
-        ESP_LOGI(TAG, "Menyalakan layar");
+        // Set the display to on
+        ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
@@ -95,15 +92,15 @@ private:
 
     void InitializeButtons() {
         
-        // Konfigurasi GPIO
+        // 配置 GPIO
         gpio_config_t io_conf = {
-            .pin_bit_mask = 1ULL << BUILTIN_LED_GPIO,  // Atur pin GPIO yang akan dikonfigurasi
-            .mode = GPIO_MODE_OUTPUT,           // Gunakan mode keluaran
-            .pull_up_en = GPIO_PULLUP_DISABLE,  // Nonaktifkan pull-up
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,  // Nonaktifkan pull-down
-            .intr_type = GPIO_INTR_DISABLE      // Nonaktifkan interupsi
+            .pin_bit_mask = 1ULL << BUILTIN_LED_GPIO,  // 设置需要配置的 GPIO 引脚
+            .mode = GPIO_MODE_OUTPUT,           // 设置为输出模式
+            .pull_up_en = GPIO_PULLUP_DISABLE,  // 禁用上拉
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,  // 禁用下拉
+            .intr_type = GPIO_INTR_DISABLE      // 禁用中断
         };
-        gpio_config(&io_conf);  // Terapkan konfigurasi
+        gpio_config(&io_conf);  // 应用配置
 
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
@@ -130,17 +127,9 @@ private:
         });
     }
 
-    // Inisialisasi perangkat IoT yang dapat terlihat oleh AI
+    // 物联网初始化，添加对 AI 可见设备
     void InitializeTools() {
         static LampController lamp(LAMP_GPIO);
-        // Inisialisasi servo sesuai pin pada config.h board aktif
-        ServoController::GetInstance().Initialize(SERVO_HEAD_GPIO, SERVO_RARM_GPIO, SERVO_LARM_GPIO,
-            false,  // balik_kepala
-            false,  // balik_lengan_kanan
-            true);  // balik_lengan_kiri
-        // Daftarkan servo sebagai alat MCP agar dapat dipanggil oleh AI
-        static ServoMcpTools servo_mcp;
-        static CampusMcpTools campus_mcp;
     }
 
 public:

@@ -1,5 +1,7 @@
 #include "servo_controller.h"
 
+#include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -16,6 +18,10 @@
 #define SERVO_TIMER     LEDC_TIMER_1
 #define SERVO_MODE      LEDC_LOW_SPEED_MODE
 #define MANUAL_OVERRIDE_MS 6000
+#define DUPLICATE_MOVE_IGNORE_MS 8000
+#define SERVO_FRAME_MS  20
+#define SERVO_REST_RELEASE_MS 350
+#define SPEAKING_MOTION_INTERVAL_MS 850
 
 // Kepala tanpa inversi, ditukar agar sesuai dengan posisi fisik
 #define H_C   90
@@ -23,6 +29,8 @@
 #define H_R   40
 #define H_SL 110
 #define H_SR  70
+#define H_TALK_L 98
+#define H_TALK_R 82
 
 // Tangan memiliki tiga tingkat posisi
 // Tangan kiri (invert=true): posisi fisik = 180 - urutan
@@ -32,6 +40,8 @@
 #define A_MID  45      // tengah (untuk animasi)
 #define A_STR  80      // lurus (tangan lurus horizontal)
 #define A_UP  130      // ke atas (paling tinggi)
+#define A_SCROLL_LOW 32
+#define A_SCROLL_HIGH 62
 
 struct CmdPacket { uint8_t type; char data[31]; };
 static constexpr int KEEP = -1;
@@ -299,6 +309,10 @@ static const ServoController::ServoStep MOVE_WAVE_BOTH[] = {
 static const ServoController::ServoStep MOVE_RAISE_BOTH[] = {
     {KEEP, A_UP, A_UP, 400}};
 
+// Kedua tangan lurus ke depan dan dipertahankan
+static const ServoController::ServoStep MOVE_STRAIGHT_BOTH[] = {
+    {KEEP, A_STR, A_STR, 380}};
+
 // --- AKSI ---
 
 // Joget
@@ -335,6 +349,33 @@ static const ServoController::ServoStep MOVE_MENYAPA[] = {
     {H_SR, A_STR, KEEP, 200}, {H_SL, A_MID, KEEP, 180},
     {H_SR, A_STR, KEEP, 200}, {H_C,  A_DN,  KEEP, 180}};
 
+// Sapaan wake word hanya melambaikan tangan kanan agar tidak bentrok dengan emosi.
+static const ServoController::ServoStep MOVE_WAKE_GREETING[] = {
+    {KEEP, A_STR, KEEP, 200}, {KEEP, A_MID, KEEP, 160},
+    {KEEP, A_STR, KEEP, 200}, {KEEP, A_MID, KEEP, 160},
+    {KEEP, A_STR, KEEP, 200}, {KEEP, A_DN,  KEEP, 180}};
+
+// Jawaban umum hanya menggerakkan kepala agar gesturnya tenang dan alami.
+static const ServoController::ServoStep MOVE_SPEAKING_HEAD_A[] = {
+    {H_TALK_L, KEEP, KEEP, 180},
+    {H_C,      KEEP, KEEP, 220}};
+
+static const ServoController::ServoStep MOVE_SPEAKING_HEAD_B[] = {
+    {H_TALK_R, KEEP, KEEP, 180},
+    {H_C,      KEEP, KEEP, 220}};
+
+// Jawaban kampus atau web menambahkan sapuan tangan kanan seperti menggulir.
+// Batas atas tetap di bawah posisi lurus agar tidak menyerupai perintah tangan.
+static const ServoController::ServoStep MOVE_SPEAKING_SEARCH_A[] = {
+    {H_TALK_L, A_SCROLL_HIGH, KEEP, 340},
+    {H_C,      A_SCROLL_LOW,  KEEP, 300},
+    {H_C,      A_DN,          KEEP, 280}};
+
+static const ServoController::ServoStep MOVE_SPEAKING_SEARCH_B[] = {
+    {H_TALK_R, A_SCROLL_LOW,  KEEP, 300},
+    {H_C,      A_SCROLL_HIGH, KEEP, 340},
+    {H_C,      A_DN,          KEEP, 280}};
+
 // Reset ke posisi semula
 static const ServoController::ServoStep MOVE_RESET[] = {
     {H_C, A_DN, A_DN, 300}};
@@ -349,20 +390,77 @@ int ServoController::AngleToUs(int angle_deg) {
     return SERVO_MIN_US + (angle_deg * (SERVO_MAX_US - SERVO_MIN_US)) / 180;
 }
 
+static int32_t EaseMinimumJerkQ16(int32_t start, int32_t target, int frame, int frames) {
+    if (frames <= 1) {
+        return target;
+    }
+
+    double t = static_cast<double>(frame) / static_cast<double>(frames);
+    double t2 = t * t;
+    double t3 = t2 * t;
+    double progress = t3 * (10.0 + t * (-15.0 + 6.0 * t));
+    return start + static_cast<int32_t>(
+        std::llround(static_cast<double>(target - start) * progress));
+}
+
 void ServoController::SetAngle(int channel, int angle_deg, bool invert) {
-    int a = invert ? (180 - angle_deg) : angle_deg;
-    int us = AngleToUs(a);
-    uint32_t duty = ((uint32_t)us * ((1 << 13) - 1)) / SERVO_PERIOD_US;
+    if (angle_deg < 0) {
+        angle_deg = 0;
+    } else if (angle_deg > 180) {
+        angle_deg = 180;
+    }
+    SetAngleQ16(channel, angle_deg << 16, invert);
+}
+
+void ServoController::SetAngleQ16(int channel, int32_t angle_q16, bool invert) {
+    constexpr int32_t kMaxAngleQ16 = 180 << 16;
+    if (angle_q16 < 0) {
+        angle_q16 = 0;
+    } else if (angle_q16 > kMaxAngleQ16) {
+        angle_q16 = kMaxAngleQ16;
+    }
+
+    int* current_angle = nullptr;
+    int32_t* current_angle_q16 = nullptr;
+    int* written_pulse_us = nullptr;
+    if (channel == head_channel_) {
+        current_angle = &current_head_angle_;
+        current_angle_q16 = &current_head_angle_q16_;
+        written_pulse_us = &written_head_pulse_us_;
+    } else if (channel == rarm_channel_) {
+        current_angle = &current_rarm_angle_;
+        current_angle_q16 = &current_rarm_angle_q16_;
+        written_pulse_us = &written_rarm_pulse_us_;
+    } else if (channel == larm_channel_) {
+        current_angle = &current_larm_angle_;
+        current_angle_q16 = &current_larm_angle_q16_;
+        written_pulse_us = &written_larm_pulse_us_;
+    }
+
+    if (current_angle_q16 != nullptr) {
+        *current_angle_q16 = angle_q16;
+    }
+    if (current_angle != nullptr) {
+        *current_angle = static_cast<int>((angle_q16 + (1 << 15)) >> 16);
+    }
+
+    int32_t physical_angle_q16 = invert ? kMaxAngleQ16 - angle_q16 : angle_q16;
+    int pulse_us = SERVO_MIN_US + static_cast<int>(
+        (static_cast<int64_t>(physical_angle_q16) * (SERVO_MAX_US - SERVO_MIN_US)) /
+        kMaxAngleQ16);
+    if (!servo_outputs_released_ && written_pulse_us != nullptr &&
+        *written_pulse_us == pulse_us) {
+        return;
+    }
+
+    uint32_t duty = (static_cast<uint32_t>(pulse_us) * ((1 << 13) - 1)) / SERVO_PERIOD_US;
     ledc_set_duty(SERVO_MODE, (ledc_channel_t)channel, duty);
     ledc_update_duty(SERVO_MODE, (ledc_channel_t)channel);
 
-    if (channel == head_channel_) {
-        current_head_angle_ = angle_deg;
-    } else if (channel == rarm_channel_) {
-        current_rarm_angle_ = angle_deg;
-    } else if (channel == larm_channel_) {
-        current_larm_angle_ = angle_deg;
+    if (written_pulse_us != nullptr) {
+        *written_pulse_us = pulse_us;
     }
+    servo_outputs_released_ = false;
 }
 
 void ServoController::InitServo(int channel, int gpio, int init_angle_deg) {
@@ -399,6 +497,8 @@ void ServoController::Initialize(int head_gpio, int right_arm_gpio, int left_arm
     InitServo(head_channel_, head_gpio, H_C);
     InitServo(rarm_channel_, right_arm_gpio, A_DN);
     InitServo(larm_channel_, left_arm_gpio, A_DN);
+    vTaskDelay(pdMS_TO_TICKS(SERVO_REST_RELEASE_MS));
+    ReleaseServoOutputs();
 
     cmd_queue_ = xQueueCreate(8, sizeof(CmdPacket));
     xTaskCreate(ServoTask, "servo_task", 4096, this, 3, &task_handle_);
@@ -411,17 +511,22 @@ void ServoController::Initialize(int head_gpio, int right_arm_gpio, int left_arm
 void ServoController::Enable()  {
     enabled_ = true;
     manual_override_until_ticks_ = 0;
+    manual_pose_active_ = false;
+    knowledge_search_active_ = false;
+    last_manual_move_ = ServoMove::NONE;
+    last_manual_move_ticks_ = 0;
     ESP_LOGI(TAG, "ON");
 }
 void ServoController::Disable() {
     enabled_ = false;
     manual_override_until_ticks_ = 0;
+    speaking_ = false;
+    knowledge_search_active_ = false;
+    manual_pose_active_ = false;
+    last_manual_move_ = ServoMove::NONE;
+    last_manual_move_ticks_ = 0;
     if (initialized_) {
-        if (cmd_queue_ != nullptr) {
-            CmdPacket dropped;
-            while (xQueueReceive(cmd_queue_, &dropped, 0) == pdTRUE) {
-            }
-        }
+        ClearCommandQueue();
         SetAngle(head_channel_, H_C,  invert_head_);
         SetAngle(rarm_channel_, A_DN, invert_rarm_);
         SetAngle(larm_channel_, A_DN, invert_larm_);
@@ -431,7 +536,7 @@ void ServoController::Disable() {
 
 void ServoController::SetEmotion(const char* emotion) {
     if (!initialized_ || !enabled_ || !emotion) return;
-    if (IsManualOverrideActive()) {
+    if (IsManualOverrideActive() || manual_pose_active_.load()) {
         ESP_LOGI(TAG, "Skip emotion '%s' during manual override", emotion);
         return;
     }
@@ -441,23 +546,152 @@ void ServoController::SetEmotion(const char* emotion) {
     xQueueSend(cmd_queue_, &pkt, 0);
 }
 
+void ServoController::SetSpeaking(bool speaking) {
+    speaking_ = speaking;
+    if (speaking) {
+        next_speaking_motion_ticks_ =
+            xTaskGetTickCount() + pdMS_TO_TICKS(SPEAKING_MOTION_INTERVAL_MS);
+    }
+}
+
+void ServoController::SetKnowledgeSearchActive(bool active) {
+    knowledge_search_active_ = active;
+}
+
+void ServoController::WakeGreeting() {
+    if (!initialized_ || !enabled_ || manual_pose_active_.load()) {
+        return;
+    }
+    CmdPacket pkt = {};
+    pkt.type = 2;
+    if (!uxQueueSpacesAvailable(cmd_queue_)) {
+        CmdPacket dropped;
+        xQueueReceive(cmd_queue_, &dropped, 0);
+    }
+    xQueueSendToFront(cmd_queue_, &pkt, 0);
+}
+
 void ServoController::ExecuteMove(ServoMove move) {
     if (!initialized_ || !enabled_ || move == ServoMove::NONE) return;
+    if (ShouldSkipDuplicateMove(move)) {
+        ESP_LOGI(TAG, "Skip duplicate move: %d", (int)move);
+        return;
+    }
     ExtendManualOverride(pdMS_TO_TICKS(MANUAL_OVERRIDE_MS));
+    ClearCommandQueue();
     CmdPacket pkt = {}; pkt.type = 1; pkt.data[0] = (uint8_t)move;
     if (!uxQueueSpacesAvailable(cmd_queue_)) { CmdPacket d; xQueueReceive(cmd_queue_, &d, 0); }
     xQueueSendToFront(cmd_queue_, &pkt, 0);
 }
 
+void ServoController::ClearCommandQueue() {
+    if (cmd_queue_ == nullptr) {
+        return;
+    }
+    CmdPacket dropped;
+    while (xQueueReceive(cmd_queue_, &dropped, 0) == pdTRUE) {
+    }
+}
+
 // Jalankan langkah tanpa kembali otomatis. Langkah terakhir menjadi posisi akhir.
 void ServoController::ExtendManualOverride(TickType_t duration_ticks) {
-    manual_override_until_ticks_ = xTaskGetTickCount() + duration_ticks;
+    manual_override_until_ticks_.store(xTaskGetTickCount() + duration_ticks);
 }
 
 bool ServoController::IsManualOverrideActive() const {
     TickType_t now = xTaskGetTickCount();
-    return manual_override_until_ticks_ != 0 &&
-        static_cast<int32_t>(manual_override_until_ticks_ - now) > 0;
+    TickType_t until = manual_override_until_ticks_.load();
+    return until != 0 && static_cast<int32_t>(until - now) > 0;
+}
+
+bool ServoController::ShouldSkipDuplicateMove(ServoMove move) {
+    TickType_t now = xTaskGetTickCount();
+    TickType_t duplicate_window = pdMS_TO_TICKS(DUPLICATE_MOVE_IGNORE_MS);
+    bool duplicate = last_manual_move_ == move &&
+        static_cast<int32_t>(now - last_manual_move_ticks_) >= 0 &&
+        static_cast<int32_t>(now - last_manual_move_ticks_) < static_cast<int32_t>(duplicate_window);
+
+    last_manual_move_ = move;
+    last_manual_move_ticks_ = now;
+    return duplicate;
+}
+
+bool ServoController::IsHoldMove(ServoMove move) const {
+    switch (move) {
+        case ServoMove::HEAD_TURN_RIGHT:
+        case ServoMove::HEAD_TURN_LEFT:
+        case ServoMove::HEAD_CENTER:
+        case ServoMove::RAISE_RIGHT_ARM:
+        case ServoMove::STRAIGHT_RIGHT_ARM:
+        case ServoMove::LOWER_RIGHT_ARM:
+        case ServoMove::RAISE_LEFT_ARM:
+        case ServoMove::STRAIGHT_LEFT_ARM:
+        case ServoMove::LOWER_LEFT_ARM:
+        case ServoMove::RAISE_BOTH_ARMS:
+        case ServoMove::STRAIGHT_BOTH_ARMS:
+        case ServoMove::HORMAT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ServoController::IsRestPosition() const {
+    return current_head_angle_ == H_C &&
+           current_rarm_angle_ == A_DN &&
+           current_larm_angle_ == A_DN;
+}
+
+void ServoController::ReleaseServoOutputs() {
+    if (!initialized_ && written_head_pulse_us_ < 0 &&
+        written_rarm_pulse_us_ < 0 && written_larm_pulse_us_ < 0) {
+        return;
+    }
+    ledc_stop(SERVO_MODE, (ledc_channel_t)head_channel_, 0);
+    ledc_stop(SERVO_MODE, (ledc_channel_t)rarm_channel_, 0);
+    ledc_stop(SERVO_MODE, (ledc_channel_t)larm_channel_, 0);
+    servo_outputs_released_ = true;
+}
+
+void ServoController::MoveToAngles(int head_angle, int rarm_angle, int larm_angle, int duration_ms, bool manual_move) {
+    const int32_t start_head_q16 = current_head_angle_q16_;
+    const int32_t start_rarm_q16 = current_rarm_angle_q16_;
+    const int32_t start_larm_q16 = current_larm_angle_q16_;
+    const int32_t target_head_q16 = head_angle << 16;
+    const int32_t target_rarm_q16 = rarm_angle << 16;
+    const int32_t target_larm_q16 = larm_angle << 16;
+    if (start_head_q16 == target_head_q16 &&
+        start_rarm_q16 == target_rarm_q16 &&
+        start_larm_q16 == target_larm_q16) {
+        return;
+    }
+
+    int frames = (duration_ms + SERVO_FRAME_MS - 1) / SERVO_FRAME_MS;
+    if (frames < 1) {
+        frames = 1;
+    }
+
+    TickType_t frame_clock = xTaskGetTickCount();
+    for (int frame = 1; frame <= frames; frame++) {
+        if (!enabled_) {
+            return;
+        }
+        if (!manual_move && IsManualOverrideActive()) {
+            return;
+        }
+
+        int32_t next_head_q16 =
+            EaseMinimumJerkQ16(start_head_q16, target_head_q16, frame, frames);
+        int32_t next_rarm_q16 =
+            EaseMinimumJerkQ16(start_rarm_q16, target_rarm_q16, frame, frames);
+        int32_t next_larm_q16 =
+            EaseMinimumJerkQ16(start_larm_q16, target_larm_q16, frame, frames);
+
+        SetAngleQ16(head_channel_, next_head_q16, invert_head_);
+        SetAngleQ16(rarm_channel_, next_rarm_q16, invert_rarm_);
+        SetAngleQ16(larm_channel_, next_larm_q16, invert_larm_);
+        vTaskDelayUntil(&frame_clock, pdMS_TO_TICKS(SERVO_FRAME_MS));
+    }
 }
 
 void ServoController::PlaySteps(const ServoController::ServoStep* st, int n, bool manual_move) {
@@ -472,40 +706,67 @@ void ServoController::PlaySteps(const ServoController::ServoStep* st, int n, boo
         int head_angle = st[i].head_angle == KEEP ? current_head_angle_ : st[i].head_angle;
         int rarm_angle = st[i].rarm_angle == KEEP ? current_rarm_angle_ : st[i].rarm_angle;
         int larm_angle = st[i].larm_angle == KEEP ? current_larm_angle_ : st[i].larm_angle;
-        TickType_t step_delay = pdMS_TO_TICKS(st[i].delay_ms / 3);
-
-        SetAngle(head_channel_, head_angle, invert_head_);
-        vTaskDelay(step_delay);
-        if (!enabled_) {
-            return;
-        }
-
-        SetAngle(rarm_channel_, rarm_angle, invert_rarm_);
-        vTaskDelay(step_delay);
-        if (!enabled_) {
-            return;
-        }
-
-        SetAngle(larm_channel_, larm_angle, invert_larm_);
-        vTaskDelay(step_delay);
+        MoveToAngles(head_angle, rarm_angle, larm_angle, st[i].delay_ms, manual_move);
     }
+
+    if (IsRestPosition()) {
+        vTaskDelay(pdMS_TO_TICKS(SERVO_REST_RELEASE_MS));
+        ReleaseServoOutputs();
+    }
+}
+
+void ServoController::PlaySpeakingMotion() {
+    if (!enabled_ || !speaking_.load() || IsManualOverrideActive() ||
+        manual_pose_active_.load()) {
+        return;
+    }
+
+    bool alternate = (speaking_motion_phase_++ & 1U) != 0U;
+    if (knowledge_search_active_.load()) {
+        if (alternate) {
+            PlaySteps(SEQ(MOVE_SPEAKING_SEARCH_B));
+        } else {
+            PlaySteps(SEQ(MOVE_SPEAKING_SEARCH_A));
+        }
+    } else if (alternate) {
+        PlaySteps(SEQ(MOVE_SPEAKING_HEAD_B));
+    } else {
+        PlaySteps(SEQ(MOVE_SPEAKING_HEAD_A));
+    }
+    next_speaking_motion_ticks_.store(
+        xTaskGetTickCount() + pdMS_TO_TICKS(SPEAKING_MOTION_INTERVAL_MS));
 }
 
 void ServoController::ServoTask(void* arg) {
     auto* self = static_cast<ServoController*>(arg);
     CmdPacket pkt;
     while (true) {
-        if (xQueueReceive(self->cmd_queue_, &pkt, pdMS_TO_TICKS(100)) != pdTRUE) continue;
+        if (xQueueReceive(self->cmd_queue_, &pkt, pdMS_TO_TICKS(100)) != pdTRUE) {
+            TickType_t now = xTaskGetTickCount();
+            TickType_t next_motion = self->next_speaking_motion_ticks_.load();
+            if (self->speaking_.load() && next_motion != 0 &&
+                static_cast<int32_t>(now - next_motion) >= 0) {
+                self->PlaySpeakingMotion();
+            }
+            continue;
+        }
 
         if (pkt.type == 0) {
             if (!self->enabled_) continue;
-            if (self->IsManualOverrideActive()) continue;
+            if (self->IsManualOverrideActive() || self->manual_pose_active_.load()) continue;
             const EmotionSequence* seq = nullptr;
             for (int i = 0; i < NUM_SEQUENCES; i++)
                 if (strcmp(SEQUENCES[i].emotion, pkt.data) == 0) { seq = &SEQUENCES[i]; break; }
             if (!seq) { ESP_LOGW(TAG, "?%s", pkt.data); continue; }
             ESP_LOGI(TAG, "E:%s", seq->emotion);
             self->PlaySteps(seq->steps, seq->num_steps);
+        } else if (pkt.type == 2) {
+            if (!self->enabled_ || self->IsManualOverrideActive() ||
+                self->manual_pose_active_.load()) {
+                continue;
+            }
+            ESP_LOGI(TAG, "Sapaan wake word");
+            self->PlaySteps(SEQ(MOVE_WAKE_GREETING));
         } else {
             if (!self->enabled_) continue;
             auto mv = (ServoMove)pkt.data[0];
@@ -527,6 +788,7 @@ void ServoController::ServoTask(void* arg) {
                 C(LOWER_LEFT_ARM,    MOVE_LOWER_LEFT);
                 C(WAVE_BOTH_ARMS,    MOVE_WAVE_BOTH);
                 C(RAISE_BOTH_ARMS,   MOVE_RAISE_BOTH);
+                C(STRAIGHT_BOTH_ARMS,MOVE_STRAIGHT_BOTH);
                 C(DANCE,             MOVE_DANCE);
                 C(SALAM,             MOVE_SALAM);
                 C(HORMAT,            MOVE_HORMAT);
@@ -536,7 +798,15 @@ void ServoController::ServoTask(void* arg) {
                 default: break;
             }
             #undef C
-            if (st && n > 0) self->PlaySteps(st, n, true);
+            if (st && n > 0) {
+                self->PlaySteps(st, n, true);
+                self->manual_pose_active_ = self->IsHoldMove(mv);
+                if (mv == ServoMove::RESET_POSITION) {
+                    self->manual_pose_active_ = false;
+                }
+                self->next_speaking_motion_ticks_.store(
+                    xTaskGetTickCount() + pdMS_TO_TICKS(SPEAKING_MOTION_INTERVAL_MS));
+            }
         }
     }
 }
@@ -553,12 +823,12 @@ ServoMove ServoController::DetectCommand(const char* text) {
     };
     bool mentions_head = has("kepala") || has("head");
     bool mentions_arm = has("tangan") || has("lengan") || has("arm");
+    bool mentions_both_arms = has("kedua") || has("dua tangan") || has("dua lengan") || has("both arms");
     bool mentions_robot = has("servo") || has("robot") || mentions_head || mentions_arm;
     bool mentions_specific_body_part = mentions_head || mentions_arm ||
         has("kanan") || has("kiri") || has("kedua") || has("dua tangan");
     bool explicit_command_context = mentions_robot || has("tolong") || has("coba") ||
         has("ayo") || has("silakan") || has("gerakkan") || has("gerakan") || has("lakukan");
-
     // 1. Matikan daya servo
     if (has("matikan servo") || has("servo off") ||
         has("nonaktifkan servo") || has("shutdown servo") ||
@@ -604,48 +874,47 @@ ServoMove ServoController::DetectCommand(const char* text) {
         return ServoMove::HEAD_SHAKE;
 
     // 6. Aksi
-    if (explicit_command_context && has("hormat")) return ServoMove::HORMAT;
+    if (has("hormat") || has("salute")) return ServoMove::HORMAT;
     if (explicit_command_context && has("salam"))  return ServoMove::SALAM;
-    if (explicit_command_context && has("tepuk tangan")) return ServoMove::TEPUK_TANGAN;
-    if (explicit_command_context && (has("menyapa") || has("beri salam") || has("sapalah") || has("robot sapa")))
+    if (has("tepuk tangan") || has("clap")) return ServoMove::TEPUK_TANGAN;
+    if (explicit_command_context && (has("menyapa") || has("beri salam") || has("sapalah") || has("robot sapa") || has("sapa ")))
         return ServoMove::MENYAPA;
-    if (explicit_command_context && (has("joget") || has("dance") ||
-        has("menari") || has("goyang")))
+    if (has("joget") || has("dance") || has("menari") || has("goyang"))
         return ServoMove::DANCE;
 
-    // 7. Tangan lurus, diperiksa sebelum perintah atas atau bawah
-    if (has("lurus") && mentions_robot) {
-        if (mentions_head) return ServoMove::HEAD_CENTER;
+    // 7. Arahkan tangan ke depan atau lurus, diperiksa sebelum perintah atas atau bawah.
+    if (((has("ke depan") || has("kedepan") || has("majukan")) && mentions_arm) ||
+        (has("lurus") && mentions_robot)) {
+        if (mentions_head && !mentions_arm) return ServoMove::HEAD_CENTER;
         if (has("kanan")) return ServoMove::STRAIGHT_RIGHT_ARM;
         if (has("kiri"))  return ServoMove::STRAIGHT_LEFT_ARM;
-        return ServoMove::RAISE_BOTH_ARMS;
+        return ServoMove::STRAIGHT_BOTH_ARMS;
     }
 
-    // 8. Turunkan tangan atau arahkan ke bawah
+    // 9. Turunkan tangan atau arahkan ke bawah
     if ((has("turunkan") || has("kebawah") || has("ke bawah")) && mentions_robot) {
         if (has("kanan")) return ServoMove::LOWER_RIGHT_ARM;
         if (has("kiri"))  return ServoMove::LOWER_LEFT_ARM;
         return mentions_arm ? ServoMove::RESET_POSITION : ServoMove::NONE;
     }
 
-    // 9. Angkat tangan atau arahkan ke atas dengan posisi dipertahankan
+    // 10. Angkat tangan atau arahkan ke atas dengan posisi dipertahankan
     if ((has("angkat") || has("keatas") || has("ke atas")) && mentions_robot) {
-        if (has("kedua") || has("dua tangan")) return ServoMove::RAISE_BOTH_ARMS;
+        if (mentions_both_arms) return ServoMove::RAISE_BOTH_ARMS;
         if (has("kanan")) return ServoMove::RAISE_RIGHT_ARM;
         if (has("kiri"))  return ServoMove::RAISE_LEFT_ARM;
         return ServoMove::RAISE_BOTH_ARMS;
     }
 
-    // 10. Lambaikan
+    // 11. Lambaikan. Jika sisi tidak jelas, default ke tangan kanan agar tidak menggerakkan dua tangan tanpa diminta.
     if ((has("lambaikan") || has("lambai") || has("kibas")) && mentions_robot) {
-        if (has("kedua") || (has("tangan") && !has("kanan") && !has("kiri")))
-            return ServoMove::WAVE_BOTH_ARMS;
+        if (mentions_both_arms) return ServoMove::WAVE_BOTH_ARMS;
         if (has("kanan")) return ServoMove::WAVE_RIGHT_ARM;
         if (has("kiri"))  return ServoMove::WAVE_LEFT_ARM;
-        return ServoMove::WAVE_BOTH_ARMS;
+        return ServoMove::WAVE_RIGHT_ARM;
     }
 
-    // 11. Diam
+    // 12. Diam
     if ((has("diam") || has("tenang")) && mentions_robot) return ServoMove::RESET_POSITION;
 
     return ServoMove::NONE;

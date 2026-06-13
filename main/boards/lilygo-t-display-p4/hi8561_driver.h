@@ -1,9 +1,9 @@
 /*
- * Deskripsi: hi8561_driver
- * Penulis: LILYGO_L
- * Tanggal: 2025-06-13 11:02:44
- * Perubahan Terakhir: 2025-10-09 10:36:27
- * Lisensi: GPL 3.0
+ * @Description: hi8561_driver
+ * @Author: LILYGO_L
+ * @Date: 2025-06-13 11:02:44
+ * @LastEditTime: 2025-10-09 10:36:27
+ * @License: GPL 3.0
  */
 #pragma once
 
@@ -15,50 +15,50 @@
 #include "esp_lcd_mipi_dsi.h"
 
 /**
- * @brief Perintah inisialisasi panel LCD.
+ * @brief LCD panel initialization commands.
  *
  */
 typedef struct
 {
-    int cmd;               /*<! Perintah LCD yang spesifik */
-    const void *data;      /*<! Buffer yang menyimpan data khusus perintah */
-    size_t data_bytes;     /*<! Ukuran `data` di memori dalam byte */
-    unsigned int delay_ms; /*<! Jeda dalam milidetik setelah perintah ini */
+    int cmd;               /*<! The specific LCD command */
+    const void *data;      /*<! Buffer that holds the command specific data */
+    size_t data_bytes;     /*<! Size of `data` in memory, in bytes */
+    unsigned int delay_ms; /*<! Delay in milliseconds after this command */
 } hi8561_lcd_init_cmd_t;
 
 /**
- * @brief Konfigurasi vendor panel LCD.
+ * @brief LCD panel vendor configuration.
  *
- * @note Struktur ini perlu diberikan ke field `vendor_config` pada `esp_lcd_panel_dev_config_t`.
+ * @note  This structure needs to be passed to the `vendor_config` field in `esp_lcd_panel_dev_config_t`.
  *
  */
 typedef struct
 {
-    const hi8561_lcd_init_cmd_t *init_cmds; /*!< Penunjuk ke larik perintah inisialisasi. Atur ke NULL bila memakai perintah bawaan.
-                                             *   Larik sebaiknya dideklarasikan sebagai `static const` dan ditempatkan di luar fungsi.
-                                             *   Silakan lihat `vendor_specific_init_default` di berkas sumber.
+    const hi8561_lcd_init_cmd_t *init_cmds; /*!< Pointer to initialization commands array. Set to NULL if using default commands.
+                                             *   The array should be declared as `static const` and positioned outside the function.
+                                             *   Please refer to `vendor_specific_init_default` in source file.
                                              */
-    uint16_t init_cmds_size;                /*<! Jumlah perintah pada larik di atas */
+    uint16_t init_cmds_size;                /*<! Number of commands in above array */
     struct
     {
-        esp_lcd_dsi_bus_handle_t dsi_bus;             /*!< Konfigurasi bus MIPI-DSI */
-        const esp_lcd_dpi_panel_config_t *dpi_config; /*!< Konfigurasi panel MIPI-DPI */
-        uint8_t lane_num;                             /*!< Jumlah jalur MIPI-DSI, bawaan 2 jika diatur ke 0 */
+        esp_lcd_dsi_bus_handle_t dsi_bus;             /*!< MIPI-DSI bus configuration */
+        const esp_lcd_dpi_panel_config_t *dpi_config; /*!< MIPI-DPI panel configuration */
+        uint8_t lane_num;                             /*!< Number of MIPI-DSI lanes, defaults to 2 if set to 0 */
     } mipi_config;
 } hi8561_vendor_config_t;
 
 /**
- * @brief Membuat panel LCD untuk model HI8561.
+ * @brief Create LCD panel for model HI8561
  *
- * @note Urutan inisialisasi khusus vendor bisa berbeda antar pabrikan, jadi sebaiknya rujuk ke pemasok LCD.
+ * @note  Vendor specific initialization can be different between manufacturers, should consult the LCD supplier for initialization sequence code.
  *
- * @param[in]  io Objek IO panel LCD
- * @param[in]  panel_dev_config Konfigurasi umum perangkat panel
- * @param[out] ret_panel Objek panel LCD yang dikembalikan
+ * @param[in]  io LCD panel IO handle
+ * @param[in]  panel_dev_config General panel device configuration
+ * @param[out] ret_panel Returned LCD panel handle
  * @return
- *      - ESP_ERR_INVALID_ARG   jika parameter tidak valid
- *      - ESP_OK                jika berhasil
- *      - Selain itu            jika gagal
+ *      - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *      - ESP_OK                on success
+ *      - Otherwise             on fail
  */
 esp_err_t esp_lcd_new_panel_hi8561(const esp_lcd_panel_io_handle_t io, const esp_lcd_panel_dev_config_t *panel_dev_config,
                                    esp_lcd_panel_handle_t *ret_panel);

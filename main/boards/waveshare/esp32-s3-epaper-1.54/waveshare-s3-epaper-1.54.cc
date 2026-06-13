@@ -41,7 +41,7 @@ class CustomBoard : public WifiBoard {
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto &app = Application::GetInstance();
-            // Saat proses awal sebelum terhubung, tombol BOOT masuk ke mode konfigurasi Wi-Fi tanpa restart
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -60,7 +60,7 @@ class CustomBoard : public WifiBoard {
 
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
-        mcp_server.AddTool("self.disp.network", "Memulai ulang konfigurasi jaringan", PropertyList(), [this](const PropertyList &) -> ReturnValue {
+        mcp_server.AddTool("self.disp.network", "重新配网", PropertyList(), [this](const PropertyList &) -> ReturnValue {
             EnterWifiConfigMode();
             return true;
         });

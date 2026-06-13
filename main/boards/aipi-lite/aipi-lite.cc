@@ -56,7 +56,7 @@ class AIPILite : public WifiBoard {
         });
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
-            esp_lcd_panel_disp_on_off(panel_, false);  // Matikan tampilan
+            esp_lcd_panel_disp_on_off(panel_, false);  // 关闭显示
             rtc_gpio_set_level(POWER_CONTROL_PIN, 0);
             rtc_gpio_hold_dis(POWER_CONTROL_PIN);
             esp_deep_sleep_start();
@@ -65,7 +65,7 @@ class AIPILite : public WifiBoard {
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -97,7 +97,7 @@ class AIPILite : public WifiBoard {
 
     void InitializeLcdDisplay() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_SPI_CS_PIN;
@@ -110,7 +110,7 @@ class AIPILite : public WifiBoard {
         ESP_ERROR_CHECK(
             esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = DISPLAY_SPI_RESET_PIN;
@@ -142,17 +142,17 @@ class AIPILite : public WifiBoard {
             app.ToggleChatState();
         });
 
-        // Atur aksi tekan lama tombol daya untuk langsung masuk mode konfigurasi Wi-Fi
+        // 设置开机按钮的长按事件（直接进入配网模式）
         boot_button_.OnLongPress([this]() {
-            // Bangunkan pewaktu hemat daya
+            // 唤醒电源保存定时器
             power_save_timer_->WakeUp();
-            // Ambil instance aplikasi
+            // 获取应用程序实例
             auto& app = Application::GetInstance();
 
-            // Masuk ke mode konfigurasi Wi-Fi
+            // 进入配网模式
             app.SetDeviceState(kDeviceStateWifiConfiguring);
 
-            // Reset konfigurasi Wi-Fi agar perangkat benar-benar masuk mode konfigurasi
+            // 重置WiFi配置以确保进入配网模式
             EnterWifiConfigMode();
         });
 
@@ -163,7 +163,7 @@ class AIPILite : public WifiBoard {
                 !(power_manager_->IsCharging() &&
                   power_manager_->GetBatteryLevel() < 100)) {
                 ESP_LOGI(TAG, "Power button long pressed, shutting down");
-                esp_lcd_panel_disp_on_off(panel_, false);  // Matikan tampilan
+                esp_lcd_panel_disp_on_off(panel_, false);  // 关闭显示
                 rtc_gpio_set_level(POWER_CONTROL_PIN, 0);
                 rtc_gpio_hold_dis(POWER_CONTROL_PIN);
                 esp_deep_sleep_start();
@@ -178,7 +178,7 @@ class AIPILite : public WifiBoard {
         rtc_gpio_set_level(POWER_CONTROL_PIN, 1);
     }
 
-    // Inisialisasi perangkat IoT yang dapat terlihat oleh AI
+    // 物联网初始化，添加对 AI 可见设备
     void InitializeTools() {}
 
    public:

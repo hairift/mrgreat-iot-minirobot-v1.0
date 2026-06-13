@@ -12,8 +12,8 @@
 #define BSP_I2S_SCLK            (GPIO_NUM_44)
 #define BSP_I2S_MCLK            (GPIO_NUM_6)
 #define BSP_I2S_LCLK            (GPIO_NUM_16)
-#define BSP_I2S_DOUT            (GPIO_NUM_15)    // Ke codec ES8311
-#define BSP_I2S_DSIN            (GPIO_NUM_43)   // Dari ADC ES7210
+#define BSP_I2S_DOUT            (GPIO_NUM_15)    // To Codec ES8311
+#define BSP_I2S_DSIN            (GPIO_NUM_43)   // From ADC ES7210
 
 #define BSP_POWER_AMP_IO         (IO_EXPANDER_PIN_NUM_3)
 #define BSP_PA_PIN       (GPIO_NUM_NC)
@@ -27,21 +27,21 @@
 #define BSP_IO_EXPANDER_I2C_ADDRESS CUSTOM_IO_EXPANDER_I2C_CH32V003_ADDRESS
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
 
-/* Layar */
+/* Display */
 #define BSP_LCD_VSYNC     (GPIO_NUM_3)
 #define BSP_LCD_HSYNC     (GPIO_NUM_46)
 #define BSP_LCD_DE        (GPIO_NUM_5)
 #define BSP_LCD_PCLK      (GPIO_NUM_7)
 #define BSP_LCD_DISP      (GPIO_NUM_NC)
 
-// Jalur data biru
+// Blue data signals
 #define BSP_LCD_DATA0        (GPIO_NUM_14) ///< B3
 #define BSP_LCD_DATA1        (GPIO_NUM_38) ///< B4
 #define BSP_LCD_DATA2        (GPIO_NUM_18) ///< B5
 #define BSP_LCD_DATA3        (GPIO_NUM_17) ///< B6
 #define BSP_LCD_DATA4        (GPIO_NUM_10) ///< B7
 
-// Jalur data hijau
+// Green data signals
 #define BSP_LCD_DATA5        (GPIO_NUM_39) ///< G2
 #define BSP_LCD_DATA6        (GPIO_NUM_0)  ///< G3
 #define BSP_LCD_DATA7        (GPIO_NUM_45) ///< G4
@@ -49,7 +49,7 @@
 #define BSP_LCD_DATA9        (GPIO_NUM_47) ///< G6
 #define BSP_LCD_DATA10       (GPIO_NUM_21) ///< G7
 
-// Jalur data merah
+// Red data signals
 #define BSP_LCD_DATA11       (GPIO_NUM_1)  ///< R3
 #define BSP_LCD_DATA12       (GPIO_NUM_2)  ///< R4
 #define BSP_LCD_DATA13       (GPIO_NUM_42) ///< R5
@@ -61,16 +61,16 @@
 #define BSP_LCD_TOUCH_RST     (IO_EXPANDER_PIN_NUM_1)
 #define BSP_LCD_TOUCH_INT     (GPIO_NUM_4)
 
-/* Format warna layar LCD */
+/* LCD display color format */
 #define BSP_LCD_COLOR_FORMAT        (ESP_LCD_COLOR_FORMAT_RGB565)
-/* Endian byte warna layar LCD */
+/* LCD display color bytes endianess */
 #define BSP_LCD_BIGENDIAN           (1)
-/* Jumlah bit warna layar LCD */
+/* LCD display color bits */
 #define BSP_LCD_BITS_PER_PIXEL      (16)
 #define BSP_LCD_BIT_PER_PIXEL       (18)
 #define BSP_RGB_DATA_WIDTH          (16)
 
-/* Definisi layar LCD */
+/* LCD display definition */
 #define BSP_LCD_H_RES              (800)
 #define BSP_LCD_V_RES              (480)
 

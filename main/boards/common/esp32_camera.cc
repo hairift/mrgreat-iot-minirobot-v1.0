@@ -1,7 +1,6 @@
 #include "sdkconfig.h"
 
 #include <esp_heap_caps.h>
-#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <esp_log.h>
@@ -28,7 +27,7 @@ Esp32Camera::Esp32Camera(const camera_config_t &config) {
     sensor_t *s = esp_camera_sensor_get();
     if (s) {
         if (s->id.PID == GC0308_PID) {
-            s->set_hmirror(s, 0); // Atur cermin kamera: 1 untuk cermin, 0 untuk normal
+            s->set_hmirror(s, 0); // Control camera mirror: 1 for mirror, 0 for normal
         }
         ESP_LOGI(TAG, "Camera initialized: format=%d", config.pixel_format);
     }
@@ -66,7 +65,7 @@ bool Esp32Camera::Capture() {
         return false;
     }
 
-    // Ambil bingkai terbaru dan buang bingkai lama agar performa tetap waktu nyata
+    // Get the latest frame, discard old frames for real-time performance
     for (int i = 0; i < 2; i++) {
         if (current_fb_) {
             esp_camera_fb_return(current_fb_);
@@ -78,12 +77,12 @@ bool Esp32Camera::Capture() {
         }
     }
 
-    // Siapkan penyangga enkode untuk format RGB565, dengan opsi tukar byte
+    // Prepare encode buffer for RGB565 format (with optional byte swapping)
     if (current_fb_->format == PIXFORMAT_RGB565) {
         size_t pixel_count = current_fb_->width * current_fb_->height;
         size_t data_size = pixel_count * 2;
 
-        // Alokasikan atau alokasikan ulang penyangga enkode jika diperlukan
+        // Allocate or reallocate encode buffer if needed
         if (encode_buf_size_ < data_size) {
             if (encode_buf_) {
                 heap_caps_free(encode_buf_);
@@ -97,7 +96,7 @@ bool Esp32Camera::Capture() {
             encode_buf_size_ = data_size;
         }
 
-        // Salin data ke penyangga enkode dengan opsi penukaran byte
+        // Copy data to encode buffer with optional byte swapping
         uint16_t *src = (uint16_t *)current_fb_->buf;
         uint16_t *dst = (uint16_t *)encode_buf_;
         if (swap_bytes_enabled_) {
@@ -108,7 +107,7 @@ bool Esp32Camera::Capture() {
             memcpy(encode_buf_, current_fb_->buf, data_size);
         }
 
-    // Alokasikan penyangga terpisah untuk pratinjau tampilan
+        // Allocate separate buffer for preview display
         uint8_t *preview_data = (uint8_t *)heap_caps_malloc(data_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (preview_data != nullptr) {
             memcpy(preview_data, encode_buf_, data_size);
@@ -120,7 +119,7 @@ bool Esp32Camera::Capture() {
             }
         }
     } else if (current_fb_->format == PIXFORMAT_JPEG) {
-        // Pratinjau format JPEG biasanya perlu didekode lebih dulu, jadi sementara hanya dicatat di log
+        // JPEG format preview usually requires decoding, skip preview display for now, just log
         ESP_LOGW(TAG, "JPEG capture success, len=%zu, but not supported for preview", current_fb_->len);
     }
 
@@ -162,14 +161,14 @@ std::string Esp32Camera::Explain(const std::string &question) {
         throw std::runtime_error("No camera frame captured");
     }
 
-    // Buat antrean JPEG lokal
+    // Create local JPEG queue
     QueueHandle_t jpeg_queue = xQueueCreate(40, sizeof(JpegChunk));
     if (jpeg_queue == nullptr) {
         ESP_LOGE(TAG, "Failed to create JPEG queue");
         throw std::runtime_error("Failed to create JPEG queue");
     }
 
-    // Mulai utas enkode
+    // Start encoding thread
     encoder_thread_ = std::thread([this, jpeg_queue]() {
         int64_t start_time = esp_timer_get_time();
         uint16_t w = current_fb_->width;
@@ -199,7 +198,7 @@ std::string Esp32Camera::Explain(const std::string &question) {
                 return;
         }
 
-        // Gunakan buffer enkode untuk RGB565, jika tidak gunakan buffer bingkai asli
+        // Use encode buffer for RGB565, otherwise use original frame buffer
         uint8_t *jpeg_src_buf = current_fb_->buf;
         size_t jpeg_src_len = current_fb_->len;
         if (current_fb_->format == PIXFORMAT_RGB565 && encode_buf_ != nullptr) {
@@ -313,23 +312,7 @@ std::string Esp32Camera::Explain(const std::string &question) {
         throw std::runtime_error("Failed to upload photo");
     }
 
-    std::string result;
-    result.reserve(4096);
-    char response_chunk[512];
-    int total_read = 0;
-    constexpr int kMaxExplainResponseBytes = 8192;
-    while (total_read < kMaxExplainResponseBytes) {
-        int to_read = std::min(static_cast<int>(sizeof(response_chunk)), kMaxExplainResponseBytes - total_read);
-        int read = http->Read(response_chunk, to_read);
-        if (read <= 0) {
-            break;
-        }
-        result.append(response_chunk, read);
-        total_read += read;
-    }
-    if (total_read >= kMaxExplainResponseBytes) {
-        ESP_LOGW(TAG, "Respons explain image melebihi batas aman %d byte, dipotong", kMaxExplainResponseBytes);
-    }
+    std::string result = http->ReadAll();
     http->Close();
 
     size_t remain_stack_size = uxTaskGetStackHighWaterMark(nullptr);

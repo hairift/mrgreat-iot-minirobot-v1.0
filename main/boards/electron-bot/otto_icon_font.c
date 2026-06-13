@@ -1,7 +1,7 @@
 /*******************************************************************************
- * Ukuran: 20 px
- * Bit per piksel: 1
- * Opsi: --bpp 1 --size 20 --no-compress --stride 1 --align 1 --font fontawesome-webfont.ttf --range 61744,61633,61480 --format lvgl -o OTTO_ICON_FONT.c
+ * Size: 20 px
+ * Bpp: 1
+ * Opts: --bpp 1 --size 20 --no-compress --stride 1 --align 1 --font fontawesome-webfont.ttf --range 61744,61633,61480 --format lvgl -o OTTO_ICON_FONT.c
  ******************************************************************************/
 
 #ifdef __has_include
@@ -25,10 +25,10 @@
 #if ENABLE_OTTO_ICON_FONT
 
 /*-----------------
- *    BITMAP
+ *    BITMAPS
  *----------------*/
 
-/*Simpan citra glif*/
+/*Store the image of the glyphs*/
 static LV_ATTRIBUTE_LARGE_CONST const uint8_t glyph_bitmap[] = {
     /* U+F028 "" */
     0x0, 0x6, 0x0, 0x10, 0xe0, 0x6, 0x6, 0x3, 0xc6, 0x60, 0xf8, 0x65, 0xff, 0x24, 0xff, 0xe6, 0x4f, 0xfc, 0x49, 0xff, 0x89, 0x3f, 0xf3, 0x27, 0xfe, 0x49, 0x87, 0xc3, 0x20, 0x78, 0xcc, 0x3, 0x3, 0x0,
@@ -51,21 +51,21 @@ static const lv_font_fmt_txt_glyph_dsc_t glyph_dsc[] = {{.bitmap_index = 0, .adv
                                                         {.bitmap_index = 79, .adv_w = 206, .box_w = 13, .box_h = 18, .ofs_x = 0, .ofs_y = -1}};
 
 /*---------------------
- *  PEMETAAN KARAKTER
+ *  CHARACTER MAPPING
  *--------------------*/
 
 static const uint16_t unicode_list_0[] = {0x0, 0x99, 0x108};
 
-/*Kumpulkan daftar unicode dan offset glyph_id*/
+/*Collect the unicode lists and glyph_id offsets*/
 static const lv_font_fmt_txt_cmap_t cmaps[] = {
     {.range_start = 61480, .range_length = 265, .glyph_id_start = 1, .unicode_list = unicode_list_0, .glyph_id_ofs_list = NULL, .list_length = 3, .type = LV_FONT_FMT_TXT_CMAP_SPARSE_TINY}};
 
 /*--------------------
- *  SEMUA DATA KUSTOM
+ *  ALL CUSTOM DATA
  *--------------------*/
 
 #if LVGL_VERSION_MAJOR == 8
-/*Simpan semua data khusus milik font*/
+/*Store all the custom data of the font*/
 static lv_font_fmt_txt_glyph_cache_t cache;
 #endif
 
@@ -93,16 +93,16 @@ static lv_font_fmt_txt_dsc_t otto_icon_font_dsc = {
  *  PUBLIC FONT
  *----------------*/
 
-/*Inisialisasi deskriptor font umum publik*/
+/*Initialize a public general font descriptor*/
 #if LVGL_VERSION_MAJOR >= 8
 const lv_font_t OTTO_ICON_FONT = {
 #else
 lv_font_t OTTO_ICON_FONT = {
 #endif
-    .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt, /*Penunjuk fungsi untuk mengambil data glif*/
-    .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt, /*Penunjuk fungsi untuk mengambil bitmap glif*/
-    .line_height = 18,                              /*Tinggi baris maksimum yang dibutuhkan font*/
-    .base_line = 1,                                 /*Garis dasar yang diukur dari bagian bawah baris*/
+    .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt, /*Function pointer to get glyph's data*/
+    .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt, /*Function pointer to get glyph's bitmap*/
+    .line_height = 18,                              /*The maximum line height required by the font*/
+    .base_line = 1,                                 /*Baseline measured from the bottom of the line*/
 #if !(LVGL_VERSION_MAJOR == 6 && LVGL_VERSION_MINOR == 0)
     .subpx = LV_FONT_SUBPX_NONE,
 #endif

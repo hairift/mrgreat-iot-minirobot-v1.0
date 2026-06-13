@@ -31,16 +31,16 @@ public:
                     bool mirror_y,
                     bool swap_xy) 
         : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
-        // Karena layar berbentuk lingkaran, bilah status perlu tambahan padding kiri dan kanan
+        // 由于屏幕是圆的，所以状态栏需要增加左右内边距
         lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES * 0.33, 0);
         lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES * 0.33, 0);
     }
@@ -53,7 +53,7 @@ private:
     Display* display_;
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -69,7 +69,7 @@ private:
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
     }
 
-    // Inisialisasi SPI
+    // SPI初始化
     void InitializeSpi() {
         ESP_LOGI(TAG, "Initialize SPI bus");
         spi_bus_config_t buscfg = GC9A01_PANEL_BUS_SPI_CONFIG(DISPLAY_SPI_SCLK_PIN, DISPLAY_SPI_MOSI_PIN, 
@@ -77,7 +77,7 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
-    // Inisialisasi GC9A01
+    // GC9A01初始化
     void InitializeGc9a01Display() {
         ESP_LOGI(TAG, "Init GC9A01 display");
 

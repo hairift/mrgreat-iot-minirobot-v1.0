@@ -60,17 +60,17 @@ private:
     }
 
     void InitializeGpio() {
-        // Nolkan struktur konfigurasi GPIO terlebih dahulu
+        // Zero-initialize the GPIO configuration structure
         gpio_config_t io_conf = {};
-        io_conf.intr_type = GPIO_INTR_DISABLE; // Matikan interupsi untuk pin ini
-        io_conf.pin_bit_mask = 1ULL << BSP_LCD_TOUCH_INT;    // Pilih pin GPIO menggunakan bitmask
-        io_conf.mode = GPIO_MODE_OUTPUT;          // Atur pin sebagai keluaran
-        io_conf.pull_up_en = GPIO_PULLUP_DISABLE; // Nonaktifkan pull-up
-        gpio_config(&io_conf); // Terapkan konfigurasi
+        io_conf.intr_type = GPIO_INTR_DISABLE; // Disable interrupts for this pin
+        io_conf.pin_bit_mask = 1ULL << BSP_LCD_TOUCH_INT;    // Select the GPIO pin using a bitmask
+        io_conf.mode = GPIO_MODE_OUTPUT;          // Set pin as output
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE; // Disable pull-up
+        gpio_config(&io_conf); // Apply the configuration
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = BSP_I2C_SDA,
@@ -168,7 +168,16 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS, 
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 16,                            
+            .flags =
+            {
+                .disable_control_phase = 1,
+            }
+	    };
         tp_io_config.scl_speed_hz = 400 * 1000;
 
         esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle);
@@ -183,7 +192,7 @@ private:
         ESP_LOGI(TAG, "Touch panel initialized successfully");
     }
 
-    // Alat inisialisasi
+    // Initialization tool
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",

@@ -10,16 +10,16 @@
 #define TAG "PowerManager"
 
 static QueueHandle_t gpio_evt_queue = NULL;
-uint16_t battCnt; // Jumlah kedipan lampu
-int battLife = 70; // Level baterai
+uint16_t battCnt;//闪灯次数
+int battLife = 70; //电量
 
-// Fungsi layanan interupsi
+// 中断服务程序
 static void IRAM_ATTR batt_mon_isr_handler(void* arg) {
     uint32_t gpio_num = (uint32_t) arg;
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
-// Tambahkan fungsi penanganan tugas
+// 添加任务处理函数
 static void batt_mon_task(void* arg) {
     uint32_t io_num;
     while(1) {
@@ -30,14 +30,14 @@ static void batt_mon_task(void* arg) {
 }
 
 static void calBattLife() {
-    // Hitung level baterai
+    // 计算电量
     battLife = battCnt;
 
     if (battLife > 100){
         battLife = 100;
     }
-    // ESP_LOGI(TAG, "Persentase baterai:%d", (int)battLife);
-    // Reset penghitung
+    // ESP_LOGI(TAG, "Battery life:%d", (int)battLife);
+    // 重置计数器
     battCnt = 0;
 }
 
@@ -47,7 +47,7 @@ PowerManager::PowerManager(){
 }
 
 void PowerManager::Initialize(){
-    // Inisialisasi pin kendali 5V
+    // 初始化5V控制引脚
     gpio_config_t io_conf_5v = {
         .pin_bit_mask = 1<<BOOT_5V_PIN,
         .mode = GPIO_MODE_OUTPUT,
@@ -57,7 +57,7 @@ void PowerManager::Initialize(){
     };
     ESP_ERROR_CHECK(gpio_config(&io_conf_5v));
 
-    // Inisialisasi pin kendali 4G
+    // 初始化4G控制引脚
     gpio_config_t io_conf_4g = {
         .pin_bit_mask = (1<<BOOT_4G5V_PIN) | (1<<BOOT_4GEN_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -67,7 +67,7 @@ void PowerManager::Initialize(){
     };
     ESP_ERROR_CHECK(gpio_config(&io_conf_4g));
 
-    // Konfigurasi pin pemantauan level baterai
+    // 电池电量监测引脚配置
     gpio_config_t io_conf_batt_mon = {
         .pin_bit_mask = 1ull<<MON_BATT_PIN,
         .mode = GPIO_MODE_INPUT,
@@ -76,16 +76,16 @@ void PowerManager::Initialize(){
         .intr_type = GPIO_INTR_POSEDGE,
     };
     ESP_ERROR_CHECK(gpio_config(&io_conf_batt_mon));
-    // Buat antrean peristiwa GPIO untuk baterai
+    // 创建电量GPIO事件队列
     gpio_evt_queue = xQueueCreate(2, sizeof(uint32_t));
-    // Pasang layanan ISR GPIO baterai
+    // 安装电量GPIO ISR服务
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
-    // Tambahkan penanganan interupsi
+    // 添加中断处理
     ESP_ERROR_CHECK(gpio_isr_handler_add(MON_BATT_PIN, batt_mon_isr_handler, (void*)MON_BATT_PIN));
-     // Buat tugas pemantauan
+     // 创建监控任务
     xTaskCreate(&batt_mon_task, "batt_mon_task", 1024, NULL, 10, NULL);
 
-    // Inisialisasi pin pemantauan
+    // 初始化监测引脚
     gpio_config_t mon_conf = {};
     mon_conf.pin_bit_mask = 1ULL << MON_USB_PIN;
     mon_conf.mode = GPIO_MODE_INPUT;
@@ -93,7 +93,7 @@ void PowerManager::Initialize(){
     mon_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     gpio_config(&mon_conf);
 
-    // Buat pewaktu pemeriksaan level baterai
+    // 创建电池电量检查定时器
     esp_timer_create_args_t timer_args = {
         .callback = [](void* arg) {
             PowerManager* self = static_cast<PowerManager*>(arg);
@@ -161,7 +161,7 @@ void PowerManager::CheckStartup() {
     if(settings1.GetInt("sleep_flag", 0) > 0){
         vTaskDelay(pdMS_TO_TICKS(1000));
         if( gpio_get_level(BOOT_BUTTON_PIN) == 1) {
-            Sleep(); // Masuk ke mode tidur
+            Sleep(); //进入休眠模式
         }else{
             settings1.SetInt("sleep_flag", 0);
         }

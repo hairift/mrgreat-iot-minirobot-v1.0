@@ -1,83 +1,67 @@
-# Panduan Papan Kustom
+# Panduan Papan Kustom Mr Great
 
-Dokumen ini menjelaskan langkah dasar untuk menambahkan papan baru ke proyek.
+Papan aktif untuk robot Mr Great adalah `bread-compact-wifi`. Konfigurasi utama berada di:
 
-## Prinsip Umum
-
-- jangan menimpa papan bawaan jika perangkat Anda berbeda
-- buat direktori papan baru dengan nama unik
-- pastikan nama kompilasi dan identitas papan tidak bentrok dengan papan lain
-
-## Struktur Minimal
-
-Setiap papan umumnya memiliki file berikut:
-
-- `xxx_board.cc` untuk inisialisasi utama
-- `config.h` untuk pin dan parameter papan
-- `config.json` untuk target chip dan opsi kompilasi
-- `README.md` jika papan memerlukan penjelasan tambahan
-
-## Langkah Penambahan Papan
-
-### 1. Buat direktori baru
-
-Contoh:
-
-```bash
-mkdir main/boards/my-custom-board
+```text
+main/boards/bread-compact-wifi/config.h
+main/boards/bread-compact-wifi/compact_wifi_board.cc
 ```
 
-### 2. Buat `config.h`
+## Pin Utama
 
-Isi file ini dengan:
+| Fungsi | GPIO |
+|---|---|
+| OLED SDA | `GPIO10` |
+| OLED SCL | `GPIO9` |
+| Mikrofon WS | `GPIO4` |
+| Mikrofon SCK | `GPIO5` |
+| Mikrofon SD | `GPIO6` |
+| Speaker DIN | `GPIO7` |
+| Speaker BCLK | `GPIO15` |
+| Speaker LRC | `GPIO16` |
+| Servo kepala | `GPIO17` |
+| Servo tangan kanan | `GPIO38` |
+| Servo tangan kiri | `GPIO39` |
+| Tombol manual | `GPIO1` |
+| ADC baterai | `GPIO2` |
+| USB D- | `GPIO19` |
+| USB D+ | `GPIO20` |
 
-- konfigurasi I2S audio
-- konfigurasi I2C codec
-- pin tombol
-- pin layar
-- parameter lampu latar atau LED jika ada
+## USB Native ESP32-S3
 
-### 3. Buat `config.json`
+`GPIO19` dan `GPIO20` adalah jalur data USB native ESP32-S3. Jalur ini tidak mengisi baterai, tidak menyalakan perangkat, dan tidak bisa menggantikan jalur power. Charging tetap melalui pin `V` dan `G` USB breakout ke TP4056.
 
-Definisikan:
+Jika ingin komputer mendeteksi ESP32-S3 lewat USB native:
 
-- target chip
-- nama kompilasi
-- tambahan `sdkconfig_append` jika perlu
+- gunakan kabel USB data, bukan kabel charging saja
+- sambungkan ground USB ke ground sistem
+- sambungkan `D-` ke `GPIO19`
+- sambungkan `D+` ke `GPIO20`
+- pastikan `GPIO19` dan `GPIO20` tidak dipakai fungsi lain
 
-Contoh nilai yang umum:
+Console utama firmware masih UART, sedangkan USB Serial/JTAG aktif sebagai console sekunder. Jika jalur USB native bekerja dan ESP32 sudah mendapat daya, Windows biasanya memunculkan port COM tambahan yang berbeda dari port UART biasa.
 
-- ukuran memori flash
-- tabel partisi
-- konfigurasi bahasa
-- fitur audio atau kata bangun
+Untuk flash dari USB native, gunakan port COM baru tersebut:
 
-### 4. Buat file papan utama
+```powershell
+idf.py -p COMx flash
+idf.py -p COMx monitor
+```
 
-File papan utama bertugas:
+Jika port COM tidak muncul, cek kabel data, ground bersama, urutan `D+` dan `D-`, driver USB Serial/JTAG, saklar daya utama, serta mode download. Tombol aplikasi `GPIO1` tidak menggantikan tombol BOOT; untuk memaksa download mode tetap gunakan BOOT `GPIO0` ke GND saat reset atau saat power dinyalakan.
 
-- inisialisasi I2C atau SPI
-- inisialisasi codec audio
-- inisialisasi layar
-- inisialisasi tombol
-- pendaftaran papan ke sistem
+## Baterai
 
-### 5. Kompilasi dan uji
+Untuk pembacaan baterai, gunakan pembagi tegangan dua resistor `100 kOhm` dan kapasitor `104` ke GND. Node tengah masuk ke `GPIO2`. Titik ukur yang disarankan adalah tegangan baterai atau output TP4056, bukan output boost 5V.
 
-Jalankan:
+## Tombol Tactile 4 Kaki
+
+Tombol manual memakai `GPIO1` dan GND. Pada tactile 4 kaki, dua kaki pada satu sisi biasanya tersambung permanen, lalu tombol baru menghubungkan sisi kiri dan kanan saat ditekan. Pakai dua kaki yang berbeda sisi atau diagonal. Jika `GPIO1` dan GND dipasang pada `kiri atas` + `kiri bawah` atau `kanan atas` + `kanan bawah` yang satu rail, tekanan tombol tidak akan mengubah sinyal. Firmware akan terasa tidak merespons atau malah membaca tombol selalu aktif.
+
+## Build
 
 ```powershell
 cd E:\MrGreat-IOT-ESP32\MrGreat-esp32-main
+idf.py set-target esp32s3
 idf.py build
-idf.py -p COM3 flash
-idf.py -p COM3 monitor
 ```
-
-## Hal yang Wajib Dicek
-
-- boot normal
-- audio masukan dan keluaran normal
-- koneksi jaringan normal
-- layar normal
-- konsumsi daya sesuai kebutuhan papan
-- fitur khusus papan tidak bentrok dengan papan lain

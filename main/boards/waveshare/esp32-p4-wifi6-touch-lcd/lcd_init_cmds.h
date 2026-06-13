@@ -1,5 +1,5 @@
 #ifdef CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4B
-// Biarkan kosong
+// Leave it blank
 #elif CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4_3
 static const st7701_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0xFF, (uint8_t[]){0x77, 0x01, 0x00, 0x00, 0x13}, 5, 0},
@@ -52,7 +52,7 @@ static const st7701_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0x29, (uint8_t[]){0x00}, 0, 0},
 };
 #elif CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7B
-// Biarkan kosong
+// Leave it blank
 #elif CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_3_4C
 static const jd9365_lcd_init_cmd_t lcd_init_cmds[] = {
     {0xE0, (uint8_t[]){0x00}, 1, 0},
@@ -743,7 +743,7 @@ static const jd9365_lcd_init_cmd_t lcd_init_cmds[] = {
     {0x45, (uint8_t[]){0x28}, 1, 0},
     {0x4B, (uint8_t[]){0x04}, 1, 0},
 
-    //{0x4A, (uint8_t[]){0x35}, 1, 0},//uji bawaan
+    //{0x4A, (uint8_t[]){0x35}, 1, 0},//bist
 
     {0x55, (uint8_t[]){0x02}, 1, 0},
     {0x56, (uint8_t[]){0x01}, 1, 0},
@@ -937,7 +937,7 @@ static const jd9365_lcd_init_cmd_t lcd_init_cmds[] = {
     {0x43, (uint8_t[]){0x1E}, 1, 0},
     {0x44, (uint8_t[]){0x0D}, 1, 0},
     {0x45, (uint8_t[]){0x28}, 1, 0},
-    //{0x4A, (uint8_t[]){0x35}, 1, 0},//uji bawaan
+    //{0x4A, (uint8_t[]){0x35}, 1, 0},//bist
 
     {0x55, (uint8_t[]){0x02}, 1, 0},
     {0x57, (uint8_t[]){0x69}, 1, 0},
@@ -1109,8 +1109,8 @@ static const jd9365_lcd_init_cmd_t lcd_init_cmds[] = {
     {0x02, (uint8_t[]){0xB3}, 1, 0},
     {0x09, (uint8_t[]){0x61}, 1, 0},
     {0x0E, (uint8_t[]){0x48}, 1, 0},
-    {0x37, (uint8_t[]){0x58}, 1, 0}, // Allwinner
-    {0x2B, (uint8_t[]){0x0F}, 1, 0}, // Allwinner
+    {0x37, (uint8_t[]){0x58}, 1, 0}, // 全志
+    {0x2B, (uint8_t[]){0x0F}, 1, 0}, // 全志
 
     {0xE0, (uint8_t[]){0x00}, 1, 0},
 

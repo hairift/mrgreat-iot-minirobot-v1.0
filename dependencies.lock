@@ -110,7 +110,7 @@ dependencies:
       type: service
     version: 0.5.3
   espressif/dl_fft:
-    component_hash: 7dadbd644c0d7ba4733cc3726ec4cff6edf27b043725e1115861dec1609a3d28
+    component_hash: ced3cf28cc70452b7859c06f4e5059215167254a2047e34c893d6f501ccd6ea2
     dependencies:
     - name: idf
       require: private
@@ -118,7 +118,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 0.3.1
+    version: 0.4.0
   espressif/esp-dsp:
     component_hash: 42dce32d46ac93dc11f60d368e29a830e9661c7345d794b8a45c343479cae636
     dependencies:
@@ -204,7 +204,7 @@ dependencies:
     - esp32c61
     version: 1.5.2
   espressif/esp_codec_dev:
-    component_hash: 54870f7a66dd93367b4153dedb22299efadf8b7b2ead322cdebc7c92a542fa35
+    component_hash: 896c67360ae1f8dedaf8a53dfe48c015317fa455f061a5165307892296990028
     dependencies:
     - name: idf
       require: private
@@ -212,7 +212,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.5.7
+    version: 1.5.10
   espressif/esp_image_effects:
     component_hash: a35037db02862d3cef6f72c25f422ae62da6e6c88219ce03c9ea24e0315ceaaa
     dependencies:
@@ -707,6 +707,102 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 3.0.3
+  espressif/touch_button_sensor:
+    component_hash: 25570fae2d9bf3590a4fea6ed56ea69c45b64d423849b9f165f7721f5ae0b5a5
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4,<6.0'
+    - name: espressif/touch_sensor_fsm
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.8.1~1,<0.8.2'
+    - name: espressif/touch_sensor_lowlevel
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=0.9.1~1,<0.10.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - linux
+    version: 0.2.2~1
+  espressif/touch_sensor_fsm:
+    component_hash: c1918e4dc4d354ee4a1c918d99eff987dd50c2b99b153cc99afe41a1f41b5dcd
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - linux
+    version: 0.8.1~1
+  espressif/touch_sensor_lowlevel:
+    component_hash: b8d5f8c785c91619d4fe531c874c3897bede0428fb3fe854bea4048e12348e1f
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4,<6.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - linux
+    version: 0.9.1~1
+  espressif/touch_slider_sensor:
+    component_hash: 4104c941bc55811b748922d9a72f8fb2fd4056818c57be15da960da074779b89
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4'
+    - name: espressif/touch_sensor_fsm
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.8.1~1,<0.8.2'
+    - name: espressif/touch_sensor_lowlevel
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=0.9.1~1,<0.10.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - linux
+    version: 0.2.0~1
   espressif/usb_host_uvc:
     component_hash: b0cb9a3a2eaa09dc6e5cc3e47e04d0a73e47c2d3dcfb3afce959224a1fe5fb5e
     dependencies:
@@ -947,6 +1043,8 @@ direct_dependencies:
 - espressif/iot_usbh_rndis
 - espressif/knob
 - espressif/led_strip
+- espressif/touch_button_sensor
+- espressif/touch_slider_sensor
 - espressif2022/esp_emote_expression
 - espressif2022/image_player
 - idf
@@ -957,6 +1055,6 @@ direct_dependencies:
 - waveshare/esp_lcd_sh8601
 - waveshare/esp_lcd_touch_cst9217
 - wvirgil123/sscma_client
-manifest_hash: bc5a490f6ddad55767a2e235151dfa89d76822430ca75688a329610eda35731f
+manifest_hash: a547918913bb2d42e9cc50f1fcf8dfa11d3d4c9371a7d2c5e45047c2d5ebbb7e
 target: esp32s3
 version: 2.0.0

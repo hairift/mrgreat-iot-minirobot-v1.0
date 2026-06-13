@@ -17,7 +17,7 @@ private:
 
     esp_codec_dev_handle_t output_dev_ = nullptr;
     esp_codec_dev_handle_t input_dev_ = nullptr;
-    // penyangga referensi yang dipakai untuk peredam gema
+    // ref buffer used for aec
     std::vector<int16_t> ref_buffer_;
     int read_pos_ = 0;
     int write_pos_ = 0;

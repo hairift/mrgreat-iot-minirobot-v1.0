@@ -13,7 +13,7 @@
 
 extern "C" void app_main(void)
 {
-    // Inisialisasi NVS flash untuk konfigurasi Wi-Fi
+    // Initialize NVS flash for WiFi configuration
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_LOGW(TAG, "Erasing NVS flash to fix corruption");
@@ -22,8 +22,8 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Inisialisasi lalu jalankan aplikasi
+    // Initialize and run the application
     auto& app = Application::GetInstance();
     app.Initialize();
-    app.Run();  // Fungsi ini menjalankan loop event utama dan tidak pernah kembali
+    app.Run();  // This function runs the main event loop and never returns
 }

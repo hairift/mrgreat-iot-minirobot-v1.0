@@ -26,14 +26,12 @@
 #include "ogg_demuxer.h"
 
 /*
- * Ada dua tipe aliran data audio:
- * 1. (Mikrofon) -> [Prosesor] -> {Antrean Enkode} -> [Encoder Opus] -> {Antrean Kirim} -> (Peladen)
- * 2. (Peladen) -> {Antrean Dekode} -> [Decoder Opus] -> {Antrean Pemutaran} -> (Pengeras Suara)
+ * Ada dua alur data audio:
+ * 1. (Mikrofon) -> [Pemroses] -> {Antrean Encode} -> [Encoder Opus] -> {Antrean Kirim} -> (Server)
+ * 2. (Server) -> {Antrean Decode} -> [Decoder Opus] -> {Antrean Playback} -> (Speaker)
  *
- * Kita menggunakan satu tugas untuk mikrofon, speaker, dan prosesor, serta satu tugas untuk encoder Opus dan decoder Opus.
- * 
- * Antrean dekode dan antrean kirim adalah antrean utama, karena paket Opus jauh lebih kecil dari paket PCM.
- * 
+ * Kita memakai satu tugas untuk mikrofon, speaker, dan pemroses, lalu satu tugas untuk encoder/decoder Opus.
+ * Antrean decode dan kirim menjadi antrean utama karena paket Opus jauh lebih kecil daripada paket PCM.
  */
 
 #define OPUS_FRAME_DURATION_MS 60
@@ -160,7 +158,7 @@ private:
 
     EventGroupHandle_t event_group_;
 
-    // Antrean proses enkode dan dekode audio
+    // Antrean encode dan decode audio
     TaskHandle_t audio_input_task_handle_ = nullptr;
     TaskHandle_t audio_output_task_handle_ = nullptr;
     TaskHandle_t opus_codec_task_handle_ = nullptr;
@@ -171,17 +169,17 @@ private:
     std::deque<std::unique_ptr<AudioStreamPacket>> audio_testing_queue_;
     std::deque<std::unique_ptr<AudioTask>> audio_encode_queue_;
     std::deque<std::unique_ptr<AudioTask>> audio_playback_queue_;
-    // Untuk AEC di sisi peladen
+    // Untuk AEC dari server
     std::deque<uint32_t> timestamp_queue_;
     uint32_t decoder_generation_ = 0;
-    bool audio_output_busy_ = false;
-    std::mutex sound_play_mutex_;
 
     bool wake_word_initialized_ = false;
     bool audio_processor_initialized_ = false;
     bool voice_detected_ = false;
     bool service_stopped_ = true;
     bool audio_input_need_warmup_ = false;
+    bool audio_output_busy_ = false;
+    std::mutex sound_play_mutex_;
 
     esp_timer_handle_t audio_power_timer_ = nullptr;
     std::chrono::steady_clock::time_point last_input_time_;

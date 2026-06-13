@@ -8,7 +8,7 @@
 #define BLINK_INFINITE -1
 
 CircularStrip::CircularStrip(gpio_num_t gpio, uint16_t max_leds) : max_leds_(max_leds) {
-    // Jika GPIO tidak terhubung, sebaiknya gunakan kelas NoLed
+    // If the gpio is not connected, you should use NoLed class
     assert(gpio != GPIO_NUM_NC);
 
     colors_.resize(max_leds_);

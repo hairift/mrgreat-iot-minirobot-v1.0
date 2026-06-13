@@ -130,18 +130,24 @@ private:
     }
 
     void InitializeButtons() {
-        boot_button_.OnClick([this]() {
+        auto handle_chat_button = [this](const char* source) {
+            ESP_LOGI(TAG, "Tombol %s ditekan", source);
+
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
             }
             app.ToggleChatState();
+        };
+
+        boot_button_.OnClick([handle_chat_button]() {
+            handle_chat_button("BOOT");
         });
 
-        // Tombol taktil untuk mengganti status percakapan
-        asr_button_.OnClick([this]() {
-            Application::GetInstance().ToggleChatState();
+        // Tombol taktil eksternal dibuat sama perilakunya dengan tombol BOOT bawaan.
+        asr_button_.OnClick([handle_chat_button]() {
+            handle_chat_button("GPIO1");
         });
     }
 
@@ -181,6 +187,13 @@ public:
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT,
             AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
+        static bool input_gain_configured = false;
+        if (!input_gain_configured) {
+            // Rekaman INMP441 memiliki ruang puncak sekitar 12 dB; gain 2x menaikkan
+            // kejelasan suara tanpa memotong puncak percakapan normal.
+            audio_codec.SetInputGain(2.0f);
+            input_gain_configured = true;
+        }
 #else
         static NoAudioCodecDuplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_GPIO_BCLK, AUDIO_I2S_GPIO_WS, AUDIO_I2S_GPIO_DOUT, AUDIO_I2S_GPIO_DIN);

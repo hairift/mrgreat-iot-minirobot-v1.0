@@ -1,77 +1,71 @@
-import argparse
-import struct
-
-import numpy as np
+# 播放p3格式的音频文件
 import opuslib
+import struct
+import numpy as np
 import sounddevice as sd
-
+import argparse
 
 def play_p3_file(input_file):
     """
-    Memutar berkas audio berformat p3.
-
-    Format p3:
-    [1 byte tipe, 1 byte cadangan, 2 byte panjang, data Opus]
+    播放p3格式的音频文件
+    p3格式: [1字节类型, 1字节保留, 2字节长度, Opus数据]
     """
-    # Inisialisasi dekoder Opus.
-    sample_rate = 16000  # Laju sampling tetap 16000 Hz.
-    channels = 1  # Mono.
+    # 初始化Opus解码器
+    sample_rate = 16000  # 采样率固定为16000Hz
+    channels = 1  # 单声道
     decoder = opuslib.Decoder(sample_rate, channels)
-
-    # Ukuran frame 60 ms.
+    
+    # 帧大小 (60ms)
     frame_size = int(sample_rate * 60 / 1000)
-
-    # Buka aliran audio untuk keluaran.
+    
+    # 打开音频流
     stream = sd.OutputStream(
         samplerate=sample_rate,
         channels=channels,
-        dtype="int16",
+        dtype='int16'
     )
     stream.start()
-
+    
     try:
-        with open(input_file, "rb") as file_handle:
-            print(f"Sedang memutar: {input_file}")
-
+        with open(input_file, 'rb') as f:
+            print(f"正在播放: {input_file}")
+            
             while True:
-                # Baca header paket sepanjang 4 byte.
-                header = file_handle.read(4)
+                # 读取头部 (4字节)
+                header = f.read(4)
                 if not header or len(header) < 4:
                     break
-
-                # Uraikan header paket.
-                packet_type, reserved, data_len = struct.unpack(">BBH", header)
-                _ = packet_type, reserved
-
-                # Baca data Opus sesuai panjang paket.
-                opus_data = file_handle.read(data_len)
+                
+                # 解析头部
+                packet_type, reserved, data_len = struct.unpack('>BBH', header)
+                
+                # 读取Opus数据
+                opus_data = f.read(data_len)
                 if not opus_data or len(opus_data) < data_len:
                     break
-
-                # Dekode data Opus menjadi PCM.
+                
+                # 解码Opus数据
                 pcm_data = decoder.decode(opus_data, frame_size)
-
-                # Ubah byte PCM menjadi array NumPy.
+                
+                # 将字节转换为numpy数组
                 audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-
-                # Kirim audio ke perangkat keluaran.
+                
+                # 播放音频
                 stream.write(audio_array)
-
+                
     except KeyboardInterrupt:
-        print("\nPemutaran dihentikan")
+        print("\n播放已停止")
     finally:
         stream.stop()
         stream.close()
-        print("Pemutaran selesai")
-
+        print("播放完成")
 
 def main():
-    parser = argparse.ArgumentParser(description="Memutar berkas audio berformat p3")
-    parser.add_argument("input_file", help="Jalur berkas p3 masukan")
+    parser = argparse.ArgumentParser(description='播放p3格式的音频文件')
+    parser.add_argument('input_file', help='输入的p3文件路径')
     args = parser.parse_args()
-
+    
     play_p3_file(args.input_file)
 
-
 if __name__ == "__main__":
-    main()
+    main() 

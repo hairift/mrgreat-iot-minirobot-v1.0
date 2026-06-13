@@ -100,7 +100,7 @@ height_(height)
     lvgl_port_init(&port_cfg);
     lvgl_port_lock(0);
 
-    display_ = lv_display_create(width, height); /* Inisialisasi dasar dengan resolusi horizontal dan vertikal dalam piksel */
+    display_ = lv_display_create(width, height); /* 以水平和垂直分辨率（像素）进行基本初始化 */
     lv_display_set_flush_cb(display_, Lvgl_flush_cb);
     lv_display_set_user_data(display_, this);
 	size_t lvgl_buffer_size = LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565) * transfer;
@@ -117,8 +117,8 @@ height_(height)
         return;
     }
 
-    // Catatan: SetupUI() sebaiknya dipanggil oleh Application::Initialize(), bukan di konstruktor
-    // agar objek LVGL dibuat setelah layar selesai diinisialisasi sepenuhnya.
+    // Note: SetupUI() should be called by Application::Initialize(), not in constructor
+    // to ensure lvgl objects are created after the display is fully initialized.
 }
 
 CustomLcdDisplay::~CustomLcdDisplay() {

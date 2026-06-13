@@ -463,7 +463,7 @@ private:
     esp_timer_handle_t touchpad_timer_;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = TP_PIN_NUM_TP_SDA,
@@ -484,22 +484,22 @@ private:
         auto touchpad = board.GetTouchpad();
         static bool was_touched = false;
         static int64_t touch_start_time = 0;
-        const int64_t TOUCH_THRESHOLD_MS = 500;  // Ambang durasi sentuh; lebih dari 500 ms dianggap tekan lama
+        const int64_t TOUCH_THRESHOLD_MS = 500;  // 触摸时长阈值，超过500ms视为长按
         
         touchpad->UpdateTouchPoint();
         auto touch_point = touchpad->GetTouchPoint();
         
-        // Deteksi awal sentuhan
+        // 检测触摸开始
         if (touch_point.num > 0 && !was_touched) {
             was_touched = true;
-            touch_start_time = esp_timer_get_time() / 1000; // Ubah ke milidetik
+            touch_start_time = esp_timer_get_time() / 1000; // 转换为毫秒
         } 
-        // Deteksi saat sentuhan dilepas
+        // 检测触摸释放
         else if (touch_point.num == 0 && was_touched) {
             was_touched = false;
             int64_t touch_duration = (esp_timer_get_time() / 1000) - touch_start_time;
             
-            // Hanya sentuhan singkat yang memicu aksi
+            // 只有短触才触发
             if (touch_duration < TOUCH_THRESHOLD_MS) {
                 auto& app = Application::GetInstance();
                 if (app.GetDeviceState() == kDeviceStateStarting) {
@@ -515,7 +515,7 @@ private:
         ESP_LOGI(TAG, "Init Cst816s");
         cst816s_ = new Cst816s(i2c_bus_, 0x15);
         
-        // Buat pewaktu dengan interval 10 ms
+        // 创建定时器，10ms 间隔
         esp_timer_create_args_t timer_args = {
             .callback = touchpad_timer_callback,
             .arg = NULL,
@@ -568,7 +568,7 @@ private:
         ESP_LOGI(TAG, "Install ST77916 panel driver");
         
         st77916_vendor_config_t vendor_config = {
-            .init_cmds = lcd_init_cmds, // Jika memakai perintah inisialisasi kustom, buka komentar pada baris ini
+            .init_cmds = lcd_init_cmds, // 如果使用自定义初始化命令，请取消注释这些行
             .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(st77916_lcd_init_cmd_t),
             .flags = {
                 .use_qspi_interface = 1,
@@ -594,7 +594,7 @@ private:
 
     void InitializeMute() {
         gpio_reset_pin(AUDIO_MUTE_PIN);
-        /* Atur GPIO sebagai keluaran push-pull */
+        /* Set the GPIO as a push/pull output */
         gpio_set_direction(AUDIO_MUTE_PIN, GPIO_MODE_OUTPUT);
         gpio_set_level(AUDIO_MUTE_PIN, 1);
     }

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Bangun aset bawaan berdasarkan konfigurasi.
+Build default assets based on configuration
 
-Skrip ini membaca konfigurasi dari sdkconfig lalu membuat assets.bin yang sesuai
-dengan konfigurasi board saat ini.
+This script reads configuration from sdkconfig and builds the appropriate assets.bin
+for the current board configuration.
 
-Cara pakai:
-    ./build_default_assets.py --sdkconfig <path> --builtin_text_font <nama_font> \
-        --default_emoji_collection <nama_koleksi> --output <path_keluaran>
+Usage:
+    ./build_default_assets.py --sdkconfig <path> --builtin_text_font <font_name> \
+        --default_emoji_collection <collection_name> --output <output_path>
 """
 
 import argparse
@@ -17,46 +17,18 @@ import shutil
 import sys
 import json
 import struct
-import time
 from datetime import datetime
 
 
 # =============================================================================
-# Fungsi pengemasan model (diambil dari pack_model.py)
+# Pack model functions (from pack_model.py)
 # =============================================================================
-
-def remove_tree_with_retry(path, required=False, attempts=8, delay_seconds=0.15):
-    """
-    Hapus direktori dengan retry singkat.
-
-    Di Windows, proses antivirus, indexer, atau tool build kadang masih memegang
-    berkas sementara selama beberapa milidetik. Cleanup akhir tidak boleh membuat
-    build gagal jika assets.bin sebenarnya sudah berhasil dibuat.
-    """
-    if not os.path.exists(path):
-        return True
-
-    last_error = None
-    for attempt in range(attempts):
-        try:
-            shutil.rmtree(path)
-            return True
-        except OSError as exc:
-            last_error = exc
-            time.sleep(delay_seconds * (attempt + 1))
-
-    if required:
-        raise last_error
-
-    print(f"Warning: gagal membersihkan direktori sementara setelah retry: {path} ({last_error})")
-    return False
 
 def struct_pack_string(string, max_len=None):
     """
-    Kemas string menjadi data biner.
-
-    Jika max_len bernilai None, panjang keluaran mengikuti panjang string.
-    Jika tidak, sisa ruang akan diisi padding melalui struct.pack('x').
+    pack string to binary data.
+    if max_len is None, max_len = len(string) + 1
+    else len(string) < max_len, the left will be padded by struct.pack('x')
     """
     if max_len == None :
         max_len = len(string)
@@ -76,7 +48,7 @@ def struct_pack_string(string, max_len=None):
 
 
 def read_data(filename):
-    """Baca data biner seperti berkas indeks dan mndata."""
+    """Read binary data, like index and mndata"""
     data = None
     with open(filename, "rb") as f:
         data = f.read()
@@ -85,7 +57,7 @@ def read_data(filename):
 
 def pack_models(model_path, out_file="srmodels.bin"):
     """
-    Kemas semua model menjadi satu berkas biner dengan format berikut:
+    Pack all models into one binary file by the following format:
     {
         model_num: int
         model1_info: model_info_t
@@ -103,7 +75,7 @@ def pack_models(model_path, out_file="srmodels.bin"):
         file1_start: int  
         file1_len: int 
         file2_name: char[32]
-        file2_start: int   // panjang_data = posisi_info - posisi_data
+        file2_start: int   // data_len = info_start - data_start
         file2_len: int
         ...
     }model_info_t
@@ -124,14 +96,14 @@ def pack_models(model_path, out_file="srmodels.bin"):
     
     model_num = len(models)
     header_len = 4 + model_num*(32+4) + file_num*(32+4+4) 
-    out_bin = struct.pack('I', model_num)  # jumlah model
+    out_bin = struct.pack('I', model_num)  # model number
     data_bin = None
     for key in models:
-        model_bin = struct_pack_string(key, 32) # + nama model
-        model_bin += struct.pack('I', len(models[key])) # + jumlah file pada model ini
+        model_bin = struct_pack_string(key, 32) # + model name
+        model_bin += struct.pack('I', len(models[key])) # + file number in this model
         
         for file_name in models[key]:
-            model_bin += struct_pack_string(file_name, 32) # + nama file
+            model_bin += struct_pack_string(file_name, 32) # + file name
             if data_bin == None:
                 model_bin += struct.pack('I', header_len) 
                 data_bin = models[key][file_name]
@@ -152,42 +124,42 @@ def pack_models(model_path, out_file="srmodels.bin"):
 
 
 # =============================================================================
-# Fungsi pembuatan aset (diambil dari build.py)
+# Build assets functions (from build.py)
 # =============================================================================
 
 def ensure_dir(directory):
-    """Pastikan direktori tersedia, buat jika belum ada."""
+    """Ensure directory exists, create if not"""
     os.makedirs(directory, exist_ok=True)
 
 
 def copy_file(src, dst):
-    """Salin berkas."""
+    """Copy file"""
     if os.path.exists(src):
         shutil.copy2(src, dst)
-        print(f"Disalin: {src} -> {dst}")
+        print(f"Copied: {src} -> {dst}")
         return True
     else:
-        print(f"Peringatan: Berkas sumber tidak ada: {src}")
+        print(f"Warning: Source file does not exist: {src}")
         return False
 
 
 def copy_directory(src, dst):
-    """Salin direktori."""
+    """Copy directory"""
     if os.path.exists(src):
         shutil.copytree(src, dst, dirs_exist_ok=True)
-        print(f"Direktori disalin: {src} -> {dst}")
+        print(f"Copied directory: {src} -> {dst}")
         return True
     else:
-        print(f"Peringatan: Direktori sumber tidak ada: {src}")
+        print(f"Warning: Source directory does not exist: {src}")
         return False
 
 
-def process_sr_models(wakenet_model_dirs, multinet_model_dirs, build_dir, assets_dir):
-    """Proses model SR, baik wakenet maupun multinet, lalu buat srmodels.bin."""
-    if not wakenet_model_dirs and not multinet_model_dirs:
+def process_sr_models(wakenet_model_dirs, multinet_model_dirs, nsnet_model_dirs, vadnet_model_dirs, build_dir, assets_dir):
+    """Memproses model SR dan menghasilkan srmodels.bin"""
+    if not wakenet_model_dirs and not multinet_model_dirs and not nsnet_model_dirs and not vadnet_model_dirs:
         return None
     
-    # Buat direktori build untuk model SR.
+    # Create SR models build directory
     sr_models_build_dir = os.path.join(build_dir, "srmodels")
     if os.path.exists(sr_models_build_dir):
         shutil.rmtree(sr_models_build_dir)
@@ -195,47 +167,65 @@ def process_sr_models(wakenet_model_dirs, multinet_model_dirs, build_dir, assets
     
     models_processed = 0
     
-    # Salin model wakenet jika tersedia.
+    # Copy wakenet models if available
     if wakenet_model_dirs:
         for wakenet_model_dir in wakenet_model_dirs:
             wakenet_name = os.path.basename(wakenet_model_dir)
             wakenet_dst = os.path.join(sr_models_build_dir, wakenet_name)
             if copy_directory(wakenet_model_dir, wakenet_dst):
                 models_processed += 1
-                print(f"Model wakenet ditambahkan: {wakenet_name}")
+                print(f"Added wakenet model: {wakenet_name}")
     
-    # Salin model multinet jika tersedia.
+    # Copy multinet models if available
     if multinet_model_dirs:
         for multinet_model_dir in multinet_model_dirs:
             multinet_name = os.path.basename(multinet_model_dir)
             multinet_dst = os.path.join(sr_models_build_dir, multinet_name)
             if copy_directory(multinet_model_dir, multinet_dst):
                 models_processed += 1
-                print(f"Model multinet ditambahkan: {multinet_name}")
+                print(f"Added multinet model: {multinet_name}")
+
+    # Salin model nsnet jika tersedia
+    if nsnet_model_dirs:
+        for nsnet_model_dir in nsnet_model_dirs:
+            nsnet_name = os.path.basename(nsnet_model_dir)
+            nsnet_dst = os.path.join(sr_models_build_dir, nsnet_name)
+            if copy_directory(nsnet_model_dir, nsnet_dst):
+                models_processed += 1
+                print(f"Added nsnet model: {nsnet_name}")
+
+    # Salin model vadnet jika tersedia
+    if vadnet_model_dirs:
+        for vadnet_model_dir in vadnet_model_dirs:
+            vadnet_name = os.path.basename(vadnet_model_dir)
+            vadnet_dst = os.path.join(sr_models_build_dir, vadnet_name)
+            if copy_directory(vadnet_model_dir, vadnet_dst):
+                models_processed += 1
+                print(f"Added vadnet model: {vadnet_name}")
     
     if models_processed == 0:
-        print("Peringatan: Tidak ada model SR yang berhasil diproses")
+        print("Warning: No SR models were successfully processed")
         return None
     
-    # Gunakan fungsi pack_models untuk membuat srmodels.bin.
+    # Use pack_models function to generate srmodels.bin
     srmodels_output = os.path.join(sr_models_build_dir, "srmodels.bin")
     try:
         pack_models(sr_models_build_dir, "srmodels.bin")
-        print(f"Dihasilkan: {srmodels_output}")
-        # Salin srmodels.bin ke direktori aset.
+        print(f"Generated: {srmodels_output}")
+        # Copy srmodels.bin to assets directory
         copy_file(srmodels_output, os.path.join(assets_dir, "srmodels.bin"))
         return "srmodels.bin"
     except Exception as e:
-        print(f"Error: Gagal membuat srmodels.bin: {e}")
+        print(f"Error: Failed to generate srmodels.bin: {e}")
         return None
 
 
 def process_text_font(text_font_file, assets_dir):
-    """Proses parameter text_font."""
+    """Process text_font parameter"""
     if not text_font_file:
         return None
     
-    # Salin berkas masukan ke build/assets.
+    # Copy input file to build/assets directory
     font_filename = os.path.basename(text_font_file)
     font_dst = os.path.join(assets_dir, font_filename)
     if copy_file(text_font_file, font_dst):
@@ -244,16 +234,16 @@ def process_text_font(text_font_file, assets_dir):
 
 
 def process_emoji_collection(emoji_collection_dir, assets_dir):
-    """Proses parameter emoji_collection."""
+    """Process emoji_collection parameter"""
     if not emoji_collection_dir:
         return []
     
     emoji_list = []
     
-    # Cek apakah koleksi yang dipakai adalah otto-gif.
+    # Check if this is otto-gif collection
     is_otto_gif = 'otto-emoji-gif-component' in emoji_collection_dir or emoji_collection_dir.endswith('otto-gif')
     
-    # Pemetaan alias emoji untuk koleksi otto GIF.
+    # Otto GIF emoji aliases mapping
     otto_gif_aliases = {
         "staticstate": ["neutral", "relaxed", "sleepy", "idle"],
         "happy": ["laughing", "funny", "loving", "confident", "winking", "cool", "delicious", "kissy", "silly"],
@@ -263,24 +253,24 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
         "buxue": ["thinking", "confused", "embarrassed"]
     }
     
-    # Salin setiap gambar dari direktori masukan ke build/assets.
+    # Copy each image from input directory to build/assets directory
     for root, dirs, files in os.walk(emoji_collection_dir):
         for file in files:
             if file.lower().endswith(('.png', '.gif')):
-                # Salin berkas
+                # Copy file
                 src_file = os.path.join(root, file)
                 dst_file = os.path.join(assets_dir, file)
                 if copy_file(src_file, dst_file):
-                    # Ambil nama berkas tanpa ekstensi.
+                    # Get filename without extension
                     filename_without_ext = os.path.splitext(file)[0]
                     
-                    # Tambahkan entri emoji utama.
+                    # Add main emoji entry
                     emoji_list.append({
                         "name": filename_without_ext,
                         "file": file
                     })
                     
-                    # Tambahkan alias untuk emoji otto-gif.
+                    # Add aliases for otto-gif emojis
                     if is_otto_gif and filename_without_ext in otto_gif_aliases:
                         for alias in otto_gif_aliases[filename_without_ext]:
                             emoji_list.append({
@@ -292,7 +282,7 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
 
 
 def process_extra_files(extra_files_dir, assets_dir):
-    """Proses parameter default_assets_extra_files."""
+    """Process default_assets_extra_files parameter"""
     if not extra_files_dir:
         return []
     
@@ -302,14 +292,14 @@ def process_extra_files(extra_files_dir, assets_dir):
     
     extra_files_list = []
     
-    # Salin setiap berkas dari direktori masukan ke build/assets.
+    # Copy each file from input directory to build/assets directory
     for root, dirs, files in os.walk(extra_files_dir):
         for file in files:
-            # Lewati berkas dan direktori tersembunyi.
+            # Skip hidden files and directories
             if file.startswith('.'):
                 continue
                 
-            # Salin berkas.
+            # Copy file
             src_file = os.path.join(root, file)
             dst_file = os.path.join(assets_dir, file)
             if copy_file(src_file, dst_file):
@@ -322,7 +312,7 @@ def process_extra_files(extra_files_dir, assets_dir):
 
 
 def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files=None, multinet_model_info=None):
-    """Buat berkas index.json."""
+    """Generate index.json file"""
     index_data = {
         "version": 1
     }
@@ -342,7 +332,7 @@ def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra
     if multinet_model_info:
         index_data["multinet_model"] = multinet_model_info
     
-    # Tulis index.json.
+    # Write index.json
     index_path = os.path.join(assets_dir, "index.json")
     with open(index_path, 'w', encoding='utf-8') as f:
         json.dump(index_data, f, indent=4, ensure_ascii=False)
@@ -351,7 +341,7 @@ def generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra
 
 
 def generate_config_json(build_dir, assets_dir):
-    """Buat berkas config.json."""
+    """Generate config.json file"""
     config_data = {
         "include_path": os.path.join(build_dir, "include"),
         "assets_path": assets_dir,
@@ -370,7 +360,7 @@ def generate_config_json(build_dir, assets_dir):
         "support_raw_bgr": False
     }
     
-    # Tulis config.json.
+    # Write config.json
     config_path = os.path.join(build_dir, "config.json")
     with open(config_path, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=4, ensure_ascii=False)
@@ -380,7 +370,7 @@ def generate_config_json(build_dir, assets_dir):
 
 
 # =============================================================================
-# Pembuatan aset SPIFFS versi ringkas (diambil dari spiffs_assets_gen.py)
+# Simplified SPIFFS assets generation (from spiffs_assets_gen.py)
 # =============================================================================
 
 def compute_checksum(data):
@@ -395,13 +385,13 @@ def sort_key(filename):
 
 def pack_assets_simple(target_path, include_path, out_file, assets_path, max_name_len=32):
     """
-    Versi ringkas dari pack_assets untuk pengemasan berkas dasar.
+    Simplified version of pack_assets that handles basic file packing
     """
     merged_data = bytearray()
     file_info_list = []
     skip_files = ['config.json']
 
-    # Pastikan direktori keluaran sudah ada.
+    # Ensure output directory exists
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
     os.makedirs(include_path, exist_ok=True)
 
@@ -418,7 +408,7 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
         file_size = os.path.getsize(file_path)
 
         file_info_list.append((file_name, len(merged_data), file_size, 0, 0))
-        # Tambahkan prefiks 0x5A5A ke merged_data.
+        # Add 0x5A5A prefix to merged_data
         merged_data.extend(b'\x5A' * 2)
 
         with open(file_path, 'rb') as bin_file:
@@ -431,7 +421,7 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
     mmap_table = bytearray()
     for file_name, offset, file_size, width, height in file_info_list:
         if len(file_name) > max_name_len:
-            print(f'Peringatan: "{file_name}" melebihi {max_name_len} byte dan akan dipotong.')
+            print(f'Warning: "{file_name}" exceeds {max_name_len} bytes and will be truncated.')
         fixed_name = file_name.ljust(max_name_len, '\0')[:max_name_len]
         mmap_table.extend(fixed_name.encode('utf-8'))
         mmap_table.extend(file_size.to_bytes(4, byteorder='little'))
@@ -448,7 +438,7 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
     with open(out_file, 'wb') as output_bin:
         output_bin.write(final_data)
 
-    # Buat berkas header.
+    # Generate header file
     current_year = datetime.now().year
     asset_name = os.path.basename(assets_path)
     header_file_path = os.path.join(include_path, f'mmap_generate_{asset_name}.h')
@@ -460,7 +450,7 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
         output_header.write(' */\n\n')
         output_header.write('/**\n')
         output_header.write(' * @file\n')
-        output_header.write(" * @brief Berkas ini dibuat otomatis oleh esp_mmap_assets, jangan diubah manual\n")
+        output_header.write(" * @brief This file was generated by esp_mmap_assets, don't modify it\n")
         output_header.write(' */\n\n')
         output_header.write('#pragma once\n\n')
         output_header.write("#include \"esp_mmap_assets.h\"\n\n")
@@ -474,18 +464,17 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
 
         output_header.write('};\n')
 
-    print(f'Semua berkas sudah digabung ke {os.path.basename(out_file)}')
+    print(f'All files have been merged into {os.path.basename(out_file)}')
 
 
 # =============================================================================
-# Fungsi konfigurasi dan fungsi utama
+# Configuration and main functions
 # =============================================================================
 
 def read_wakenet_from_sdkconfig(sdkconfig_path):
     """
-    Baca model wakenet dari sdkconfig berdasarkan logika movemodel.py.
-
-    Mengembalikan daftar nama model wakenet.
+    Read wakenet models from sdkconfig (based on movemodel.py logic)
+    Returns a list of wakenet model names
     """
     if not os.path.exists(sdkconfig_path):
         print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
@@ -510,9 +499,8 @@ def read_wakenet_from_sdkconfig(sdkconfig_path):
 
 def read_multinet_from_sdkconfig(sdkconfig_path):
     """
-    Baca model multinet dari sdkconfig berdasarkan logika movemodel.py.
-
-    Mengembalikan daftar nama model multinet.
+    Read multinet models from sdkconfig (based on movemodel.py logic)
+    Returns a list of multinet model names
     """
     if not os.path.exists(sdkconfig_path):
         print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
@@ -558,11 +546,60 @@ def read_multinet_from_sdkconfig(sdkconfig_path):
     return models
 
 
+def read_nsnet_from_sdkconfig(sdkconfig_path):
+    """
+    Membaca model nsnet dari sdkconfig.
+    Mengembalikan daftar nama model nsnet.
+    """
+    if not os.path.exists(sdkconfig_path):
+        print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
+        return []
+
+    with io.open(sdkconfig_path, "r", encoding="utf-8") as f:
+        models_string = ''
+        for label in f:
+            label = label.strip("\n")
+            if 'CONFIG_SR_NSN' in label and label[0] != '#':
+                models_string += label
+
+    models = []
+    if "CONFIG_SR_NSN_NSNET1" in models_string:
+        models.append('nsnet1')
+    if "CONFIG_SR_NSN_NSNET2" in models_string:
+        models.append('nsnet2')
+
+    return models
+
+
+def read_vadnet_from_sdkconfig(sdkconfig_path):
+    """
+    Membaca model vadnet dari sdkconfig.
+    Mengembalikan daftar nama model vadnet.
+    """
+    if not os.path.exists(sdkconfig_path):
+        print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
+        return []
+
+    with io.open(sdkconfig_path, "r", encoding="utf-8") as f:
+        models_string = ''
+        for label in f:
+            label = label.strip("\n")
+            if 'CONFIG_SR_VADN' in label and label[0] != '#':
+                models_string += label
+
+    models = []
+    if "CONFIG_SR_VADN_VADNET1_SMALL" in models_string:
+        models.append('vadnet1_small')
+    elif "CONFIG_SR_VADN_VADNET1_MEDIUM" in models_string:
+        models.append('vadnet1_medium')
+
+    return models
+
+
 def read_wake_word_type_from_sdkconfig(sdkconfig_path):
     """
-    Baca konfigurasi jenis wake word dari sdkconfig.
-
-    Mengembalikan kamus yang berisi informasi jenis wake word.
+    Read wake word type configuration from sdkconfig
+    Returns a dict with wake word type info
     """
     if not os.path.exists(sdkconfig_path):
         print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
@@ -586,7 +623,7 @@ def read_wake_word_type_from_sdkconfig(sdkconfig_path):
             if line.startswith('#'):
                 continue
                 
-            # Periksa konfigurasi jenis wake word.
+            # Check for wake word type configuration
             if 'CONFIG_USE_ESP_WAKE_WORD=y' in line:
                 config_values['use_esp_wake_word'] = True
             elif 'CONFIG_USE_AFE_WAKE_WORD=y' in line:
@@ -601,9 +638,8 @@ def read_wake_word_type_from_sdkconfig(sdkconfig_path):
 
 def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
     """
-    Baca konfigurasi wake word kustom dari sdkconfig.
-
-    Mengembalikan kamus informasi wake word kustom, atau None jika belum diatur.
+    Read custom wake word configuration from sdkconfig
+    Returns a dict with custom wake word info or None if not configured
     """
     if not os.path.exists(sdkconfig_path):
         print(f"Warning: sdkconfig file not found: {sdkconfig_path}")
@@ -616,19 +652,19 @@ def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
             if line.startswith('#') or '=' not in line:
                 continue
                 
-            # Periksa konfigurasi wake word kustom.
+            # Check for custom wake word configuration
             if 'CONFIG_USE_CUSTOM_WAKE_WORD=y' in line:
                 config_values['use_custom_wake_word'] = True
             elif 'CONFIG_CUSTOM_WAKE_WORD=' in line and not line.startswith('#'):
-                # Ambil nilai string tanpa tanda kutip.
+                # Extract string value (remove quotes)
                 value = line.split('=', 1)[1].strip('"')
                 config_values['wake_word'] = value
             elif 'CONFIG_CUSTOM_WAKE_WORD_DISPLAY=' in line and not line.startswith('#'):
-                # Ambil nilai string tanpa tanda kutip.
+                # Extract string value (remove quotes)
                 value = line.split('=', 1)[1].strip('"')
                 config_values['display'] = value
             elif 'CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=' in line and not line.startswith('#'):
-                # Ambil nilai numerik.
+                # Extract numeric value
                 value = line.split('=', 1)[1]
                 try:
                     config_values['threshold'] = int(value)
@@ -637,9 +673,9 @@ def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
                         config_values['threshold'] = float(value)
                     except ValueError:
                         print(f"Warning: Invalid threshold value: {value}")
-                        config_values['threshold'] = 20  # nilai bawaan, nantinya dikonversi menjadi 0.2
+                        config_values['threshold'] = 20  # default (will be converted to 0.2)
     
-    # Kembalikan konfigurasi hanya jika wake word kustom aktif dan field wajib lengkap.
+    # Return config only if custom wake word is enabled and required fields are present
     if (config_values.get('use_custom_wake_word', False) and 
         'wake_word' in config_values and 
         'display' in config_values and 
@@ -647,7 +683,7 @@ def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
         return {
             'wake_word': config_values['wake_word'],
             'display': config_values['display'],
-            'threshold': config_values['threshold'] / 100.0  # Ubah ke bentuk desimal, misalnya 20 menjadi 0.2.
+            'threshold': config_values['threshold'] / 100.0  # Convert to decimal (20 -> 0.2)
         }
     
     return None
@@ -655,34 +691,32 @@ def read_custom_wake_word_from_sdkconfig(sdkconfig_path):
 
 def get_language_from_multinet_models(multinet_models):
     """
-    Tentukan bahasa berdasarkan nama model multinet.
-
-    Mengembalikan `cn`, `en`, atau None.
+    Determine language from multinet model names
+    Returns 'cn', 'en', or None
     """
     if not multinet_models:
         return None
     
-    # Cek apakah ada model bahasa Tionghoa.
+    # Check for Chinese models
     cn_indicators = ['_cn', 'cn_']
     en_indicators = ['_en', 'en_']
     
     has_cn = any(any(indicator in model for indicator in cn_indicators) for model in multinet_models)
     has_en = any(any(indicator in model for indicator in en_indicators) for model in multinet_models)
     
-    # Jika keduanya ada atau tidak ada sama sekali, pakai nilai bawaan cn.
+    # If both or neither, default to cn
     if has_cn and not has_en:
         return 'cn'
     elif has_en and not has_cn:
         return 'en'
     else:
-        return 'cn'  # Gunakan bahasa Tionghoa sebagai nilai bawaan.
+        return 'cn'  # Default to Chinese
 
 
 def get_wakenet_model_paths(model_names, esp_sr_model_path):
     """
-    Ambil path lengkap ke direktori model wakenet.
-
-    Mengembalikan daftar path model yang valid.
+    Get the full paths to the wakenet model directories
+    Returns a list of valid model paths
     """
     if not model_names:
         return []
@@ -700,9 +734,8 @@ def get_wakenet_model_paths(model_names, esp_sr_model_path):
 
 def get_multinet_model_paths(model_names, esp_sr_model_path):
     """
-    Ambil path lengkap ke direktori model multinet.
-
-    Mengembalikan daftar path model yang valid.
+    Get the full paths to the multinet model directories
+    Returns a list of valid model paths
     """
     if not model_names:
         return []
@@ -718,17 +751,54 @@ def get_multinet_model_paths(model_names, esp_sr_model_path):
     return valid_paths
 
 
+def get_nsnet_model_paths(model_names, esp_sr_model_path):
+    """
+    Mengambil path lengkap direktori model nsnet.
+    Mengembalikan daftar path model yang valid.
+    """
+    if not model_names:
+        return []
+
+    valid_paths = []
+    for model_name in model_names:
+        nsnet_model_path = os.path.join(esp_sr_model_path, 'nsnet_model', model_name)
+        if os.path.exists(nsnet_model_path):
+            valid_paths.append(nsnet_model_path)
+        else:
+            print(f"Warning: Nsnet model directory not found: {nsnet_model_path}")
+
+    return valid_paths
+
+
+def get_vadnet_model_paths(model_names, esp_sr_model_path):
+    """
+    Mengambil path lengkap direktori model vadnet.
+    Mengembalikan daftar path model yang valid.
+    """
+    if not model_names:
+        return []
+
+    valid_paths = []
+    for model_name in model_names:
+        vadnet_model_path = os.path.join(esp_sr_model_path, 'vadnet_model', model_name)
+        if os.path.exists(vadnet_model_path):
+            valid_paths.append(vadnet_model_path)
+        else:
+            print(f"Warning: Vadnet model directory not found: {vadnet_model_path}")
+
+    return valid_paths
+
+
 def get_text_font_path(builtin_text_font, xiaozhi_fonts_path):
     """
-    Ambil path font teks jika diperlukan.
-
-    Mengembalikan path berkas font, atau None jika font tidak dibutuhkan.
+    Get the text font path if needed
+    Returns the font file path or None if no font is needed
     """
     if not builtin_text_font or 'basic' not in builtin_text_font:
         return None
     
-    # Ubah nama font dari varian basic ke nama font common.
-    # Contoh: font_puhui_basic_16_4 menjadi font_puhui_common_16_4.bin
+    # Convert from basic to common font name
+    # e.g., font_puhui_basic_16_4 -> font_puhui_common_16_4.bin
     if builtin_text_font.startswith('font_noto_'):
         font_name = builtin_text_font.replace('basic', 'qwen') + '.bin'
     else:
@@ -744,19 +814,18 @@ def get_text_font_path(builtin_text_font, xiaozhi_fonts_path):
 
 def get_emoji_collection_path(default_emoji_collection, xiaozhi_fonts_path, project_root=None):
     """
-    Ambil path koleksi emoji jika diperlukan.
+    Get the emoji collection path if needed
+    Returns the emoji directory path or None if no emoji collection is needed
 
-    Mengembalikan path direktori emoji, atau None jika tidak dibutuhkan.
-
-    Yang didukung:
-    - koleksi emoji PNG dari xiaozhi-fonts seperti `emojis_32` atau `twemoji_64`
-    - koleksi emoji GIF dari xiaozhi-fonts seperti `noto-emoji_128`
-    - koleksi Otto GIF `otto-gif`
+    Supports:
+    - PNG emoji collections from xiaozhi-fonts (e.g., emojis_32, twemoji_64)
+    - GIF emoji collections from xiaozhi-fonts (e.g., noto-emoji_128, noto-emoji_64)
+    - Otto GIF emoji collection (otto-gif)
     """
     if not default_emoji_collection:
         return None
     
-    # Penanganan khusus untuk koleksi otto-gif.
+    # Special handling for otto-gif collection
     if default_emoji_collection == 'otto-gif':
         if project_root:
             otto_gif_path = os.path.join(project_root, 'managed_components', 
@@ -770,12 +839,12 @@ def get_emoji_collection_path(default_emoji_collection, xiaozhi_fonts_path, proj
             print("Warning: project_root not provided, cannot locate otto-gif collection")
             return None
     
-    # Coba dulu koleksi emoji PNG.
+    # Try PNG emoji collections first (e.g., emojis_32, twemoji_64)
     emoji_path = os.path.join(xiaozhi_fonts_path, 'png', default_emoji_collection)
     if os.path.exists(emoji_path):
         return emoji_path
     
-    # Jika tidak ada, coba koleksi emoji GIF.
+    # Try GIF emoji collections (e.g., noto-emoji_128, noto-emoji_64, noto-emoji_32)
     emoji_path = os.path.join(xiaozhi_fonts_path, 'gif', default_emoji_collection)
     if os.path.exists(emoji_path):
         return emoji_path
@@ -784,50 +853,50 @@ def get_emoji_collection_path(default_emoji_collection, xiaozhi_fonts_path, proj
     return None
 
 
-def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path, extra_files_path, output_path, multinet_model_info=None):
+def build_assets_integrated(wakenet_model_paths, multinet_model_paths, nsnet_model_paths, vadnet_model_paths, text_font_path, emoji_collection_path, extra_files_path, output_path, multinet_model_info=None):
     """
-    Bangun aset dengan fungsi terintegrasi tanpa dependensi eksternal tambahan.
+    Build assets using integrated functions (no external dependencies)
     """
-    # Buat direktori build sementara
+    # Create temporary build directory
     temp_build_dir = os.path.join(os.path.dirname(output_path), "temp_build")
     assets_dir = os.path.join(temp_build_dir, "assets")
     
     try:
-        # Bersihkan lalu buat ulang direktori kerja.
+        # Clean and create directories
         if os.path.exists(temp_build_dir):
-            remove_tree_with_retry(temp_build_dir, required=True)
+            shutil.rmtree(temp_build_dir)
         ensure_dir(temp_build_dir)
         ensure_dir(assets_dir)
         
         print("Starting to build assets...")
         
-        # Proses tiap komponen aset.
-        srmodels = process_sr_models(wakenet_model_paths, multinet_model_paths, temp_build_dir, assets_dir) if (wakenet_model_paths or multinet_model_paths) else None
+        # Process each component
+        srmodels = process_sr_models(wakenet_model_paths, multinet_model_paths, nsnet_model_paths, vadnet_model_paths, temp_build_dir, assets_dir) if (wakenet_model_paths or multinet_model_paths or nsnet_model_paths or vadnet_model_paths) else None
         text_font = process_text_font(text_font_path, assets_dir) if text_font_path else None
         emoji_collection = process_emoji_collection(emoji_collection_path, assets_dir) if emoji_collection_path else None
         extra_files = process_extra_files(extra_files_path, assets_dir) if extra_files_path else None
         
-        # Buat index.json.
+        # Generate index.json
         generate_index_json(assets_dir, srmodels, text_font, emoji_collection, extra_files, multinet_model_info)
         
-        # Buat config.json untuk proses pengemasan.
+        # Generate config.json for packing
         config_path = generate_config_json(temp_build_dir, assets_dir)
         
-        # Muat konfigurasi lalu kemas aset.
+        # Load config and pack assets
         with open(config_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
         
-        # Gunakan fungsi pengemasan ringkas.
+        # Use simplified packing function
         include_path = config_data['include_path']
         image_file = config_data['image_file']
         pack_assets_simple(assets_dir, include_path, image_file, "assets", int(config_data['name_length']))
         
-        # Salin assets.bin akhir ke lokasi keluaran.
+        # Copy final assets.bin to output location
         if os.path.exists(image_file):
             shutil.copy2(image_file, output_path)
             print(f"Successfully generated assets.bin: {output_path}")
             
-            # Tampilkan informasi ukuran berkas.
+            # Show size information
             total_size = os.path.getsize(output_path)
             print(f"Assets file size: {total_size / 1024:.2f}K ({total_size} bytes)")
             
@@ -840,9 +909,9 @@ def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font
         print(f"Error: Failed to build assets: {e}")
         return False
     finally:
-        # Bersihkan direktori sementara.
+        # Clean up temporary directory
         if os.path.exists(temp_build_dir):
-            remove_tree_with_retry(temp_build_dir, required=False)
+            shutil.rmtree(temp_build_dir)
 
 
 def main():
@@ -857,9 +926,9 @@ def main():
     
     args = parser.parse_args()
     
-    # Tetapkan path bawaan jika belum diberikan.
+    # Set default paths if not provided
     if not args.esp_sr_model_path or not args.xiaozhi_fonts_path:
-        # Hitung akar proyek dari lokasi skrip.
+        # Calculate project root from script location
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
         
@@ -875,65 +944,73 @@ def main():
     print(f"  emoji_collection: {args.emoji_collection}")
     print(f"  output: {args.output}")
     
-    # Baca konfigurasi jenis wake word dari sdkconfig.
+    # Read wake word type configuration from sdkconfig
     wake_word_config = read_wake_word_type_from_sdkconfig(args.sdkconfig)
     
-    # Baca model SR dari sdkconfig.
+    # Read SR models from sdkconfig
     wakenet_model_names = read_wakenet_from_sdkconfig(args.sdkconfig)
     multinet_model_names = read_multinet_from_sdkconfig(args.sdkconfig)
+    nsnet_model_names = read_nsnet_from_sdkconfig(args.sdkconfig)
+    vadnet_model_names = read_vadnet_from_sdkconfig(args.sdkconfig)
     
-    # Terapkan logika wake word untuk menentukan model yang perlu dikemas.
+    # Apply wake word logic to decide which models to package
     wakenet_model_paths = []
     multinet_model_paths = []
+    nsnet_model_paths = get_nsnet_model_paths(nsnet_model_names, args.esp_sr_model_path)
+    vadnet_model_paths = get_vadnet_model_paths(vadnet_model_names, args.esp_sr_model_path)
     
-    # 1. Kemas model wakenet hanya jika USE_ESP_WAKE_WORD=y atau USE_AFE_WAKE_WORD=y.
+    # 1. Only package wakenet models if USE_ESP_WAKE_WORD=y or USE_AFE_WAKE_WORD=y
     if wake_word_config['use_esp_wake_word'] or wake_word_config['use_afe_wake_word']:
         wakenet_model_paths = get_wakenet_model_paths(wakenet_model_names, args.esp_sr_model_path)
     elif wakenet_model_names:
         print(f"  Note: Found wakenet models {wakenet_model_names} but wake word type is not ESP/AFE, skipping")
     
-    # 2. Cek error: jika USE_CUSTOM_WAKE_WORD=y tetapi tidak ada multinet, laporkan error.
+    # 2. Error check: if USE_CUSTOM_WAKE_WORD=y but no multinet models selected, report error
     if wake_word_config['use_custom_wake_word'] and not multinet_model_names:
         print("Error: USE_CUSTOM_WAKE_WORD is enabled but no multinet models are selected in sdkconfig")
         print("Please select appropriate CONFIG_SR_MN_* options in menuconfig, or disable USE_CUSTOM_WAKE_WORD")
         sys.exit(1)
     
-    # 3. Kemas model multinet hanya jika USE_CUSTOM_WAKE_WORD=y.
+    # 3. Only package multinet models if USE_CUSTOM_WAKE_WORD=y
     if wake_word_config['use_custom_wake_word']:
         multinet_model_paths = get_multinet_model_paths(multinet_model_names, args.esp_sr_model_path)
     elif multinet_model_names:
         print(f"  Note: Found multinet models {multinet_model_names} but USE_CUSTOM_WAKE_WORD is disabled, skipping")
     
-    # Tampilkan informasi model yang benar-benar akan dikemas.
+    # Print model information (only for models that will actually be packaged)
     if wakenet_model_paths:
         print(f"  wakenet models: {', '.join(wakenet_model_names)} (will be packaged)")
     if multinet_model_paths:
         print(f"  multinet models: {', '.join(multinet_model_names)} (will be packaged)")
+    if nsnet_model_paths:
+        print(f"  nsnet models: {', '.join(nsnet_model_names)} (will be packaged)")
+    if vadnet_model_paths:
+        print(f"  vadnet models: {', '.join(vadnet_model_names)} (will be packaged)")
     
-    # Ambil path font teks jika dibutuhkan.
+    # Get text font path if needed
     text_font_path = get_text_font_path(args.builtin_text_font, args.xiaozhi_fonts_path)
     
-    # Ambil path koleksi emoji jika dibutuhkan.
-    # Hitung akar proyek dari lokasi skrip untuk mendukung otto-gif.
+    # Get emoji collection path if needed
+    # Calculate project root from script location for otto-gif support
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     emoji_collection_path = get_emoji_collection_path(args.emoji_collection, args.xiaozhi_fonts_path, project_root)
     
-    # Ambil path berkas tambahan jika disediakan.
+    # Get extra files path if provided
     extra_files_path = args.extra_files
     
-    # Baca konfigurasi wake word kustom.
+    # Read custom wake word configuration
     custom_wake_word_config = read_custom_wake_word_from_sdkconfig(args.sdkconfig)
     multinet_model_info = None
     
     if custom_wake_word_config and multinet_model_paths:
-        # Tentukan bahasa dari model multinet.
+        # Determine language from multinet models
         language = get_language_from_multinet_models(multinet_model_names)
         
-        # Susun struktur informasi multinet_model.
+        # Build multinet_model info structure
         multinet_model_info = {
             "language": language,
-            "duration": 3000,  # Durasi bawaan dalam milidetik.
+            "duration": 3000,  # Default duration in ms
             "threshold": custom_wake_word_config['threshold'],
             "commands": [
                 {
@@ -947,19 +1024,19 @@ def main():
         print(f"  wake word language: {language}")
         print(f"  wake word threshold: {custom_wake_word_config['threshold']}")
     
-    # Pastikan memang ada aset yang perlu dibangun.
-    if not wakenet_model_paths and not multinet_model_paths and not text_font_path and not emoji_collection_path and not extra_files_path and not multinet_model_info:
+    # Check if we have anything to build
+    if not wakenet_model_paths and not multinet_model_paths and not nsnet_model_paths and not vadnet_model_paths and not text_font_path and not emoji_collection_path and not extra_files_path and not multinet_model_info:
         print("Warning: No assets to build (no SR models, text font, emoji collection, extra files, or custom wake word)")
-        # Buat assets.bin kosong.
+        # Create an empty assets.bin file
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
         with open(args.output, 'wb') as f:
-            pass  # Buat berkas kosong
+            pass  # Create empty file
         print(f"Created empty assets.bin: {args.output}")
         return
     
-    # Bangun seluruh aset.
-    success = build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path, 
-                                     extra_files_path, args.output, multinet_model_info)
+    # Build the assets
+    success = build_assets_integrated(wakenet_model_paths, multinet_model_paths, nsnet_model_paths, vadnet_model_paths,
+                                     text_font_path, emoji_collection_path, extra_files_path, args.output, multinet_model_info)
     
     if not success:
         sys.exit(1)

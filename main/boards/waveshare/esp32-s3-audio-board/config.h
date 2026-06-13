@@ -38,7 +38,7 @@
 
 #define DISPLAY_SPI_SCLK_HZ         (20 * 1000 * 1000)
 
-/* Pin kamera */
+/* Camera pins */
 #define CAMERA_PIN_PWDN     GPIO_NUM_NC
 #define CAMERA_PIN_RESET    GPIO_NUM_NC
 #define CAMERA_PIN_XCLK     GPIO_NUM_43

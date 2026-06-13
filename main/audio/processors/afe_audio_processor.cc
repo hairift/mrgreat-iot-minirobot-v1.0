@@ -14,7 +14,7 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     codec_ = codec;
     frame_samples_ = frame_duration_ms * 16000 / 1000;
 
-    // Alokasikan lebih awal kapasitas penyangga keluaran
+    // Siapkan kapasitas penyangga keluaran dari awal.
     output_buffer_.reserve(frame_samples_);
 
     int ref_num = codec_->input_reference() ? 1 : 0;
@@ -33,18 +33,22 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     } else {
         models = models_list;
     }
+    if (models == nullptr) {
+        ESP_LOGE(TAG, "Daftar model ESP-SR tidak tersedia");
+        return;
+    }
 
     char* ns_model_name = esp_srmodel_filter(models, ESP_NSNET_PREFIX, NULL);
     char* vad_model_name = esp_srmodel_filter(models, ESP_VADN_PREFIX, NULL);
     
     afe_config_t* afe_config = afe_config_init(input_format.c_str(), NULL, AFE_TYPE_VC, AFE_MODE_HIGH_PERF);
+    if (afe_config == nullptr) {
+        ESP_LOGE(TAG, "Gagal membuat konfigurasi AFE");
+        return;
+    }
     afe_config->aec_mode = AEC_MODE_VOIP_HIGH_PERF;
-    // Mode ini sedikit lebih ketat terhadap noise, tetapi masih cukup peka untuk perintah pendek.
-    afe_config->vad_mode = VAD_MODE_1;
-    afe_config->vad_min_speech_ms = 64;
-    // Jangan terlalu cepat menutup ucapan agar jeda antarkata tidak memotong transkripsi.
-    afe_config->vad_min_noise_ms = 350;
-    afe_config->vad_delay_ms = 192;
+    afe_config->vad_mode = VAD_MODE_0;
+    afe_config->vad_min_noise_ms = 100;
     if (vad_model_name != nullptr) {
         afe_config->vad_model_name = vad_model_name;
     }
@@ -53,10 +57,13 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
         afe_config->ns_init = true;
         afe_config->ns_model_name = ns_model_name;
         afe_config->afe_ns_mode = AFE_NS_MODE_NET;
+        ESP_LOGI(TAG, "Peredam bising aktif dengan model %s", ns_model_name);
     } else {
         afe_config->ns_init = false;
+        ESP_LOGW(TAG, "Model peredam bising tidak tersedia, AFE berjalan tanpa NS");
     }
 
+    // Hindari penguatan ganda karena level INMP441 sudah mendekati batas PCM.
     afe_config->agc_init = false;
     afe_config->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
 
@@ -69,13 +76,29 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
 #endif
 
     afe_iface_ = esp_afe_handle_from_config(afe_config);
+    if (afe_iface_ == nullptr) {
+        ESP_LOGE(TAG, "Antarmuka AFE tidak tersedia untuk konfigurasi saat ini");
+        afe_config_free(afe_config);
+        return;
+    }
+
     afe_data_ = afe_iface_->create_from_config(afe_config);
+    afe_config_free(afe_config);
+    if (afe_data_ == nullptr) {
+        ESP_LOGE(TAG, "Gagal membuat pemroses audio AFE");
+        return;
+    }
     
-    xTaskCreate([](void* arg) {
+    BaseType_t task_result = xTaskCreate([](void* arg) {
         auto this_ = (AfeAudioProcessor*)arg;
         this_->AudioProcessorTask();
         vTaskDelete(NULL);
     }, "audio_communication", 4096, this, 3, NULL);
+    if (task_result != pdPASS) {
+        ESP_LOGE(TAG, "Gagal membuat tugas pemrosesan audio");
+        afe_iface_->destroy(afe_data_);
+        afe_data_ = nullptr;
+    }
 }
 
 AfeAudioProcessor::~AfeAudioProcessor() {
@@ -98,7 +121,7 @@ void AfeAudioProcessor::Feed(std::vector<int16_t>&& data) {
     }
 
     std::lock_guard<std::mutex> lock(input_buffer_mutex_);
-    // Periksa status berjalan di dalam kunci agar tidak terjadi kondisi balapan dengan Stop()
+    // Periksa status berjalan di dalam kunci agar tidak balapan dengan Stop().
     if (!IsRunning()) {
         return;
     }
@@ -154,12 +177,12 @@ void AfeAudioProcessor::AudioProcessorTask() {
         }
         if (res == nullptr || res->ret_value == ESP_FAIL) {
             if (res != nullptr) {
-                ESP_LOGE(TAG, "Kode error: %d", res->ret_value);
+                ESP_LOGI(TAG, "Kode error: %d", res->ret_value);
             }
             continue;
         }
 
-        // Tangani perubahan status VAD
+        // Perubahan status VAD.
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
                 is_speaking_ = true;
@@ -173,18 +196,18 @@ void AfeAudioProcessor::AudioProcessorTask() {
         if (output_callback_) {
             size_t samples = res->data_size / sizeof(int16_t);
             
-            // Tambahkan data ke penyangga keluaran
+            // Tambahkan data ke penyangga.
             output_buffer_.insert(output_buffer_.end(), res->data, res->data + samples);
             
-            // Keluarkan bingkai penuh saat penyangga sudah mencukupi
+            // Keluarkan bingkai penuh saat penyangga sudah cukup.
             while (output_buffer_.size() >= frame_samples_) {
                 if (output_buffer_.size() == frame_samples_) {
-                    // Jika ukuran penyangga sama persis dengan satu bingkai, pindahkan seluruh penyangga
+                    // Jika ukuran penyangga sama dengan satu bingkai, pindahkan seluruh penyangga.
                     output_callback_(std::move(output_buffer_));
                     output_buffer_.clear();
                     output_buffer_.reserve(frame_samples_);
                 } else {
-                    // Jika penyangga melebihi satu bingkai, salin satu bingkai lalu hapus dari penyangga
+                    // Jika penyangga melebihi satu bingkai, salin satu bingkai lalu hapus dari penyangga.
                     output_callback_(std::vector<int16_t>(output_buffer_.begin(), output_buffer_.begin() + frame_samples_));
                     output_buffer_.erase(output_buffer_.begin(), output_buffer_.begin() + frame_samples_);
                 }
@@ -194,12 +217,17 @@ void AfeAudioProcessor::AudioProcessorTask() {
 }
 
 void AfeAudioProcessor::EnableDeviceAec(bool enable) {
+    if (afe_iface_ == nullptr || afe_data_ == nullptr) {
+        ESP_LOGW(TAG, "AFE belum siap untuk mengubah pengaturan AEC");
+        return;
+    }
+
     if (enable) {
 #if CONFIG_USE_DEVICE_AEC
         afe_iface_->disable_vad(afe_data_);
         afe_iface_->enable_aec(afe_data_);
 #else
-        ESP_LOGE(TAG, "Device AEC is not supported");
+        ESP_LOGE(TAG, "Device AEC tidak didukung");
 #endif
     } else {
         afe_iface_->disable_aec(afe_data_);

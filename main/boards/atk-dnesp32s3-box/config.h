@@ -27,7 +27,7 @@
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT true
 
 
-// Definisi pin
+// Pin Definitions 
 #define LCD_NUM_CS GPIO_NUM_1
 #define LCD_NUM_DC GPIO_NUM_2
 #define LCD_NUM_RD GPIO_NUM_41

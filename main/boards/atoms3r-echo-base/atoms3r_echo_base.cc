@@ -25,10 +25,10 @@
 class Pi4ioe : public I2cDevice {
 public:
     Pi4ioe(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : I2cDevice(i2c_bus, addr) {
-        WriteReg(PI4IOE_REG_IO_PP, 0x00); // Atur ke impedansi tinggi
-        WriteReg(PI4IOE_REG_IO_PULLUP, 0xFF); // Aktifkan pull-up
-        WriteReg(PI4IOE_REG_IO_DIR, 0x6E); // Atur input=0, output=1
-        WriteReg(PI4IOE_REG_IO_OUT, 0xFF); // Atur keluaran ke 1
+        WriteReg(PI4IOE_REG_IO_PP, 0x00); // Set to high-impedance
+        WriteReg(PI4IOE_REG_IO_PULLUP, 0xFF); // Enable pull-up
+        WriteReg(PI4IOE_REG_IO_DIR, 0x6E); // Set input=0, output=1
+        WriteReg(PI4IOE_REG_IO_OUT, 0xFF); // Set outputs to 1
     }
 
     void SetSpeakerMute(bool mute) {
@@ -39,18 +39,18 @@ public:
 class Lp5562 : public I2cDevice {
 public:
     Lp5562(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : I2cDevice(i2c_bus, addr) {
-        WriteReg(0x00, 0B01000000); // Atur chip_en menjadi 1
-        WriteReg(0x08, 0B00000001); // Aktifkan clock internal
-        WriteReg(0x70, 0B00000000); // Atur semua keluaran LED agar dikendalikan melalui register I2C
+        WriteReg(0x00, 0B01000000); // Set chip_en to 1
+        WriteReg(0x08, 0B00000001); // Enable internal clock
+        WriteReg(0x70, 0B00000000); // Configure all LED outputs to be controlled from I2C registers
 
-        // Frekuensi clock PWM 558 Hz
+        // PWM clock frequency 558 Hz
         auto data = ReadReg(0x08);
         data = data | 0B01000000;
         WriteReg(0x08, data);
     }
 
     void SetBrightness(uint8_t brightness) {
-        // Petakan nilai 0 sampai 100 menjadi 0 sampai 255
+        // Map 0~100 to 0~255
         brightness = brightness * 255 / 100;
         WriteReg(0x0E, brightness);
     }
@@ -112,7 +112,7 @@ private:
     bool is_echo_base_connected_ = false;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -167,14 +167,14 @@ private:
             return;
         }
         
-        // Tampilkan halaman kesalahan
+        // Pop error page
         InitializeLp5562();
         InitializeSpi();
         InitializeGc9107Display();
         InitializeButtons();
         GetBacklight()->SetBrightness(100);
         
-        // Pastikan antarmuka sudah disiapkan sebelum menampilkan kesalahan
+        // Ensure UI is set up before displaying error
         display_->SetupUI();
         
         display_->SetStatus(Lang::Strings::ERROR);
@@ -185,7 +185,7 @@ private:
             ESP_LOGE(TAG, "Atomic Echo Base is disconnected");
             vTaskDelay(pdMS_TO_TICKS(1000));
 
-            // Jalankan ulang deteksi
+            // Rerun detection
             I2cDetect();
             if (is_echo_base_connected_) {
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -211,7 +211,7 @@ private:
     }
 
     void InitializeSpi() {
-        ESP_LOGI(TAG, "Inisialisasi bus SPI");
+        ESP_LOGI(TAG, "Initialize SPI bus");
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = GPIO_NUM_21;
         buscfg.miso_io_num = GPIO_NUM_NC;
@@ -225,7 +225,7 @@ private:
     void InitializeGc9107Display() {
         ESP_LOGI(TAG, "Init GC9107 display");
 
-        ESP_LOGI(TAG, "Pasang panel IO");
+        ESP_LOGI(TAG, "Install panel IO");
         esp_lcd_panel_io_handle_t io_handle = NULL;
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = GPIO_NUM_14;
@@ -237,16 +237,16 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &io_handle));
     
-        ESP_LOGI(TAG, "Pasang driver panel GC9A01");
+        ESP_LOGI(TAG, "Install GC9A01 panel driver");
         esp_lcd_panel_handle_t panel_handle = NULL;
         gc9a01_vendor_config_t gc9107_vendor_config = {
             .init_cmds = gc9107_lcd_init_cmds,
             .init_cmds_size = sizeof(gc9107_lcd_init_cmds) / sizeof(gc9a01_lcd_init_cmd_t),
         };
         esp_lcd_panel_dev_config_t panel_config = {};
-        panel_config.reset_gpio_num = GPIO_NUM_48; // Setel ke -1 jika tidak dipakai
+        panel_config.reset_gpio_num = GPIO_NUM_48; // Set to -1 if not use
         panel_config.rgb_endian = LCD_RGB_ENDIAN_BGR;
-        panel_config.bits_per_pixel = 16; // Diatur oleh perintah LCD `3Ah` (16/18)
+        panel_config.bits_per_pixel = 16; // Implemented by LCD command `3Ah` (16/18)
         panel_config.vendor_config = &gc9107_vendor_config;
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_gc9a01(io_handle, &panel_config, &panel_handle));

@@ -18,10 +18,10 @@
 static const sh8601_lcd_init_cmd_t lcd_init_cmds[] = {
     {0xFE, (uint8_t[]) {0x00}, 1, 0},
     {0xC4, (uint8_t[]) {0x80}, 1, 0},
-    {0x3A, (uint8_t[]) {0x55}, 1, 0}, // 0x55 untuk RGB565, 0x77 untuk RGB888
+    {0x3A, (uint8_t[]) {0x55}, 1, 0}, // 0x55 for RGB565, 0x77 for RGB888
     {0x35, (uint8_t[]) {0x00}, 1, 0},
     {0x53, (uint8_t[]) {0x20}, 1, 0},
-    {0x51, (uint8_t[]) {0xFF}, 1, 0}, // Kecerahan
+    {0x51, (uint8_t[]) {0xFF}, 1, 0}, // Brightness
     {0x63, (uint8_t[]) {0xFF}, 1, 0},
     {0x2A, (uint8_t[]) {0x00, 0x06, 0x01, 0xD7}, 4, 0},
     {0x2B, (uint8_t[]) {0x00, 0x00, 0x01, 0xD1}, 4, 0},
@@ -42,7 +42,7 @@ class CustomLcdDisplay : public SpiLcdDisplay {
         uint16_t y1 = area->y1;
         uint16_t y2 = area->y2;
 
-        // Bulatkan area agar kinerja lebih baik
+        // Round area for better performance
         area->x1 = (x1 >> 1) << 1;
         area->y1 = (y1 >> 1) << 1;
         area->x2 = ((x2 >> 1) << 1) + 1;
@@ -61,13 +61,13 @@ class CustomLcdDisplay : public SpiLcdDisplay {
     CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle, esp_lcd_panel_handle_t panel_handle, int width, int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy) : 
     SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy), 
     io_handle_(io_handle) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
-        SetMIRROR_XY(0xC0); // Putar 180 derajat; aman karena hanya bekerja pada perangkat keras
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
+        SetMIRROR_XY(0xC0); // Rotate 180 degrees - this is safe as it only operates on hardware
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
@@ -112,7 +112,7 @@ class CustomBoard : public WifiBoard {
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto &app = Application::GetInstance();
-            // Saat proses awal sebelum terhubung, tombol BOOT masuk ke mode konfigurasi Wi-Fi tanpa restart
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -173,14 +173,14 @@ class CustomBoard : public WifiBoard {
 
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
-        mcp_server.AddTool("self.disp.setbacklight", "Mengatur tingkat kecerahan layar", PropertyList({Property("level", kPropertyTypeInteger, 0, 255)}), [this](const PropertyList &properties) -> ReturnValue {
+        mcp_server.AddTool("self.disp.setbacklight", "设置屏幕亮度", PropertyList({Property("level", kPropertyTypeInteger, 0, 255)}), [this](const PropertyList &properties) -> ReturnValue {
             int level = properties["level"].value<int>();
             ESP_LOGI("setbacklight", "%d", level);
             SetDispbacklight(level);
             return true;
         });
 
-        mcp_server.AddTool("self.disp.network", "Memulai ulang konfigurasi jaringan", PropertyList(), [this](const PropertyList &) -> ReturnValue {
+        mcp_server.AddTool("self.disp.network", "重新配网", PropertyList(), [this](const PropertyList &) -> ReturnValue {
             EnterWifiConfigMode();
             return true;
         });

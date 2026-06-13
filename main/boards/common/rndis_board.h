@@ -28,24 +28,24 @@ protected:
     virtual std::string GetBoardJson() override;
 
     /**
-     * Tangani kejadian jaringan yang dipanggil dari fungsi panggil balik pengelola Wi-Fi.
-     * @param event Tipe kejadian jaringan.
-     * @param data Data tambahan, misalnya SSID untuk kejadian Connecting atau Connected.
+     * Handle network event (called from WiFi manager callbacks)
+     * @param event The network event type
+     * @param data Additional data (e.g., SSID for Connecting/Connected events)
      */
     void OnNetworkEvent(NetworkEvent event, const std::string& data = "");
 
     /**
-     * Mulai percobaan koneksi Wi-Fi.
+     * Start WiFi connection attempt
      */
     void TryWifiConnect();
 
     /**
-     * Masuk ke mode konfigurasi Wi-Fi.
+     * Enter WiFi configuration mode
      */
     void StartWifiConfigMode();
 
     /**
-     * Callback saat koneksi Wi-Fi melewati batas waktu.
+     * WiFi connection timeout callback
      */
     static void OnWifiConnectTimeout(void* arg);
 
@@ -56,8 +56,8 @@ public:
     virtual std::string GetBoardType() override;
     
     /**
-     * Mulai koneksi jaringan secara asinkron.
-     * Fungsi ini kembali segera. Kejadian jaringan diberitahukan melalui fungsi panggil balik yang diatur oleh SetNetworkEventCallback().
+     * Start network connection asynchronously
+     * This function returns immediately. Network events are notified through the callback set by SetNetworkEventCallback().
      */
     virtual void StartNetwork() override;
     

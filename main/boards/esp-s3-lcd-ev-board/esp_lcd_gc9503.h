@@ -5,7 +5,7 @@
  */
 /**
  * @file
- * @brief Driver ESP LCD untuk GC9503
+ * @brief ESP LCD: GC9503
  */
 
 #pragma once
@@ -20,63 +20,63 @@ extern "C" {
 #endif
 
 /**
- * @brief Perintah inisialisasi panel LCD.
+ * @brief LCD panel initialization commands.
  *
  */
 typedef struct {
-    int cmd;                /*<! Perintah LCD yang dipakai */
-    const void *data;       /*<! Buffer yang menyimpan data khusus untuk perintah tersebut */
-    size_t data_bytes;      /*<! Ukuran `data` di memori dalam byte */
-    unsigned int delay_ms;  /*<! Jeda dalam milidetik setelah perintah ini */
+    int cmd;                /*<! The specific LCD command */
+    const void *data;       /*<! Buffer that holds the command specific data */
+    size_t data_bytes;      /*<! Size of `data` in memory, in bytes */
+    unsigned int delay_ms;  /*<! Delay in milliseconds after this command */
 } gc9503_lcd_init_cmd_t;
 
 /**
- * @brief Konfigurasi vendor panel LCD.
+ * @brief LCD panel vendor configuration.
  *
- * @note  Struktur ini perlu diberikan ke field `vendor_config` pada `esp_lcd_panel_dev_config_t`.
+ * @note  This structure needs to be passed to the `vendor_config` field in `esp_lcd_panel_dev_config_t`.
  *
  */
 typedef struct {
-    const esp_lcd_rgb_panel_config_t *rgb_config;   /*!< Konfigurasi panel RGB */
-    const gc9503_lcd_init_cmd_t *init_cmds;         /*!< Penunjuk ke larik perintah inisialisasi. Isi NULL jika memakai perintah bawaan.
-                                                     *   Larik sebaiknya dideklarasikan sebagai `static const` dan ditempatkan di luar fungsi.
-                                                     *   Lihat `vendor_specific_init_default` pada file sumber.
+    const esp_lcd_rgb_panel_config_t *rgb_config;   /*!< RGB panel configuration */
+    const gc9503_lcd_init_cmd_t *init_cmds;         /*!< Pointer to initialization commands array. Set to NULL if using default commands.
+                                                     *   The array should be declared as `static const` and positioned outside the function.
+                                                     *   Please refer to `vendor_specific_init_default` in source file.
                                                      */
-    uint16_t init_cmds_size;                        /*<! Jumlah perintah pada larik di atas */
+    uint16_t init_cmds_size;                        /*<! Number of commands in above array */
     struct {
-        unsigned int mirror_by_cmd: 1;              /*<! Fungsi `mirror()` dijalankan lewat perintah LCD jika bernilai 1.
-                                                     *   Jika tidak, fungsi dijalankan lewat perangkat lunak.
+        unsigned int mirror_by_cmd: 1;              /*<! The `mirror()` function will be implemented by LCD command if set to 1.
+                                                     *   Otherwise, the function will be implemented by software.
                                                      */
-        unsigned int auto_del_panel_io: 1;          /*<! Hapus instance panel IO secara otomatis jika bernilai 1. Semua flag `*_by_cmd` menjadi tidak berlaku.
-                                                     *   Jika pin panel IO berbagi dengan pin antarmuka RGB lain untuk menghemat GPIO,
-                                                     *   setel ke 1 agar panel IO dan pin-pinnya dilepas, kecuali sinyal CS.
+        unsigned int auto_del_panel_io: 1;          /*<! Delete the panel IO instance automatically if set to 1. All `*_by_cmd` flags will be invalid.
+                                                     *   If the panel IO pins are sharing other pins of the RGB interface to save GPIOs,
+                                                     *   Please set it to 1 to release the panel IO and its pins (except CS signal).
                                                      */
     } flags;
 } gc9503_vendor_config_t;
 
 /**
- * @brief Membuat panel LCD untuk model GC9503.
+ * @brief Create LCD panel for model GC9503
  *
- * @note  Saat `auto_del_panel_io` bernilai 1, fungsi ini akan menginisialisasi GC9503 dengan urutan khusus vendor lebih dulu, lalu memanggil `esp_lcd_new_rgb_panel()` untuk membuat panel LCD RGB. Dalam kondisi ini `esp_lcd_panel_init()` hanya menginisialisasi bagian RGB.
- * @note  Saat `auto_del_panel_io` bernilai 0, fungsi ini hanya memanggil `esp_lcd_new_rgb_panel()` untuk membuat panel LCD RGB. Dalam kondisi ini `esp_lcd_panel_init()` akan menginisialisasi GC9503 dan RGB.
- * @note  Inisialisasi khusus vendor bisa berbeda antar pabrikan, jadi urutan inisialisasinya perlu dikonfirmasi ke pemasok LCD.
+ * @note  When `auto_del_panel_io` is set to 1, this function will first initialize the GC9503 with vendor specific initialization and then calls `esp_lcd_new_rgb_panel()` to create an RGB LCD panel. And the `esp_lcd_panel_init()` function will only initialize RGB.
+ * @note  When `auto_del_panel_io` is set to 0, this function will only call `esp_lcd_new_rgb_panel()` to create an RGB LCD panel. And the `esp_lcd_panel_init()` function will initialize both the GC9503 and RGB.
+ * @note  Vendor specific initialization can be different between manufacturers, should consult the LCD supplier for initialization sequence code.
  *
- * @param[in]  io Objek IO panel LCD
- * @param[in]  panel_dev_config Konfigurasi umum perangkat panel (`vendor_config` dan `rgb_config` wajib ada)
- * @param[out] ret_panel Objek panel LCD yang dihasilkan
+ * @param[in]  io LCD panel IO handle
+ * @param[in]  panel_dev_config General panel device configuration (`vendor_config` and `rgb_config` are necessary)
+ * @param[out] ret_panel Returned LCD panel handle
  * @return
- *      - ESP_ERR_INVALID_ARG   jika parameter tidak valid
- *      - ESP_OK                jika berhasil
- *      - selain itu            jika gagal
+ *      - ESP_ERR_INVALID_ARG   if parameter is invalid
+ *      - ESP_OK                on success
+ *      - Otherwise             on fail
  */
 esp_err_t esp_lcd_new_panel_gc9503(const esp_lcd_panel_io_handle_t io, const esp_lcd_panel_dev_config_t *panel_dev_config,
                                    esp_lcd_panel_handle_t *ret_panel);
 
 /**
- * @brief Struktur konfigurasi IO panel SPI 3 kabel.
+ * @brief 3-wire SPI panel IO configuration structure
  *
- * @param[in] line_cfg Konfigurasi jalur SPI
- * @param[in] scl_active_edge Tepi aktif sinyal SCL, 0: tepi naik, 1: tepi turun
+ * @param[in] line_cfg SPI line configuration
+ * @param[in] scl_active_edge SCL signal active edge, 0: rising edge, 1: falling edge
  *
  */
 #define GC9503_PANEL_IO_3WIRE_SPI_CONFIG(line_cfg, scl_active_edge) \
@@ -96,7 +96,7 @@ esp_err_t esp_lcd_new_panel_gc9503(const esp_lcd_panel_io_handle_t io, const esp
     }
 
 /**
- * @brief Struktur timing RGB.
+ * @brief RGB timing structure
  *
  * @note  refresh_rate = (pclk_hz * data_width) / (h_res + hsync_pulse_width + hsync_back_porch + hsync_front_porch)
  *                                              / (v_res + vsync_pulse_width + vsync_back_porch + vsync_front_porch)

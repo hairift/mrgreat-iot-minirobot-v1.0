@@ -19,7 +19,7 @@
 
 class Pmic : public Axp2101 {
 public:
-    // Inisialisasi daya
+    // Power Init
     Pmic(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : Axp2101(i2c_bus, addr) {
         uint8_t data = ReadReg(0x90);
         data |= 0b10110100;
@@ -54,7 +54,7 @@ private:
 
 class Aw9523 : public I2cDevice {
 public:
-    // Inisialisasi IO ekspander
+    // Exanpd IO Init
     Aw9523(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : I2cDevice(i2c_bus, addr) {
         WriteReg(0x02, 0b00000111);  // P0
         WriteReg(0x03, 0b10001111);  // P1
@@ -144,7 +144,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -195,22 +195,22 @@ private:
     void PollTouchpad() {
         static bool was_touched = false;
         static int64_t touch_start_time = 0;
-        const int64_t TOUCH_THRESHOLD_MS = 500;  // Ambang durasi sentuhan, lebih dari 500 ms dianggap tekan lama
+        const int64_t TOUCH_THRESHOLD_MS = 500;  // 触摸时长阈值，超过500ms视为长按
         
         ft6336_->UpdateTouchPoint();
         auto& touch_point = ft6336_->GetTouchPoint();
         
-        // Deteksi awal sentuhan
+        // 检测触摸开始
         if (touch_point.num > 0 && !was_touched) {
             was_touched = true;
-            touch_start_time = esp_timer_get_time() / 1000; // Ubah ke milidetik
+            touch_start_time = esp_timer_get_time() / 1000; // 转换为毫秒
         } 
-        // Deteksi pelepasan sentuhan
+        // 检测触摸释放
         else if (touch_point.num == 0 && was_touched) {
             was_touched = false;
             int64_t touch_duration = (esp_timer_get_time() / 1000) - touch_start_time;
             
-            // Hanya sentuhan singkat yang memicu aksi
+            // 只有短触才触发
             if (touch_duration < TOUCH_THRESHOLD_MS) {
                 auto& app = Application::GetInstance();
                 if (app.GetDeviceState() == kDeviceStateStarting) {
@@ -226,7 +226,7 @@ private:
         ESP_LOGI(TAG, "Init FT6336");
         ft6336_ = new Ft6336(i2c_bus_, 0x38);
         
-        // Buat timer dengan interval 20 ms
+        // 创建定时器，20ms 间隔
         esp_timer_create_args_t timer_args = {
             .callback = [](void* arg) {
                 M5StackCoreS3Board* board = (M5StackCoreS3Board*)arg;

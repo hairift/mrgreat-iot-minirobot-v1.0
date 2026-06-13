@@ -43,21 +43,21 @@
 #define DISPLAY_BACKLIGHT_PIN           GPIO_NUM_20
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 
-// Konfigurasi kartu SD (nonaktif secara bawaan)
-// Aktifkan salah satu opsi berikut dengan memberi nilai 1, lalu sesuaikan pin yang dipakai.
-// Catatan: SDMMC dapat bentrok dengan ESP-Hosted SDIO. Jika memakai ESP-Hosted melalui SDIO,
-// sebaiknya gunakan mode SDSPI untuk kartu SD atau nonaktifkan hosted SDIO.
+// SD Card configuration (disabled by default)
+// Enable one of the following by setting to 1 and set pins accordingly.
+// Note: SDMMC may conflict with ESP-Hosted SDIO. If using ESP-Hosted via SDIO,
+// prefer SDSPI mode for SD card or disable hosted SDIO.
 
-// Mode SDMMC 1-bit/4-bit
+// SDMMC 1-bit/4-bit mode
 #ifndef SDCARD_SDMMC_ENABLED
 #define SDCARD_SDMMC_ENABLED            0
 #endif
-// Lebar bus SDMMC: atur ke 1 atau 4
+// SDMMC bus width: set to 1 or 4
 #ifndef SDCARD_SDMMC_BUS_WIDTH
-// Gunakan lebar bus 4-bit saat mengaktifkan SDMMC
+// Use 4-bit bus width when enabling SDMMC
 #define SDCARD_SDMMC_BUS_WIDTH          4
 #endif
-// Penetapan pin SDMMC, isi dengan pin sebenarnya saat SDMMC diaktifkan
+// SDMMC pin assignments (set to actual pins when enabling SDMMC)
 #ifndef SDCARD_SDMMC_CLK_PIN
 #define SDCARD_SDMMC_CLK_PIN            GPIO_NUM_43  // BSP_SD_CLK
 #endif
@@ -77,7 +77,7 @@
 #define SDCARD_SDMMC_D3_PIN             GPIO_NUM_42  // BSP_SD_D3
 #endif
 
-// Mode SDSPI (memakai bus SPI)
+// SDSPI mode (uses SPI bus)
 #ifndef SDCARD_SDSPI_ENABLED
 #define SDCARD_SDSPI_ENABLED            1
 #endif

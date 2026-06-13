@@ -135,7 +135,7 @@ private:
     bool es8311_detected_ = false;
     
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)0,
             .sda_io_num = GPIO_NUM_48,
@@ -150,13 +150,13 @@ private:
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
 
-        // Inisialisasi XL9555
+        // Initialize XL9555
         xl9555_in_ = new XL9555_IN(i2c_bus_, 0x20);
 
         if (xl9555_in_->GetPingState(0x0020) == 1) {
-            es8311_detected_ = true;    /* Penanda perangkat audio, saat SPK_CTRL_IO bernilai tinggi maka penanda ini bernilai 1 dan dianggap sebagai ES8311 */
+            es8311_detected_ = true;    /* 音频设备标志位，SPK_CTRL_IO为高电平时，该标志位置1，且判定为ES8311 */
         } else {
-            es8311_detected_ = false;    /* Penanda perangkat audio, saat SPK_CTRL_IO bernilai rendah maka penanda ini bernilai 0 dan dianggap sebagai NS4168 */
+            es8311_detected_ = false;    /* 音频设备标志位，SPK_CTRL_IO为低电平时，该标志位置0，且判定为NS4168 */
         }
 
         xl9555_in_->xl9555_cfg();
@@ -165,7 +165,7 @@ private:
     void InitializeATK_ST7789_80_Display() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        /* Konfigurasi pin RD */
+        /* 配置RD引脚 */
         gpio_config_t gpio_init_struct;
         gpio_init_struct.intr_type = GPIO_INTR_DISABLE;
         gpio_init_struct.mode = GPIO_MODE_INPUT_OUTPUT;
@@ -261,9 +261,9 @@ public:
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-        /* Inisialisasi codec berdasarkan hasil deteksi */
+        /* 根据探测结果初始化编解码器 */
         if (es8311_detected_) {
-            /* Gunakan driver ES8311 */
+            /* 使用ES8311 驱动 */
             static Es8311AudioCodec audio_codec(
                 i2c_bus_, 
                 I2C_NUM_0, 

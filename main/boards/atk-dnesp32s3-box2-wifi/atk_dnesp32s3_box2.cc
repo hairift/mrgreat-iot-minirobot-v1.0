@@ -58,7 +58,7 @@ private:
                         self->power_status_ = kDeviceBatterySupply;
                     }
 
-                    /* Jika level baterai turun di bawah batas tertentu, perangkat akan mati otomatis */
+                    /* 低于某个电量，会自动关机 */
                     if (self->power_manager_->low_voltage_ < 2630 && self->power_status_ == kDeviceBatterySupply) {
                         esp_timer_stop(self->power_manager_->timer_handle_);
 
@@ -104,7 +104,7 @@ private:
         });
         power_save_timer_->OnShutdownRequest([this]() {
             if (power_status_ == kDeviceBatterySupply) {
-                GetBacklight()->SetBrightness(0);   
+                GetBacklight()->SetBrightness(0);
                 esp_timer_stop(power_manager_->timer_handle_);
                 esp_io_expander_set_dir( io_exp_handle, XIO_CHG_CTRL, IO_EXPANDER_OUTPUT);
                 esp_io_expander_set_level(io_exp_handle, XIO_CHG_CTRL, 0);
@@ -174,7 +174,7 @@ private:
         assert(ret == ESP_OK);
     }
 
-    // Inisialisasi periferal I2C
+    // Initialize I2C peripheral
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)I2C_NUM_0,
@@ -294,7 +294,7 @@ private:
     void InitializeSt7789Display() {
         ESP_LOGI(TAG, "Install panel IO");
 
-        /* Pin RD */
+        /* RD PIN */
         gpio_config_t gpio_init_struct;
         gpio_init_struct.intr_type = GPIO_INTR_DISABLE;
         gpio_init_struct.mode = GPIO_MODE_INPUT_OUTPUT;
@@ -304,7 +304,7 @@ private:
         gpio_config(&gpio_init_struct);
         gpio_set_level(LCD_PIN_RD, 1);
 
-        /* Pin BL */
+        /* BL PIN */
         gpio_init_struct.pin_bit_mask = 1ull << DISPLAY_BACKLIGHT_PIN;
         gpio_init_struct.pull_down_en = GPIO_PULLDOWN_DISABLE;
         gpio_init_struct.pull_up_en = GPIO_PULLUP_ENABLE;
@@ -452,5 +452,5 @@ public:
 
 DECLARE_BOARD(atk_dnesp32s3_box2_wifi);
 
-// Definisikan variabel anggota statis
+// 定义静态成员变量
 atk_dnesp32s3_box2_wifi* atk_dnesp32s3_box2_wifi::instance_ = nullptr;

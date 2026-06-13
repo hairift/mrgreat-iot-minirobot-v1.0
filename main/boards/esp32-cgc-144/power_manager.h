@@ -26,7 +26,7 @@ private:
     adc_oneshot_unit_handle_t adc_handle_;
 
     void CheckBatteryStatus() {
-        // Ambil status pengisian daya
+        // Get charging status
         bool new_charging_status = gpio_get_level(charging_pin_) == 1;
         if (new_charging_status != is_charging_) {
             is_charging_ = new_charging_status;
@@ -37,14 +37,13 @@ private:
             return;
         }
 
-        // Jika data level baterai belum cukup, baca data baterai lagi
+        // 如果电池电量数据不足，则读取电池电量数据
         if (adc_values_.size() < kBatteryAdcDataCount) {
             ReadBatteryAdcData();
             return;
         }
 
-        // Jika data level baterai sudah cukup, baca ulang setiap
-        // interval kBatteryAdcInterval
+        // 如果电池电量数据充足，则每 kBatteryAdcInterval 个 tick 读取一次电池电量数据
         ticks_++;
         if (ticks_ % kBatteryAdcInterval == 0) {
             ReadBatteryAdcData();
@@ -55,7 +54,7 @@ private:
         int adc_value;
         ESP_ERROR_CHECK(adc_oneshot_read(adc_handle_, ADC_CHANNEL_3, &adc_value));
         
-        // Tambahkan nilai ADC ke antrean
+        // 将 ADC 值添加到队列中
         adc_values_.push_back(adc_value);
         if (adc_values_.size() > kBatteryAdcDataCount) {
             adc_values_.erase(adc_values_.begin());
@@ -66,7 +65,7 @@ private:
         }
         average_adc /= adc_values_.size();
 
-        // Definisikan rentang level baterai
+        // 定义电池电量区间
         const struct {
             uint16_t adc;
             uint8_t level;
@@ -79,15 +78,15 @@ private:
             {2430, 100}
         };
 
-        // Saat nilai berada di bawah batas minimum
+        // 低于最低值时
         if (average_adc < levels[0].adc) {
             battery_level_ = 0;
         }
-        // Saat nilai berada di atas batas maksimum
+        // 高于最高值时
         else if (average_adc >= levels[5].adc) {
             battery_level_ = 100;
         } else {
-            // Gunakan interpolasi linear untuk menghitung nilai di tengah
+            // 线性插值计算中间值
             for (int i = 0; i < 5; i++) {
                 if (average_adc >= levels[i].adc && average_adc < levels[i+1].adc) {
                     float ratio = static_cast<float>(average_adc - levels[i].adc) / (levels[i+1].adc - levels[i].adc);
@@ -97,7 +96,7 @@ private:
             }
         }
 
-        // Periksa status baterai lemah
+        // Check low battery status
         if (adc_values_.size() >= kBatteryAdcDataCount) {
             bool new_low_battery_status = battery_level_ <= kLowBatteryLevel;
             if (new_low_battery_status != is_low_battery_) {
@@ -113,7 +112,7 @@ private:
 
 public:
     PowerManager(gpio_num_t pin) : charging_pin_(pin) {
-        // Inisialisasi pin pengisian daya
+        // 初始化充电引脚
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_INPUT;
@@ -122,7 +121,7 @@ public:
         io_conf.pull_up_en = GPIO_PULLUP_DISABLE;     
         gpio_config(&io_conf);
 
-        // Buat pewaktu pemeriksaan level baterai
+        // 创建电池电量检查定时器
         esp_timer_create_args_t timer_args = {
             .callback = [](void* arg) {
                 PowerManager* self = static_cast<PowerManager*>(arg);
@@ -136,7 +135,7 @@ public:
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer_handle_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(timer_handle_, 1000000));
 
-        // Inisialisasi ADC
+        // 初始化 ADC
         adc_oneshot_unit_init_cfg_t init_config = {
             .unit_id = ADC_UNIT_1,
             .ulp_mode = ADC_ULP_MODE_DISABLE,
@@ -161,7 +160,7 @@ public:
     }
 
     bool IsCharging() {
-        // Jika baterai sudah penuh, jangan tampilkan status mengisi lagi
+        // 如果电量已经满了，则不再显示充电中
         if (battery_level_ == 100) {
             return false;
         }
@@ -169,7 +168,7 @@ public:
     }
 
     bool IsDischarging() {
-        // Status isi dan pakai daya tidak dibedakan, jadi kembalikan kebalikannya
+        // 没有区分充电和放电，所以直接返回相反状态
         return !is_charging_;
     }
 

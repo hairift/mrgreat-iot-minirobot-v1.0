@@ -1,144 +1,127 @@
-import os
-import sys
-import tempfile
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-
+from tkinter import ttk, filedialog, messagebox
 from PIL import Image
+import os
+import tempfile
+import sys
+from LVGLImage import LVGLImage, ColorFormat, CompressMethod
 
-from LVGLImage import ColorFormat, CompressMethod, LVGLImage
+HELP_TEXT = """LVGL图片转换工具使用说明：
 
-HELP_TEXT = """Panduan penggunaan alat konversi gambar LVGL:
+1. 添加文件：点击“添加文件”按钮选择需要转换的图片，支持批量导入
 
-1. Tambah berkas:
-   Klik tombol "Tambah Berkas" untuk memilih gambar yang ingin dikonversi. Impor banyak berkas didukung.
+2. 移除文件：在列表中选中文件前的复选框“[ ]”（选中后会变成“[√]”），点击“移除选中”可删除选定文件
 
-2. Hapus berkas:
-   Pilih kotak "[ ]" pada daftar berkas. Setelah aktif akan berubah menjadi "[x]". Klik "Hapus Pilihan" untuk menghapus berkas yang dipilih.
+3. 设置分辨率：选择需要的分辨率，如128x128
+   建议根据自己的设备的屏幕分辨率来选择。过大和过小都会影响显示效果。
 
-3. Atur resolusi:
-   Pilih resolusi yang dibutuhkan, misalnya 128x128. Sesuaikan dengan resolusi layar perangkat agar hasil tampilannya proporsional.
+4. 颜色格式：选择“自动识别”会根据图片是否透明自动选择，或手动指定
+   除非你了解这个选项，否则建议使用自动识别，不然可能会出现一些意想不到的问题……
 
-4. Format warna:
-   Pilihan "Deteksi Otomatis" akan menyesuaikan format berdasarkan transparansi gambar. Gunakan pilihan ini bila tidak membutuhkan pengaturan manual.
+5. 压缩方式：选择NONE或RLE压缩
+   除非你了解这个选项，否则建议保持默认NONE不压缩
 
-5. Metode kompresi:
-   Pilih NONE atau RLE. Jika tidak ada kebutuhan khusus, gunakan NONE.
+6. 输出目录：设置转换后文件的保存路径
+   默认为程序所在目录下的output文件夹
 
-6. Folder keluaran:
-   Tentukan lokasi penyimpanan hasil konversi. Nilai bawaan menggunakan folder output di direktori program.
-
-7. Mulai konversi:
-   Klik "Konversi Semua Berkas" atau "Konversi Berkas Terpilih" untuk memulai proses.
+7. 转换：点击“转换全部”或“转换选中”开始转换
 """
-
 
 class ImageConverterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Alat Konversi Gambar LVGL")
+        self.root.title("LVGL图片转换工具")
         self.root.geometry("750x650")
-
-        # Inisialisasi variabel.
+        
+        # 初始化变量
         self.output_dir = tk.StringVar(value=os.path.abspath("output"))
         self.resolution = tk.StringVar(value="128x128")
-        self.color_format = tk.StringVar(value="Deteksi Otomatis")
+        self.color_format = tk.StringVar(value="自动识别")
         self.compress_method = tk.StringVar(value="NONE")
 
-        # Buat komponen antarmuka.
+        # 创建UI组件
         self.create_widgets()
         self.redirect_output()
 
     def create_widgets(self):
-        # Bingkai pengaturan konversi.
-        settings_frame = ttk.LabelFrame(self.root, text="Pengaturan Konversi")
+        # 参数设置框架
+        settings_frame = ttk.LabelFrame(self.root, text="转换设置")
         settings_frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
-        # Pengaturan resolusi.
-        ttk.Label(settings_frame, text="Resolusi:").grid(row=0, column=0, padx=2)
-        ttk.Combobox(
-            settings_frame,
-            textvariable=self.resolution,
-            values=["512x512", "256x256", "128x128", "64x64", "32x32"],
-            width=8,
-        ).grid(row=0, column=1, padx=2)
+        # 分辨率设置
+        ttk.Label(settings_frame, text="分辨率:").grid(row=0, column=0, padx=2)
+        ttk.Combobox(settings_frame, textvariable=self.resolution, 
+                    values=["512x512", "256x256", "128x128", "64x64", "32x32"], width=8).grid(row=0, column=1, padx=2)
 
-        # Format warna.
-        ttk.Label(settings_frame, text="Format Warna:").grid(row=0, column=2, padx=2)
-        ttk.Combobox(
-            settings_frame,
-            textvariable=self.color_format,
-            values=["Deteksi Otomatis", "RGB565", "RGB565A8"],
-            width=16,
-        ).grid(row=0, column=3, padx=2)
+        # 颜色格式
+        ttk.Label(settings_frame, text="颜色格式:").grid(row=0, column=2, padx=2)
+        ttk.Combobox(settings_frame, textvariable=self.color_format,
+                    values=["自动识别", "RGB565", "RGB565A8"], width=10).grid(row=0, column=3, padx=2)
 
-        # Metode kompresi.
-        ttk.Label(settings_frame, text="Kompresi:").grid(row=0, column=4, padx=2)
-        ttk.Combobox(
-            settings_frame,
-            textvariable=self.compress_method,
-            values=["NONE", "RLE"],
-            width=8,
-        ).grid(row=0, column=5, padx=2)
+        # 压缩方式
+        ttk.Label(settings_frame, text="压缩方式:").grid(row=0, column=4, padx=2)
+        ttk.Combobox(settings_frame, textvariable=self.compress_method,
+                    values=["NONE", "RLE"], width=8).grid(row=0, column=5, padx=2)
 
-        # Bingkai pengelolaan berkas.
-        file_frame = ttk.LabelFrame(self.root, text="Pilih Berkas")
+        # 文件操作框架
+        file_frame = ttk.LabelFrame(self.root, text="选取文件")
         file_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
 
-        # Tombol pengelolaan berkas.
+        # 文件操作按钮
         btn_frame = ttk.Frame(file_frame)
         btn_frame.pack(fill=tk.X, pady=2)
-        ttk.Button(btn_frame, text="Tambah Berkas", command=self.select_files).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Hapus Pilihan", command=self.remove_selected).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Kosongkan Daftar", command=self.clear_files).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="添加文件", command=self.select_files).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="移除选中", command=self.remove_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="清空列表", command=self.clear_files).pack(side=tk.LEFT, padx=2)
 
-        # Daftar berkas menggunakan Treeview.
-        self.tree = ttk.Treeview(file_frame, columns=("selected", "filename"), show="headings", height=10)
-        self.tree.heading("selected", text="Pilih", anchor=tk.W)
-        self.tree.heading("filename", text="Nama Berkas", anchor=tk.W)
+        # 文件列表（Treeview）
+        self.tree = ttk.Treeview(file_frame, columns=("selected", "filename"), 
+                               show="headings", height=10)
+        self.tree.heading("selected", text="选择", anchor=tk.W)
+        self.tree.heading("filename", text="文件名", anchor=tk.W)
         self.tree.column("selected", width=60, anchor=tk.W)
         self.tree.column("filename", width=600, anchor=tk.W)
         self.tree.pack(fill=tk.BOTH, expand=True)
         self.tree.bind("<ButtonRelease-1>", self.on_tree_click)
 
-        # Folder keluaran.
-        output_frame = ttk.LabelFrame(self.root, text="Folder Keluaran")
+        # 输出目录
+        output_frame = ttk.LabelFrame(self.root, text="输出目录")
         output_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
         ttk.Entry(output_frame, textvariable=self.output_dir, width=60).pack(side=tk.LEFT, padx=5)
-        ttk.Button(output_frame, text="Telusuri", command=self.select_output_dir).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(output_frame, text="浏览", command=self.select_output_dir).pack(side=tk.RIGHT, padx=5)
 
-        # Tombol konversi dan bantuan.
+        # 转换按钮和帮助按钮
         convert_frame = ttk.Frame(self.root)
         convert_frame.grid(row=3, column=0, padx=10, pady=10)
-        ttk.Button(convert_frame, text="Konversi Semua Berkas", command=lambda: self.start_conversion(True)).pack(side=tk.LEFT, padx=5)
-        ttk.Button(convert_frame, text="Konversi Berkas Terpilih", command=lambda: self.start_conversion(False)).pack(side=tk.LEFT, padx=5)
-        ttk.Button(convert_frame, text="Bantuan", command=self.show_help).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(convert_frame, text="转换全部文件", command=lambda: self.start_conversion(True)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(convert_frame, text="转换选中文件", command=lambda: self.start_conversion(False)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(convert_frame, text="帮助", command=self.show_help).pack(side=tk.RIGHT, padx=5)
 
-        # Area log beserta tombol bersihkan.
-        log_frame = ttk.LabelFrame(self.root, text="Log")
+        # 日志区域（新增清空按钮部分）
+        log_frame = ttk.LabelFrame(self.root, text="日志")
         log_frame.grid(row=4, column=0, padx=10, pady=5, sticky="nsew")
-
-        # Bingkai tombol pada area log.
+        
+        # 添加按钮框架
         log_btn_frame = ttk.Frame(log_frame)
         log_btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
-
-        # Tombol pembersih log.
-        ttk.Button(log_btn_frame, text="Kosongkan Log", command=self.clear_log).pack(side=tk.RIGHT, padx=5, pady=2)
-
+        
+        # 清空日志按钮
+        ttk.Button(log_btn_frame, text="清空日志", command=self.clear_log).pack(side=tk.RIGHT, padx=5, pady=2)
+        
         self.log_text = tk.Text(log_frame, height=15)
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        # Konfigurasi tata letak.
+        # 布局配置
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
         self.root.rowconfigure(4, weight=1)
 
     def clear_log(self):
-        """Kosongkan isi log."""
+        """清空日志内容"""
         self.log_text.delete(1.0, tk.END)
 
     def show_help(self):
-        messagebox.showinfo("Bantuan", HELP_TEXT)
+        messagebox.showinfo("帮助", HELP_TEXT)
 
     def redirect_output(self):
         class StdoutRedirector:
@@ -161,9 +144,9 @@ class ImageConverterApp:
         if region == "cell":
             col = self.tree.identify_column(event.x)
             item = self.tree.identify_row(event.y)
-            if col == "#1":  # Kolom pertama adalah kolom pilihan.
+            if col == "#1":  # 点击的是选中列
                 current_val = self.tree.item(item, "values")[0]
-                new_val = "[x]" if current_val == "[ ]" else "[ ]"
+                new_val = "[√]" if current_val == "[ ]" else "[ ]"
                 self.tree.item(item, values=(new_val, self.tree.item(item, "values")[1]))
 
     def select_output_dir(self):
@@ -172,14 +155,14 @@ class ImageConverterApp:
             self.output_dir.set(path)
 
     def select_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("Berkas Gambar", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")])
-        for file_path in files:
-            self.tree.insert("", tk.END, values=("[ ]", os.path.basename(file_path)), tags=(file_path,))
+        files = filedialog.askopenfilenames(filetypes=[("图片文件", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")])
+        for f in files:
+            self.tree.insert("", tk.END, values=("[ ]", os.path.basename(f)), tags=(f,))
 
     def remove_selected(self):
         to_remove = []
         for item in self.tree.get_children():
-            if self.tree.item(item, "values")[0] == "[x]":
+            if self.tree.item(item, "values")[0] == "[√]":
                 to_remove.append(item)
         for item in reversed(to_remove):
             self.tree.delete(item)
@@ -192,78 +175,77 @@ class ImageConverterApp:
         input_files = [
             self.tree.item(item, "tags")[0]
             for item in self.tree.get_children()
-            if convert_all or self.tree.item(item, "values")[0] == "[x]"
+            if convert_all or self.tree.item(item, "values")[0] == "[√]"
         ]
-
+        
         if not input_files:
-            msg = "Tidak ada berkas yang bisa dikonversi." if convert_all else "Belum ada berkas yang dipilih."
-            messagebox.showwarning("Peringatan", msg)
+            msg = "没有找到可转换的文件" if convert_all else "没有选中任何文件"
+            messagebox.showwarning("警告", msg)
             return
-
+        
         os.makedirs(self.output_dir.get(), exist_ok=True)
-
-        # Urai parameter konversi.
-        width, height = map(int, self.resolution.get().split("x"))
+        
+        # 解析转换参数
+        width, height = map(int, self.resolution.get().split('x'))
         compress = CompressMethod.RLE if self.compress_method.get() == "RLE" else CompressMethod.NONE
 
-        # Jalankan konversi.
+        # 执行转换
         self.convert_images(input_files, width, height, compress)
 
     def convert_images(self, input_files, width, height, compress):
         success_count = 0
         total_files = len(input_files)
-
-        for file_path in input_files:
+        
+        for idx, file_path in enumerate(input_files):
             try:
-                print(f"Sedang memproses: {os.path.basename(file_path)}")
-
-                with Image.open(file_path) as image:
-                    # Ubah ukuran gambar sesuai resolusi target.
-                    image = image.resize((width, height), Image.Resampling.LANCZOS)
-
-                    # Tentukan format warna yang dipakai.
+                print(f"正在处理: {os.path.basename(file_path)}")
+                
+                with Image.open(file_path) as img:
+                    # 调整图片大小
+                    img = img.resize((width, height), Image.Resampling.LANCZOS)
+                    
+                    # 处理颜色格式
                     color_format_str = self.color_format.get()
-                    if color_format_str == "Deteksi Otomatis":
-                        # Periksa apakah gambar memiliki kanal transparansi.
-                        has_alpha = image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info)
+                    if color_format_str == "自动识别":
+                        # 检测透明通道
+                        has_alpha = img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info)
                         if has_alpha:
-                            image = image.convert("RGBA")
-                            color_format = ColorFormat.RGB565A8
+                            img = img.convert('RGBA')
+                            cf = ColorFormat.RGB565A8
                         else:
-                            image = image.convert("RGB")
-                            color_format = ColorFormat.RGB565
+                            img = img.convert('RGB')
+                            cf = ColorFormat.RGB565
                     else:
                         if color_format_str == "RGB565A8":
-                            image = image.convert("RGBA")
-                            color_format = ColorFormat.RGB565A8
+                            img = img.convert('RGBA')
+                            cf = ColorFormat.RGB565A8
                         else:
-                            image = image.convert("RGB")
-                            color_format = ColorFormat.RGB565
+                            img = img.convert('RGB')
+                            cf = ColorFormat.RGB565
 
-                    # Simpan gambar hasil penyesuaian resolusi.
+                    # 保存调整后的图片
                     base_name = os.path.splitext(os.path.basename(file_path))[0]
                     output_image_path = os.path.join(self.output_dir.get(), f"{base_name}_{width}x{height}.png")
-                    image.save(output_image_path, "PNG")
+                    img.save(output_image_path, 'PNG')
 
-                    # Buat berkas sementara untuk sumber konversi LVGL.
+                    # 创建临时文件
                     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
                         temp_path = tmpfile.name
-                        image.save(temp_path, "PNG")
+                        img.save(temp_path, 'PNG')
 
-                    # Ubah menjadi array C untuk LVGL.
-                    lvgl_img = LVGLImage().from_png(temp_path, cf=color_format)
+                    # 转换为LVGL C数组
+                    lvgl_img = LVGLImage().from_png(temp_path, cf=cf)
                     output_c_path = os.path.join(self.output_dir.get(), f"{base_name}.c")
                     lvgl_img.to_c_array(output_c_path, compress=compress)
 
                     success_count += 1
                     os.unlink(temp_path)
-                    print(f"Berhasil dikonversi: {base_name}.c\n")
+                    print(f"成功转换: {base_name}.c\n")
 
-            except Exception as exc:
-                print(f"Konversi gagal: {str(exc)}\n")
+            except Exception as e:
+                print(f"转换失败: {str(e)}\n")
 
-        print(f"Konversi selesai. Berhasil {success_count}/{total_files} berkas.\n")
-
+        print(f"转换完成! 成功 {success_count}/{total_files} 个文件\n")
 
 if __name__ == "__main__":
     root = tk.Tk()

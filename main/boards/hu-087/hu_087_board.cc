@@ -43,7 +43,7 @@ class Hu087Board : public WifiBoard {
     }
 
     void InitializeSsd1306Display() {
-        // Konfigurasi SSD1306
+        // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
             .on_color_trans_done = nullptr,
@@ -63,7 +63,7 @@ class Hu087Board : public WifiBoard {
         ESP_ERROR_CHECK(
             esp_lcd_new_panel_io_i2c_v2(display_i2c_bus_, &io_config, &panel_io_));
 
-        ESP_LOGI(TAG, "Memasang driver SSD1306");
+        ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = -1;
         panel_config.bits_per_pixel = 1;
@@ -75,18 +75,18 @@ class Hu087Board : public WifiBoard {
 
         ESP_ERROR_CHECK(
             esp_lcd_new_panel_ssd1306(panel_io_, &panel_config, &panel_));
-        ESP_LOGI(TAG, "Driver SSD1306 berhasil dipasang");
+        ESP_LOGI(TAG, "SSD1306 driver installed");
 
-        // Atur ulang layar
+        // Reset the display
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
         if (esp_lcd_panel_init(panel_) != ESP_OK) {
-            ESP_LOGE(TAG, "Gagal menginisialisasi layar");
+            ESP_LOGE(TAG, "Failed to initialize display");
             display_ = new NoDisplay();
             return;
         }
 
-        // Nyalakan layar
-        ESP_LOGI(TAG, "Menyalakan layar");
+        // Set the display to on
+        ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT,

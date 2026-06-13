@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi papan AtomEchoS3R
+// AtomEchoS3R Board configuration
 
 #include <driver/gpio.h>
 

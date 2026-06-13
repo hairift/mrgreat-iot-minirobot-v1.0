@@ -23,7 +23,7 @@ typedef enum {
     BSP_ADC_BUTTON_NUM
 } bsp_adc_button_t;
 
-// Inisialisasi ILI9341 dengan perintah khusus
+// Init ili9341 by custom cmd
 static const ili9341_lcd_init_cmd_t vendor_specific_init[] = {
     {0xC8, (uint8_t []){0xFF, 0x93, 0x42}, 3, 0},
     {0xC0, (uint8_t []){0x0E, 0x0E}, 2, 0},
@@ -55,7 +55,7 @@ private:
     LcdDisplay* display_;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -105,7 +105,7 @@ private:
     }
 
     void InitializeButtons() {
-        /* Inisialisasi ADC karena tiga tombol pertama di esp-box lite memakai tombol berbasis ADC, bukan GPIO */
+        /* Initialize ADC  esp-box lite的前三个按钮采用是的adc按钮，而非gpio */
         button_adc_config_t adc_cfg = {};
         adc_cfg.adc_channel = ADC_CHANNEL_0; // ADC1 channel 0 is GPIO1
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)        
@@ -154,7 +154,7 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Inisialisasi antarmuka IO pengendali layar
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = GPIO_NUM_5;
@@ -166,7 +166,7 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi pengendali layar
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         const ili9341_vendor_config_t vendor_config = {
             .init_cmds = &vendor_specific_init[0],

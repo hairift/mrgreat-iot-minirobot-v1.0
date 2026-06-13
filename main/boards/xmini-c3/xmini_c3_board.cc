@@ -40,7 +40,7 @@ private:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -55,7 +55,7 @@ private:
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
 
-        // Periksa koneksi bus I2C
+        // Print I2C bus info
         if (i2c_master_probe(codec_i2c_bus_, 0x18, 1000) != ESP_OK) {
             while (true) {
                 ESP_LOGE(TAG, "Failed to probe I2C bus, please check if you have installed the correct firmware");
@@ -65,7 +65,7 @@ private:
     }
 
     void InitializeSsd1306Display() {
-        // Konfigurasi SSD1306
+        // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
             .on_color_trans_done = nullptr,
@@ -83,7 +83,7 @@ private:
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(codec_i2c_bus_, &io_config, &panel_io_));
 
-        ESP_LOGI(TAG, "Memasang driver SSD1306");
+        ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = -1;
         panel_config.bits_per_pixel = 1;
@@ -94,18 +94,18 @@ private:
         panel_config.vendor_config = &ssd1306_config;
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(panel_io_, &panel_config, &panel_));
-        ESP_LOGI(TAG, "Driver SSD1306 berhasil dipasang");
+        ESP_LOGI(TAG, "SSD1306 driver installed");
 
-        // Reset layar
+        // Reset the display
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
         if (esp_lcd_panel_init(panel_) != ESP_OK) {
-            ESP_LOGE(TAG, "Gagal menginisialisasi layar");
+            ESP_LOGE(TAG, "Failed to initialize display");
             display_ = new NoDisplay();
             return;
         }
 
-        // Nyalakan layar
-        ESP_LOGI(TAG, "Menyalakan layar");
+        // Set the display to on
+        ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
@@ -150,8 +150,8 @@ public:
         InitializePowerSaveTimer();
         InitializeTools();
 
-        // Untuk menghindari firmware yang salah, operasi EFUSE diletakkan paling akhir
-        // Gunakan pin VDD SPI milik ESP32-C3 sebagai GPIO biasa
+        // 避免使用错误的固件，把 EFUSE 操作放在最后
+        // 把 ESP32C3 的 VDD SPI 引脚作为普通 GPIO 口使用
         esp_efuse_write_field_bit(ESP_EFUSE_VDD_SPI_AS_GPIO);
     }
 

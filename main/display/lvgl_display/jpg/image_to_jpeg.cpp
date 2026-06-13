@@ -37,7 +37,7 @@ static __always_inline uint8_t expand_6_to_8(uint8_t v) {
 
 static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width, uint16_t height, v4l2_pix_fmt_t format,
                                              jpeg_pixel_format_t* out_fmt, int* out_size) {
-    // Format GRAY dipakai langsung sebagai masukan JPEG_PIXEL_FORMAT_GRAY
+    // GRAY 直接作为 JPEG_PIXEL_FORMAT_GRAY 输入
     if (format == V4L2_PIX_FMT_GREY) {
         int sz = (int)width * (int)height;
         uint8_t* buf = (uint8_t*)jpeg_calloc_align(sz, 16);
@@ -51,7 +51,7 @@ static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width,
         return buf;
     }
 
-    // Format V4L2 YUYV (Y Cb Y Cr) dapat langsung dipakai sebagai masukan JPEG_PIXEL_FORMAT_YCbYCr
+    // V4L2 YUYV (Y Cb Y Cr) 可直接作为 JPEG_PIXEL_FORMAT_YCbYCr 输入
     if (format == V4L2_PIX_FMT_YUYV) {
         int sz = (int)width * (int)height * 2;
         uint8_t* buf = (uint8_t*)jpeg_calloc_align(sz, 16);
@@ -65,8 +65,8 @@ static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width,
         return buf;
     }
 
-    // Format V4L2 UYVY (Cb Y Cr Y) diurut ulang menjadi YUYV sebelum dipakai sebagai masukan YCbYCr
-    // Pada versi saat ini format UYVY belum dipakai
+    // V4L2 UYVY (Cb Y Cr Y) -> 重排为 YUYV 再作为 YCbYCr 输入
+    // 当前版本暂时不会出现 UYVY 格式
     if (format == V4L2_PIX_FMT_UYVY) [[unlikely]] {
         int sz = (int)width * (int)height * 2;
         const uint8_t* s = src;
@@ -90,8 +90,8 @@ static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width,
         return buf;
     }
 
-    // Format V4L2 YUV422P (YUV422 planar) diurut ulang menjadi YUYV (YCbYCr)
-    // Pada versi saat ini format YUV422P belum dipakai
+    // V4L2 YUV422P (YUV422 Planar) -> 重排为 YUYV (YCbYCr)
+    // 当前版本暂时不会出现 YUV422P 格式
     if (format == V4L2_PIX_FMT_YUV422P) [[unlikely]] {
         int sz = (int)width * (int)height * 2;
         const uint8_t* y_plane = src;
@@ -124,8 +124,8 @@ static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width,
         return buf;
     }
 
-    // Format RGB diubah dulu ke YUV422 (YCbYCr) sebelum dipakai sebagai masukan
-    // Lihat penjelasan di https://github.com/78/xiaozhi-esp32/issues/1380#issuecomment-3497156378
+    // RGB 转换为 YUV422 (YCbYCr) 再输入
+    // 见 https://github.com/78/xiaozhi-esp32/issues/1380#issuecomment-3497156378
     else if (format == V4L2_PIX_FMT_RGB24 || format == V4L2_PIX_FMT_RGB565 || format == V4L2_PIX_FMT_RGB565X) {
         esp_imgfx_pixel_fmt_t in_pixel_fmt = ESP_IMGFX_PIXEL_FMT_RGB888;
         uint32_t src_len = 0;
@@ -138,7 +138,7 @@ static uint8_t* convert_input_to_encoder_buf(const uint8_t* src, uint16_t width,
                 in_pixel_fmt = ESP_IMGFX_PIXEL_FMT_RGB565_LE;
                 src_len = static_cast<uint32_t>(width * height * 2);
                 break;
-            [[unlikely]] case V4L2_PIX_FMT_RGB565X: // Pada versi saat ini format RGB565X belum dipakai
+            [[unlikely]] case V4L2_PIX_FMT_RGB565X: // 当前版本暂时不会出现 RGB565X
                 in_pixel_fmt = ESP_IMGFX_PIXEL_FMT_RGB565_BE;
                 src_len = static_cast<uint32_t>(width * height * 2);
                 break;
@@ -256,7 +256,7 @@ static uint8_t* convert_input_to_hw_encoder_buf(const uint8_t* src, uint16_t wid
     }
 
     if (format == V4L2_PIX_FMT_YUYV) {
-        // Perangkat keras membutuhkan format big-endian | Y1 V Y0 U | sehingga perlu bswap16
+        // 硬件需要 | Y1 V Y0 U | 的“大端”格式，因此需要 bswap16
         int sz = (int)width * (int)height * 2;
         uint16_t* buf = (uint16_t*)malloc_psram(sz);
         if (!buf)
@@ -380,7 +380,7 @@ static bool encode_with_esp_new_jpeg(const uint8_t* src, size_t src_len, uint16_
         return false;
     }
 
-    // Perkiraan buffer keluaran: 1,5 kali lebar x tinggi ditambah 64 KB
+    // 估算输出缓冲区：宽高的 1.5 倍 + 64KB
     size_t out_cap = (size_t)width * (size_t)height * 3 / 2 + 64 * 1024;
     if (out_cap < 128 * 1024)
         out_cap = 128 * 1024;
@@ -405,7 +405,7 @@ static bool encode_with_esp_new_jpeg(const uint8_t* src, size_t src_len, uint16_
 
     if (cb) {
         cb(cb_arg, 0, outbuf, (size_t)out_len);
-        cb(cb_arg, 1, NULL, 0);  // Sinyal akhir
+        cb(cb_arg, 1, NULL, 0);  // 结束信号
         free(outbuf);
         if (jpg_out)
             *jpg_out = NULL;
@@ -443,7 +443,7 @@ bool image_to_jpeg(uint8_t* src, size_t src_len, uint16_t width, uint16_t height
     if (encode_with_hw_jpeg(src, src_len, width, height, format, quality, out, out_len, NULL, NULL)) {
         return true;
     }
-    // Gunakan esp_new_jpeg sebagai cadangan
+    // Fallback to esp_new_jpeg
 #endif
     return encode_with_esp_new_jpeg(src, src_len, width, height, format, quality, out, out_len, NULL, NULL);
 }
@@ -453,7 +453,7 @@ bool image_to_jpeg_cb(uint8_t* src, size_t src_len, uint16_t width, uint16_t hei
 #ifdef CONFIG_XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
     if (format == V4L2_PIX_FMT_JPEG) {
         cb(arg, 0, src, src_len);
-        cb(arg, 1, nullptr, 0); // Sinyal akhir
+        cb(arg, 1, nullptr, 0); // end signal
         return true;
     }
 #endif // CONFIG_XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
@@ -461,7 +461,7 @@ bool image_to_jpeg_cb(uint8_t* src, size_t src_len, uint16_t width, uint16_t hei
     if (encode_with_hw_jpeg(src, src_len, width, height, format, quality, NULL, NULL, cb, arg)) {
         return true;
     }
-    // Gunakan esp_new_jpeg sebagai cadangan
+    // Fallback to esp_new_jpeg
 #endif
     return encode_with_esp_new_jpeg(src, src_len, width, height, format, quality, NULL, NULL, cb, arg);
 }

@@ -1,45 +1,27 @@
-# Panduan Konfigurasi BluFi
+# Konfigurasi BluFi
 
-Dokumen ini menjelaskan cara mengaktifkan dan menggunakan BluFi untuk provisioning Wi-Fi pada firmware ini.
+BluFi dipakai untuk mengirim konfigurasi Wi-Fi ke perangkat saat belum ada SSID yang tersimpan. Pada firmware Mr Great, jalur utama tetap memakai Wi-Fi station, sedangkan BluFi menjadi opsi provisioning jika dibutuhkan.
 
-## Tujuan
+## Alur Dasar
 
-BluFi dipakai ketika perangkat perlu menerima SSID dan kata sandi Wi-Fi melalui BLE. Jalur ini cocok untuk kondisi awal saat perangkat belum memiliki jaringan tersimpan.
+1. Perangkat menyala dan memeriksa konfigurasi Wi-Fi tersimpan.
+2. Jika konfigurasi belum ada atau gagal tersambung, mode provisioning dapat dijalankan.
+3. Pengguna mengirim SSID dan kata sandi melalui aplikasi atau alat yang mendukung BluFi.
+4. Perangkat menyimpan konfigurasi lalu mencoba koneksi ulang.
 
-## Prasyarat
+## Catatan Keamanan
 
-- papan dan firmware mendukung BLE
-- NVS aktif dan loop event bawaan sudah berjalan
-- hanya satu stack Bluetooth yang diaktifkan sesuai konfigurasi proyek
+- Jangan menulis SSID dan kata sandi secara permanen di source code.
+- Gunakan koneksi provisioning hanya saat dibutuhkan.
+- Setelah Wi-Fi tersambung, pastikan perangkat kembali ke mode operasi normal.
 
-## Pengaturan Menuconfig
+## Validasi
 
-Aktifkan metode konfigurasi Wi-Fi berbasis BluFi sesuai opsi proyek yang tersedia. Jangan aktifkan provisioning hotspot pada saat yang sama jika ingin memaksa jalur BluFi.
+```powershell
+cd E:\MrGreat-IOT-ESP32\MrGreat-esp32-main
+idf.py build
+idf.py -p COM3 flash
+idf.py -p COM3 monitor
+```
 
-## Alur Kerja
-
-1. Perangkat masuk ke mode provisioning.
-2. Aplikasi ponsel terhubung ke perangkat melalui BluFi.
-3. SSID dan kata sandi dikirim ke perangkat.
-4. Perangkat menyimpan kredensial dan mencoba tersambung ke Wi-Fi.
-5. Status koneksi dikirim kembali ke aplikasi.
-
-## Langkah Penggunaan
-
-1. Kompilasi lalu tulis firmware dengan BluFi aktif.
-2. Nyalakan perangkat dari kondisi tanpa Wi-Fi tersimpan.
-3. Buka aplikasi klien BluFi di ponsel.
-4. Pilih perangkat, lalu kirim SSID dan kata sandi.
-5. Pastikan perangkat berhasil tersambung dan menyimpan konfigurasi.
-
-## Hal yang Perlu Diperhatikan
-
-- jangan mengaktifkan dua metode provisioning sekaligus bila tidak dibutuhkan
-- jika pengujian diulang berkali-kali, hapus kredensial Wi-Fi lama agar hasil tidak rancu
-- gunakan aplikasi klien yang mengikuti format paket BluFi resmi
-
-## Verifikasi
-
-- perangkat menerima kredensial
-- perangkat dapat tersambung ke access point
-- perangkat dapat menyambung ulang otomatis setelah restart
+Perhatikan log Wi-Fi. Perangkat harus bisa mendapatkan alamat IP dan masuk ke state `idle` tanpa reboot loop.

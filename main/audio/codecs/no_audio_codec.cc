@@ -2,10 +2,36 @@
 
 #include <esp_err.h>
 #include <esp_log.h>
+#include <freertos/FreeRTOS.h>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 
 #define TAG "NoAudioCodec"
+
+namespace {
+
+int16_t ApplySoftwareInputGain(int16_t sample, float gain) {
+    if (gain <= 1.0f) {
+        return sample;
+    }
+
+    constexpr float kLimit = 32767.0f;
+    constexpr float kSoftKnee = 24576.0f;
+    float value = static_cast<float>(sample) * gain;
+    float magnitude = std::fabs(value);
+    if (magnitude <= kSoftKnee) {
+        return static_cast<int16_t>(value);
+    }
+
+    // Kompresi asimtotik menjaga puncak kuat tanpa memotong gelombang secara keras.
+    constexpr float kRemainingRange = kLimit - kSoftKnee;
+    float excess = magnitude - kSoftKnee;
+    float limited = kSoftKnee + (kRemainingRange * excess) / (excess + kRemainingRange);
+    return static_cast<int16_t>(std::copysign(limited, value));
+}
+
+}  // ruang nama
 
 NoAudioCodec::~NoAudioCodec() {
     if (rx_handle_ != nullptr) {
@@ -72,7 +98,7 @@ NoAudioCodecDuplex::NoAudioCodecDuplex(int input_sample_rate, int output_sample_
     };
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Channel duplex dibuat");
+    ESP_LOGI(TAG, "Kanal duplex dibuat");
 }
 
 
@@ -142,7 +168,7 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     std_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
     std_cfg.gpio_cfg.din = mic_din;
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Channel simplex dibuat");
+    ESP_LOGI(TAG, "Kanal simplex dibuat");
 }
 
 NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck, gpio_num_t mic_ws, gpio_num_t mic_din, i2s_std_slot_mask_t mic_slot_mask){
@@ -212,7 +238,7 @@ NoAudioCodecSimplex::NoAudioCodecSimplex(int input_sample_rate, int output_sampl
     std_cfg.gpio_cfg.dout = I2S_GPIO_UNUSED;
     std_cfg.gpio_cfg.din = mic_din;
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx_handle_, &std_cfg));
-    ESP_LOGI(TAG, "Channel simplex dibuat");
+    ESP_LOGI(TAG, "Kanal simplex dibuat");
 }
 
 int NoAudioCodec::Write(const int16_t* data, int samples) {
@@ -223,7 +249,7 @@ int NoAudioCodec::Write(const int16_t* data, int samples) {
     // volume_factor_: 0-65536
     int32_t volume_factor = pow(double(output_volume_) / 100.0, 2) * 65536;
     for (int i = 0; i < samples; i++) {
-        int64_t temp = int64_t(data[i]) * volume_factor; // Gunakan int64_t untuk operasi perkalian
+        int64_t temp = int64_t(data[i]) * volume_factor; // Pakai int64_t agar hasil perkalian tidak overflow
         if (temp > INT32_MAX) {
             buffer[i] = INT32_MAX;
         } else if (temp < INT32_MIN) {
@@ -234,7 +260,8 @@ int NoAudioCodec::Write(const int16_t* data, int samples) {
     }
 
     size_t bytes_written = 0;
-    esp_err_t ret = i2s_channel_write(tx_handle_, buffer.data(), samples * sizeof(int32_t), &bytes_written, portMAX_DELAY);
+    esp_err_t ret = i2s_channel_write(tx_handle_, buffer.data(),
+        samples * sizeof(int32_t), &bytes_written, portMAX_DELAY);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Gagal menulis audio ke I2S: %s", esp_err_to_name(ret));
         return 0;
@@ -244,31 +271,21 @@ int NoAudioCodec::Write(const int16_t* data, int samples) {
 
 int NoAudioCodec::Read(int16_t* dest, int samples) {
     size_t bytes_read;
-    constexpr TickType_t kReadTimeoutTicks = pdMS_TO_TICKS(200);
+    constexpr uint32_t kReadTimeoutMs = 200;
 
     std::vector<int32_t> bit32_buffer(samples);
-    if (i2s_channel_read(rx_handle_, bit32_buffer.data(), samples * sizeof(int32_t), &bytes_read, kReadTimeoutTicks) != ESP_OK) {
+    if (i2s_channel_read(rx_handle_, bit32_buffer.data(), samples * sizeof(int32_t), &bytes_read, kReadTimeoutMs) != ESP_OK) {
         return 0;
     }
 
     samples = bytes_read / sizeof(int32_t);
-    int64_t max_raw = 0;
     for (int i = 0; i < samples; i++) {
-        int32_t raw = bit32_buffer[i];
-        int64_t abs_raw = (raw < 0) ? -static_cast<int64_t>(raw) : raw;
-        if (abs_raw > max_raw) max_raw = abs_raw;
-        int32_t value = raw >> 12;
-        dest[i] = (value > INT16_MAX) ? INT16_MAX : (value < -INT16_MAX) ? -INT16_MAX : (int16_t)value;
+        int32_t value = bit32_buffer[i] >> 12;
+        int16_t sample = (value > INT16_MAX) ? INT16_MAX :
+                         (value < -INT16_MAX) ? -INT16_MAX :
+                         static_cast<int16_t>(value);
+        dest[i] = ApplySoftwareInputGain(sample, input_gain_);
     }
-
-#if CONFIG_USE_AUDIO_DEBUGGER
-    // Catat level audio mikrofon hanya saat debugger audio aktif agar UART tidak mengganggu audio.
-    static int read_count = 0;
-    if (++read_count >= 5000) {
-        read_count = 0;
-        ESP_LOGD("MIC_DEBUG", "max_raw=%lld samples=%d (jika max_raw=0 maka mic bermasalah!)", max_raw, samples);
-    }
-#endif
     return samples;
 }
 
@@ -298,10 +315,10 @@ void NoAudioCodec::EnableOutput(bool enable) {
     AudioCodec::EnableOutput(enable);
 }
 
-// Konstruktor delegasi: memanggil konstruktor utama dengan mask slot bawaan
+// Konstruktor delegasi: memanggil konstruktor utama dengan slot mask bawaan
 NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, gpio_num_t mic_sck, gpio_num_t mic_din) 
     : NoAudioCodecSimplexPdm(input_sample_rate, output_sample_rate, spk_bclk, spk_ws, spk_dout, I2S_STD_SLOT_LEFT, mic_sck, mic_din) {
-    // Semua inisialisasi ditangani oleh konstruktor yang didelegasikan
+    // Semua inisialisasi ditangani oleh konstruktor delegasi
 }
 
 NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck, gpio_num_t mic_din) {
@@ -364,7 +381,7 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
     ESP_ERROR_CHECK(i2s_new_channel(&rx_chan_cfg, NULL, &rx_handle_));
     i2s_pdm_rx_config_t pdm_rx_cfg = {
         .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG((uint32_t)input_sample_rate_),
-        /* Lebar bit data mode PDM tetap 16 */
+        /* Lebar bit data mode PDM tetap 16 bit */
         .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
         .gpio_cfg = {
             .clk = mic_sck,
@@ -379,24 +396,26 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
 #else
     ESP_LOGE(TAG, "PDM tidak didukung");
 #endif
-    ESP_LOGI(TAG, "Channel simplex dibuat");
+    ESP_LOGI(TAG, "Kanal simplex dibuat");
 }
 
 int NoAudioCodecSimplexPdm::Read(int16_t* dest, int samples) {
     size_t bytes_read;
 
-    // Data PDM setelah demodulasi memiliki lebar bit 16, baca langsung ke penyangga tujuan
+    // Data setelah demodulasi PDM berukuran 16 bit dan langsung dibaca ke penyangga tujuan
     if (i2s_channel_read(rx_handle_, dest, samples * sizeof(int16_t), &bytes_read, portMAX_DELAY) != ESP_OK) {
-        ESP_LOGE(TAG, "Gagal membaca!");
+        ESP_LOGE(TAG, "Gagal membaca audio");
         return 0;
     }
 
     samples = bytes_read / sizeof(int16_t);
     if (input_gain_ > 0) {
-        int gain_factor = (int)input_gain_;
+        int gain_factor = static_cast<int>(input_gain_);
         for (int i = 0; i < samples; i++) {
             int32_t amplified = dest[i] * gain_factor;
-            dest[i] = (amplified > INT16_MAX) ? INT16_MAX : (amplified < -INT16_MAX) ? -INT16_MAX : (int16_t)amplified;
+            dest[i] = (amplified > INT16_MAX) ? INT16_MAX :
+                      (amplified < -INT16_MAX) ? -INT16_MAX :
+                      static_cast<int16_t>(amplified);
         }
     }
     return samples;

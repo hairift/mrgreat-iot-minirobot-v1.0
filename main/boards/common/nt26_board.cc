@@ -15,10 +15,10 @@ Nt26Board::Nt26Board(gpio_num_t tx_pin, gpio_num_t rx_pin, gpio_num_t dtr_pin, g
     esp_event_loop_create_default();
     esp_netif_init();
     
-    // Buat handle kunci manajemen daya
+    // Create PM lock handle
     esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "nt26_cpu", &pm_lock_cpu_max_);
     
-    // Buat pewaktu batas tunggu kesiapan jaringan
+    // Create network ready timeout timer
     esp_timer_create_args_t timer_args = {
         .callback = OnNetworkReadyTimeout,
         .arg = this,
@@ -60,8 +60,8 @@ void Nt26Board::OnNetworkEvent(NetworkEvent event, const std::string& data) {
 
 void Nt26Board::OnNetworkReadyTimeout(void* arg) {
     auto* self = static_cast<Nt26Board*>(arg);
-    ESP_LOGW(TAG, "Batas waktu kesiapan jaringan terlampaui");
-    self->OnNetworkEvent(NetworkEvent::ModemErrorTimeout, "Batas waktu koneksi jaringan terlampaui");
+    ESP_LOGW(TAG, "Network ready timeout");
+    self->OnNetworkEvent(NetworkEvent::ModemErrorTimeout, "网络连接超时");
 }
 
 void Nt26Board::StartNetwork() {
@@ -109,6 +109,8 @@ void Nt26Board::StartNetwork() {
                 break;
             case UartEthModem::UartEthModemEvent::InFlightMode:
                 ESP_LOGW(TAG, "Modem in flight mode");
+                break;
+            case UartEthModem::UartEthModemEvent::RequestingPdpContext:
                 break;
         }
     });
@@ -178,7 +180,7 @@ void Nt26Board::SetPowerSaveLevel(PowerSaveLevel level) {
 }
 
 std::string Nt26Board::GetBoardJson() {
-    // Atur jenis papan untuk OTA
+    // Set the board type for OTA
     std::string board_json = std::string("{\"type\":\"" BOARD_TYPE "\",");
     board_json += "\"name\":\"" BOARD_NAME "\",";
     if (modem_) {
@@ -210,7 +212,7 @@ std::string Nt26Board::GetDeviceStatusJson() {
     auto& board = Board::GetInstance();
     auto root = cJSON_CreateObject();
 
-    // Speaker audio
+    // Audio speaker
     auto audio_speaker = cJSON_CreateObject();
     auto audio_codec = board.GetAudioCodec();
     if (audio_codec) {
@@ -218,7 +220,7 @@ std::string Nt26Board::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "audio_speaker", audio_speaker);
 
-    // Layar
+    // Screen
     auto backlight = board.GetBacklight();
     auto screen = cJSON_CreateObject();
     if (backlight) {
@@ -233,7 +235,7 @@ std::string Nt26Board::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "screen", screen);
 
-    // Baterai
+    // Battery
     int battery_level = 0;
     bool charging = false, discharging = false;
     if (board.GetBatteryLevel(battery_level, charging, discharging)) {
@@ -243,7 +245,7 @@ std::string Nt26Board::GetDeviceStatusJson() {
         cJSON_AddItemToObject(root, "battery", battery);
     }
 
-    // Jaringan
+    // Network
     auto network = cJSON_CreateObject();
     cJSON_AddStringToObject(network, "type", "cellular");
     if (modem_) {

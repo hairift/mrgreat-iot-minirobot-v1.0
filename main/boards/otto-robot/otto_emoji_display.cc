@@ -12,45 +12,54 @@
 #include "display/lvgl_display/lvgl_theme.h"
 
 #define TAG "OttoEmojiDisplay"
-OttoEmojiDisplay::OttoEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, int width, int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy)
-    : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-}
+OttoEmojiDisplay::OttoEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
+                                   int width, int height, int offset_x, int offset_y, bool mirror_x,
+                                   bool mirror_y, bool swap_xy)
+    : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x, mirror_y,
+                    swap_xy) {}
 
 void OttoEmojiDisplay::SetupUI() {
-    // Cegah pemanggilan ganda; SetupUI() milik induk juga memeriksa hal ini
+    // Prevent duplicate calls - parent SetupUI() will also check, but check here for early return
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
         return;
     }
-    
-    // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL sudah dibuat
+
+    // Call parent SetupUI() first to create all lvgl objects
     SpiLcdDisplay::SetupUI();
-    
-    // Siapkan gambar pratinjau setelah UI selesai diinisialisasi
-    // Lepaskan kunci sebelum memanggil SetEmotion agar tidak terjadi deadlock
-    {
-        DisplayLockGuard lock(this);
-        lv_obj_set_size(preview_image_, width_ , height_ );
+
+    // UI 对象创建完成后切换主题
+    auto* dark_theme = LvglThemeManager::GetInstance().GetTheme("dark");
+    if (dark_theme != nullptr) {
+        SetTheme(dark_theme);
     }
 
-    // Tetapkan emosi bawaan setelah UI selesai diinisialisasi
+    // Setup preview image after UI is initialized - release lock before calling SetEmotion
+    // to avoid deadlock (SetEmotion also acquires DisplayLockGuard internally)
+    {
+        DisplayLockGuard lock(this);
+        lv_obj_set_size(preview_image_, width_, height_);
+    }
+
+    // Set default emotion after UI is initialized
     SetEmotion("staticstate");
 }
 
 void OttoEmojiDisplay::SetupPreviewImage() {
     DisplayLockGuard lock(this);
     if (preview_image_ == nullptr) {
-        ESP_LOGW(TAG, "SetupPreviewImage dipanggil tetapi preview_image_ masih nullptr");
+        ESP_LOGW(TAG,
+                 "SetupPreviewImage called but preview_image_ is nullptr (UI not initialized yet)");
         return;
     }
-    lv_obj_set_size(preview_image_, width_ , height_ );
+    lv_obj_set_size(preview_image_, width_, height_);
 }
 
 void OttoEmojiDisplay::InitializeOttoEmojis() {
-    ESP_LOGI(TAG, "Inisialisasi emosi Otto ditangani oleh sistem Assets");
-    // Inisialisasi emosi dipindahkan ke sistem assets melalui konfigurasi DEFAULT_EMOJI_COLLECTION=otto-gif
-    // assets.cc akan memuat GIF emosi dari partisi assets lalu memasangnya ke tema
-    // Emosi bawaan kini diatur di SetupUI() setelah objek LVGL selesai dibuat
+    ESP_LOGI(TAG, "Otto表情初始化将由Assets系统处理");
+    // 表情初始化已移至assets系统,通过DEFAULT_EMOJI_COLLECTION=otto-gif配置
+    // assets.cc会从assets分区加载GIF表情并设置到theme
+    // Note: Default emotion is now set in SetupUI() after LVGL objects are created
 }
 
 LV_FONT_DECLARE(OTTO_ICON_FONT);
@@ -65,21 +74,21 @@ void OttoEmojiDisplay::SetStatus(const char* status) {
 
     if (strcmp(status, Lang::Strings::LISTENING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x84\xB0");  // U+F130 ikon mikrofon
+        lv_label_set_text(status_label_, "\xEF\x84\xB0");  // U+F130 麦克风图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x80\xA8");  // U+F028 ikon berbicara
+        lv_label_set_text(status_label_, "\xEF\x80\xA8");  // U+F028 说话图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::CONNECTING) == 0) {
         lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
-        lv_label_set_text(status_label_, "\xEF\x83\x81");  // U+F0c1 ikon koneksi
+        lv_label_set_text(status_label_, "\xEF\x83\x81");  // U+F0c1 连接图标
         lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         return;
     } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {
@@ -115,15 +124,15 @@ void OttoEmojiDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
 
     preview_image_cached_ = std::move(image);
     auto img_dsc = preview_image_cached_->image_dsc();
-    // Atur sumber gambar dan tampilkan pratinjau
+    // 设置图片源并显示预览图片
     lv_image_set_src(preview_image_, img_dsc);
     lv_image_set_rotation(preview_image_, 900);
     if (img_dsc->header.w > 0 && img_dsc->header.h > 0) {
-        // Faktor skala 1.0
+        // zoom factor 1.0
         lv_image_set_scale(preview_image_, 256 * width_ / img_dsc->header.w);
     }
 
-    // Sembunyikan emoji_box_
+    // Hide emoji_box_
     if (gif_controller_) {
         gif_controller_->Stop();
     }

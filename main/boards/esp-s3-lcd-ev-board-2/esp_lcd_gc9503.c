@@ -16,18 +16,18 @@
 
 #include "esp_lcd_gc9503.h"
 
-#define GC9503_CMD_MADCTL (0xB1)         // Kendali akses data memori
-#define GC9503_CMD_MADCTL_DEFAULT (0x10) // Nilai baku kendali akses data memori
-#define GC9503_CMD_SS_BIT (1 << 0)       // Arah pemindaian driver sumber, 0: atas ke bawah, 1: bawah ke atas
-#define GC9503_CMD_GS_BIT (1 << 1)       // Arah pemindaian driver gerbang, 0: kiri ke kanan, 1: kanan ke kiri
-#define GC9503_CMD_BGR_BIT (1 << 5)      // Urutan RGB/BGR, 0: RGB, 1: BGR
+#define GC9503_CMD_MADCTL (0xB1)         // Memory data access control
+#define GC9503_CMD_MADCTL_DEFAULT (0x10) // Default value of Memory data access control
+#define GC9503_CMD_SS_BIT (1 << 0)       // Source driver scan direction, 0: top to bottom, 1: bottom to top
+#define GC9503_CMD_GS_BIT (1 << 1)       // Gate driver scan direction, 0: left to right, 1: right to left
+#define GC9503_CMD_BGR_BIT (1 << 5)      // RGB/BGR order, 0: RGB, 1: BGR
 
 typedef struct
 {
     esp_lcd_panel_io_handle_t io;
     int reset_gpio_num;
-    uint8_t madctl_val; // Simpan nilai register GC9503_CMD_MADCTL saat ini
-    uint8_t colmod_val; // Simpan nilai register LCD_CMD_COLMOD saat ini
+    uint8_t madctl_val; // Save current value of GC9503_CMD_MADCTL register
+    uint8_t colmod_val; // Save current value of LCD_CMD_COLMOD register
     const gc9503_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
     struct
@@ -37,7 +37,7 @@ typedef struct
         unsigned int display_on_off_use_cmd : 1;
         unsigned int reset_level : 1;
     } flags;
-    // Menyimpan fungsi asli panel RGB
+    // To save the original functions of RGB panel
     esp_err_t (*init)(esp_lcd_panel_t *panel);
     esp_err_t (*del)(esp_lcd_panel_t *panel);
     esp_err_t (*reset)(esp_lcd_panel_t *panel);
@@ -94,13 +94,13 @@ esp_err_t esp_lcd_new_panel_gc9503(const esp_lcd_panel_io_handle_t io, const esp
     gc9503->colmod_val = 0;
     switch (panel_dev_config->bits_per_pixel)
     {
-    case 16: // Format RGB565
+    case 16: // RGB565
         gc9503->colmod_val = 0x50;
         break;
-    case 18: // Format RGB666
+    case 18: // RGB666
         gc9503->colmod_val = 0x60;
         break;
-    case 24: // Format RGB888
+    case 24: // RGB888
         gc9503->colmod_val = 0x70;
         break;
     default:
@@ -120,40 +120,40 @@ esp_err_t esp_lcd_new_panel_gc9503(const esp_lcd_panel_io_handle_t io, const esp
     if (gc9503->flags.auto_del_panel_io)
     {
         if (gc9503->reset_gpio_num >= 0)
-        { // Lakukan reset perangkat keras
+        { // Perform hardware reset
             gpio_set_level(gc9503->reset_gpio_num, gc9503->flags.reset_level);
             vTaskDelay(pdMS_TO_TICKS(10));
             gpio_set_level(gc9503->reset_gpio_num, !gc9503->flags.reset_level);
         }
         else
-        { // Lakukan reset perangkat lunak
+        { // Perform software reset
             ESP_GOTO_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), err, TAG, "send command failed");
         }
         vTaskDelay(pdMS_TO_TICKS(120));
 
         /**
-         * Agar pin antarmuka SPI 3 kabel seperti SDA dan SCK bisa berbagi dengan pin lain pada antarmuka RGB
-         * seperti HSYNC untuk menghemat GPIO, perintah inisialisasi LCD harus dikirim melalui SPI 3 kabel
-         * sebelum `esp_lcd_new_rgb_panel()` dipanggil.
+         * In order to enable the 3-wire SPI interface pins (such as SDA and SCK) to share other pins of the RGB interface
+         * (such as HSYNC) and save GPIOs, we need to send LCD initialization commands via the 3-wire SPI interface before
+         * `esp_lcd_new_rgb_panel()` is called.
          */
         ESP_GOTO_ON_ERROR(panel_gc9503_send_init_cmds(gc9503), err, TAG, "send init commands failed");
-        // Setelah perintah inisialisasi dikirim, antarmuka SPI 3 kabel dapat dihapus
+        // After sending the initialization commands, the 3-wire SPI interface can be deleted
         ESP_GOTO_ON_ERROR(esp_lcd_panel_io_del(io), err, TAG, "delete panel IO failed");
         gc9503->io = NULL;
         ESP_LOGD(TAG, "delete panel IO");
     }
 
-    // Buat panel RGB
+    // Create RGB panel
     ESP_GOTO_ON_ERROR(esp_lcd_new_rgb_panel(vendor_config->rgb_config, ret_panel), err, TAG, "create RGB panel failed");
     ESP_LOGD(TAG, "new RGB panel @%p", ret_panel);
 
-    // Simpan fungsi asli panel RGB
+    // Save the original functions of RGB panel
     gc9503->init = (*ret_panel)->init;
     gc9503->del = (*ret_panel)->del;
     gc9503->reset = (*ret_panel)->reset;
     gc9503->mirror = (*ret_panel)->mirror;
     gc9503->disp_on_off = (*ret_panel)->disp_on_off;
-    // Timpa fungsi panel RGB dengan versi khusus GC9503
+    // Overwrite the functions of RGB panel
     (*ret_panel)->init = panel_gc9503_init;
     (*ret_panel)->del = panel_gc9503_del;
     (*ret_panel)->reset = panel_gc9503_reset;
@@ -162,7 +162,7 @@ esp_err_t esp_lcd_new_panel_gc9503(const esp_lcd_panel_io_handle_t io, const esp
     (*ret_panel)->user_data = gc9503;
     ESP_LOGD(TAG, "new gc9503 panel @%p", gc9503);
 
-    // ESP_LOGI(TAG, "Pembuatan panel LCD berhasil, versi: %d.%d.%d", ESP_LCD_GC9503_VER_MAJOR, ESP_LCD_GC9503_VER_MINOR,
+    // ESP_LOGI(TAG, "LCD panel create success, version: %d.%d.%d", ESP_LCD_GC9503_VER_MAJOR, ESP_LCD_GC9503_VER_MINOR,
     //          ESP_LCD_GC9503_VER_PATCH);
     return ESP_OK;
 
@@ -180,7 +180,7 @@ err:
 
 // *INDENT-OFF*
 // static const gc9503_lcd_init_cmd_t vendor_specific_init_default[] = {
-// //  {cmd, { data }, ukuran_data, jeda_ms}
+// //  {cmd, { data }, data_size, delay_ms}
 //     {0x11, (uint8_t []){0x00}, 0, 120},
 
 //     {0xf0, (uint8_t []){0x55, 0xaa, 0x52, 0x08, 0x00}, 5, 0},
@@ -333,8 +333,8 @@ static esp_err_t panel_gc9503_send_init_cmds(gc9503_panel_t *gc9503)
                         TAG, "send command failed");
     ;
 
-    // Inisialisasi khusus vendor dapat berbeda untuk tiap pabrikan.
-    // Urutan kodenya sebaiknya dikonfirmasi ke pemasok panel LCD.
+    // Vendor specific initialization, it can be different between manufacturers
+    // should consult the LCD supplier for initialization sequence code
     const gc9503_lcd_init_cmd_t *init_cmds = NULL;
     uint16_t init_cmds_size = 0;
     if (gc9503->init_cmds)
@@ -351,7 +351,7 @@ static esp_err_t panel_gc9503_send_init_cmds(gc9503_panel_t *gc9503)
     bool is_cmd_overwritten = false;
     for (int i = 0; i < init_cmds_size; i++)
     {
-        // Periksa apakah perintah ini sudah dipakai atau bentrok dengan pengaturan internal
+        // Check if the command has been used or conflicts with the internal
         switch (init_cmds[i].cmd)
         {
         case LCD_CMD_MADCTL:
@@ -369,7 +369,7 @@ static esp_err_t panel_gc9503_send_init_cmds(gc9503_panel_t *gc9503)
 
         if (is_cmd_overwritten)
         {
-            ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal",
+            ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence",
                      init_cmds[i].cmd);
         }
 
@@ -390,7 +390,7 @@ static esp_err_t panel_gc9503_init(esp_lcd_panel_t *panel)
     {
         ESP_RETURN_ON_ERROR(panel_gc9503_send_init_cmds(gc9503), TAG, "send init commands failed");
     }
-    // Inisialisasi panel RGB
+    // Init RGB panel
     ESP_RETURN_ON_ERROR(gc9503->init(panel), TAG, "init RGB panel failed");
 
     return ESP_OK;
@@ -404,7 +404,7 @@ static esp_err_t panel_gc9503_del(esp_lcd_panel_t *panel)
     {
         gpio_reset_pin(gc9503->reset_gpio_num);
     }
-    // Hapus panel RGB
+    // Delete RGB panel
     gc9503->del(panel);
     free(gc9503);
     ESP_LOGD(TAG, "del gc9503 panel @%p", gc9503);
@@ -416,7 +416,7 @@ static esp_err_t panel_gc9503_reset(esp_lcd_panel_t *panel)
     gc9503_panel_t *gc9503 = (gc9503_panel_t *)panel->user_data;
     esp_lcd_panel_io_handle_t io = gc9503->io;
 
-    // Lakukan reset perangkat keras
+    // Perform hardware reset
     if (gc9503->reset_gpio_num >= 0)
     {
         gpio_set_level(gc9503->reset_gpio_num, gc9503->flags.reset_level);
@@ -425,11 +425,11 @@ static esp_err_t panel_gc9503_reset(esp_lcd_panel_t *panel)
         vTaskDelay(pdMS_TO_TICKS(120));
     }
     else if (io)
-    { // Lakukan reset perangkat lunak
+    { // Perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(120));
     }
-    // Reset panel RGB
+    // Reset RGB panel
     ESP_RETURN_ON_ERROR(gc9503->reset(panel), TAG, "reset RGB panel failed");
 
     return ESP_OK;
@@ -443,7 +443,7 @@ static esp_err_t panel_gc9503_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool
     if (gc9503->flags.mirror_by_cmd)
     {
         ESP_RETURN_ON_FALSE(io, ESP_FAIL, TAG, "Panel IO is deleted, cannot send command");
-        // Kendalikan pencerminan melalui perintah LCD
+        // Control mirror through LCD command
         if (mirror_x)
         {
             gc9503->madctl_val |= GC9503_CMD_GS_BIT;
@@ -469,7 +469,7 @@ static esp_err_t panel_gc9503_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool
     }
     else
     {
-        // Kendalikan pencerminan melalui panel RGB
+        // Control mirror through RGB panel
         ESP_RETURN_ON_ERROR(gc9503->mirror(panel, mirror_x, mirror_y), TAG, "RGB panel mirror failed");
     }
     return ESP_OK;
@@ -484,7 +484,7 @@ static esp_err_t panel_gc9503_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
     if (gc9503->flags.display_on_off_use_cmd)
     {
         ESP_RETURN_ON_FALSE(io, ESP_FAIL, TAG, "Panel IO is deleted, cannot send command");
-        // Kendalikan hidup atau mati layar melalui perintah LCD
+        // Control display on/off through LCD command
         if (on_off)
         {
             command = LCD_CMD_DISPON;
@@ -497,7 +497,7 @@ static esp_err_t panel_gc9503_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
     }
     else
     {
-        // Kendalikan hidup atau mati layar melalui sinyal kontrol tampilan
+        // Control display on/off through display control signal
         ESP_RETURN_ON_ERROR(gc9503->disp_on_off(panel, on_off), TAG, "RGB panel disp_on_off failed");
     }
     return ESP_OK;

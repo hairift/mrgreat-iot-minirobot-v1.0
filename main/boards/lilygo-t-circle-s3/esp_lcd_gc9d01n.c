@@ -33,8 +33,8 @@ typedef struct{
     int x_gap;
     int y_gap;
     uint8_t fb_bits_per_pixel;
-    uint8_t madctl_val; // Simpan nilai register LCD_CMD_MADCTL saat ini
-    uint8_t colmod_val; // Simpan nilai register LCD_CMD_COLMOD saat ini
+    uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
+    uint8_t colmod_val; // save current value of LCD_CMD_COLMOD register
     const gc9d01n_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
 } gc9d01n_panel_t;
@@ -81,13 +81,13 @@ esp_err_t esp_lcd_new_panel_gc9d01n(const esp_lcd_panel_io_handle_t io, const es
 #endif
 
     switch (panel_dev_config->bits_per_pixel){
-    case 16: // Format RGB565
+    case 16: // RGB565
         gc9d01n->colmod_val = 0x55;
         gc9d01n->fb_bits_per_pixel = 16;
         break;
-    case 18: // Format RGB666
+    case 18: // RGB666
         gc9d01n->colmod_val = 0x66;
-        // Setiap komponen warna (R/G/B) memakai 6 bit tinggi pada satu byte sehingga satu piksel membutuhkan 3 byte penuh
+        // each color component (R/G/B) should occupy the 6 high bits of a byte, which means 3 full bytes are required for a pixel
         gc9d01n->fb_bits_per_pixel = 24;
         break;
     default:
@@ -118,7 +118,7 @@ esp_err_t esp_lcd_new_panel_gc9d01n(const esp_lcd_panel_io_handle_t io, const es
     *ret_panel = &(gc9d01n->base);
     ESP_LOGD(TAG, "new gc9d01n panel @%p", gc9d01n);
 
-    // ESP_LOGI(TAG, "Pembuatan panel LCD berhasil, versi: %d.%d.%d", ESP_LCD_GC9D01N_VER_MAJOR, ESP_LCD_GC9D01N_VER_MINOR,
+    // ESP_LOGI(TAG, "LCD panel create success, version: %d.%d.%d", ESP_LCD_GC9D01N_VER_MAJOR, ESP_LCD_GC9D01N_VER_MINOR,
     //          ESP_LCD_GC9D01N_VER_PATCH);
 
     return ESP_OK;
@@ -148,16 +148,16 @@ static esp_err_t panel_gc9d01n_reset(esp_lcd_panel_t *panel){
     gc9d01n_panel_t *gc9d01n = __containerof(panel, gc9d01n_panel_t, base);
     esp_lcd_panel_io_handle_t io = gc9d01n->io;
 
-    // Lakukan reset perangkat keras
+    // perform hardware reset
     if (gc9d01n->reset_gpio_num >= 0){
         gpio_set_level(gc9d01n->reset_gpio_num, gc9d01n->reset_level);
         vTaskDelay(pdMS_TO_TICKS(10));
         gpio_set_level(gc9d01n->reset_gpio_num, !gc9d01n->reset_level);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-    else{ // Lakukan reset perangkat lunak
+    else{ // perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
-        vTaskDelay(pdMS_TO_TICKS(20)); // Sesuai spesifikasi, tunggu minimal 5 ms sebelum mengirim perintah baru
+        vTaskDelay(pdMS_TO_TICKS(20)); // spec, wait at least 5ms before sending new command
     }
 
     return ESP_OK;
@@ -165,7 +165,7 @@ static esp_err_t panel_gc9d01n_reset(esp_lcd_panel_t *panel){
 
 static const gc9d01n_lcd_init_cmd_t vendor_specific_init_default[] = {
     //  {cmd, { data }, data_size, delay_ms}
-    // Aktifkan register internal
+    // Enable Inter Register
     {0xFE, (uint8_t[]){0x00}, 0, 0},
     {0xEF, (uint8_t[]){0x00}, 0, 0},
     {0x80, (uint8_t[]){0xFF}, 1, 0},
@@ -220,7 +220,7 @@ static esp_err_t panel_gc9d01n_init(esp_lcd_panel_t *panel){
     gc9d01n_panel_t *gc9d01n = __containerof(panel, gc9d01n_panel_t, base);
     esp_lcd_panel_io_handle_t io = gc9d01n->io;
 
-    // Setelah reset daya, LCD masuk ke mode tidur dan layar mati, jadi keluar dari mode tidur lebih dulu
+    // LCD goes into sleep mode and display will be turned off after power on reset, exit sleep mode first
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SLPOUT, NULL, 0), TAG, "send command failed");
     vTaskDelay(pdMS_TO_TICKS(100));
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_MADCTL, (uint8_t[]){gc9d01n->madctl_val,},1),TAG, "send command failed");
@@ -238,7 +238,7 @@ static esp_err_t panel_gc9d01n_init(esp_lcd_panel_t *panel){
 
     bool is_cmd_overwritten = false;
     for (int i = 0; i < init_cmds_size; i++){
-        // Periksa apakah perintah sudah dipakai atau bertabrakan dengan konfigurasi internal
+        // Check if the command has been used or conflicts with the internal
         switch (init_cmds[i].cmd){
         case LCD_CMD_MADCTL:
             is_cmd_overwritten = true;
@@ -254,7 +254,7 @@ static esp_err_t panel_gc9d01n_init(esp_lcd_panel_t *panel){
         }
 
         if (is_cmd_overwritten){
-            ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal", init_cmds[i].cmd);
+            ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence", init_cmds[i].cmd);
         }
 
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
@@ -275,10 +275,10 @@ static esp_err_t panel_gc9d01n_draw_bitmap(esp_lcd_panel_t *panel, int x_start, 
     y_start += gc9d01n->y_gap;
     y_end += gc9d01n->y_gap;
 
-    // Tentukan area memori frame yang dapat diakses MCU
+    // define an area of frame memory where MCU can access
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_CASET, (uint8_t[]){(x_start >> 8) & 0xFF,x_start & 0xFF,((x_end - 1) >> 8) & 0xFF,(x_end - 1) & 0xFF,},4),TAG, "send command failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_RASET, (uint8_t[]){(y_start >> 8) & 0xFF,y_start & 0xFF,((y_end - 1) >> 8) & 0xFF,(y_end - 1) & 0xFF,},4),TAG, "send command failed");
-    // Kirim isi frame buffer
+    // transfer frame buffer
     size_t len = (x_end - x_start) * (y_end - y_start) * gc9d01n->fb_bits_per_pixel / 8;
     ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_color(io, LCD_CMD_RAMWR, color_data, len), TAG, "send color failed");
 

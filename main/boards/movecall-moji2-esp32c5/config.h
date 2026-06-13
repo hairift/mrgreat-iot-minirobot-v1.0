@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi Movecall Moji 2
+// Movecall Moji 2 configuration
 
 #include <driver/gpio.h>
 

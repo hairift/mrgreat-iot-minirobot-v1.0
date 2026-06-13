@@ -12,12 +12,12 @@
 #define DEG2RAD(g) ((g) * M_PI) / 180
 #endif
 
-#define SERVO_MIN_PULSEWIDTH_US 500           // Lebar pulsa minimum (mikrodetik)
-#define SERVO_MAX_PULSEWIDTH_US 2500          // Lebar pulsa maksimum (mikrodetik)
-#define SERVO_MIN_DEGREE -90                  // Sudut minimum
-#define SERVO_MAX_DEGREE 90                   // Sudut maksimum
-#define SERVO_TIMEBASE_RESOLUTION_HZ 1000000  // 1 MHz, 1 us per tick
-#define SERVO_TIMEBASE_PERIOD 20000           // 20000 tick, 20 ms
+#define SERVO_MIN_PULSEWIDTH_US 500           // 最小脉宽（微秒）
+#define SERVO_MAX_PULSEWIDTH_US 2500          // 最大脉宽（微秒）
+#define SERVO_MIN_DEGREE -90                  // 最小角度
+#define SERVO_MAX_DEGREE 90                   // 最大角度
+#define SERVO_TIMEBASE_RESOLUTION_HZ 1000000  // 1MHz, 1us per tick
+#define SERVO_TIMEBASE_PERIOD 20000           // 20000 ticks, 20ms
 
 class Oscillator {
 public:
@@ -49,28 +49,28 @@ private:
 private:
     bool is_attached_;
 
-    //-- Parameter osilator
-    unsigned int amplitude_;  //-- Amplitudo (derajat)
-    int offset_;              //-- Offset (derajat)
-    unsigned int period_;     //-- Periode (milidetik)
-    double phase0_;           //-- Fase (radian)
+    //-- Oscillators parameters
+    unsigned int amplitude_;  //-- Amplitude (degrees)
+    int offset_;              //-- Offset (degrees)
+    unsigned int period_;     //-- Period (miliseconds)
+    double phase0_;           //-- Phase (radians)
 
-    //-- Variabel internal
-    int pos_;                       //-- Posisi servo saat ini
-    int pin_;                       //-- Pin tempat servo terhubung
-    int trim_;                      //-- Offset kalibrasi
-    double phase_;                  //-- Fase saat ini
-    double inc_;                    //-- Pertambahan fase
-    double number_samples_;         //-- Jumlah sampel
-    unsigned int sampling_period_;  //-- Periode sampling (ms)
+    //-- Internal variables
+    int pos_;                       //-- Current servo pos
+    int pin_;                       //-- Pin where the servo is connected
+    int trim_;                      //-- Calibration offset
+    double phase_;                  //-- Current phase
+    double inc_;                    //-- Increment of phase
+    double number_samples_;         //-- Number of samples
+    unsigned int sampling_period_;  //-- sampling period (ms)
 
     long previous_millis_;
     long current_millis_;
 
-    //-- Mode osilasi. Jika true, servo berhenti
+    //-- Oscillation mode. If true, the servo is stopped
     bool stop_;
 
-    //-- Mode terbalik
+    //-- Reverse mode
     bool rev_;
 
     int diff_limit_;

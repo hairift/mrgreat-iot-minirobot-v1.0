@@ -3,7 +3,7 @@
 
 #include <driver/gpio.h>
 
-// Jika menggunakan versi kabel untuk baterai, aktifkan baris di bawah ini
+// 如果使用插线版本接入电池，请启用下面一行
 //#define ESP32_CGC_144_lite
 
 #define AUDIO_INPUT_SAMPLE_RATE  16000
@@ -20,7 +20,7 @@
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
 #define ASR_BUTTON_GPIO         GPIO_NUM_13
 
-// Uji MCP: kendalikan lampu
+// A MCP Test: Control a lamp
 #define LAMP_GPIO 				GPIO_NUM_12
 
 #define DISPLAY_SDA_PIN         GPIO_NUM_NC
@@ -35,7 +35,7 @@
 
 #define DISPLAY_SPI_SCLK_HZ     (20 * 1000 * 1000)
 
-// Jika menggunakan layar 240x240, beri komentar pada baris di bawah ini
+// 如果使用240x240的屏幕，请注释下面一行
 #define LCD_128X128
 
 #ifdef LCD_128X128

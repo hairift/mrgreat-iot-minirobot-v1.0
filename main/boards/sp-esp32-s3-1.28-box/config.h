@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi Movecall Moji
+// Movecall Moji configuration
 
 #include <driver/gpio.h>
 
@@ -49,8 +49,8 @@
 
 #define DISPLAY_SPI_SCLK_HZ     (40 * 1000 * 1000)
 
-// Definisi pin yang berkaitan dengan pemantauan baterai
-#define BATTERY_ADC_PIN         GPIO_NUM_1  // Pin ADC untuk membaca tegangan baterai
-#define BATTERY_CHARGING_PIN    GPIO_NUM_41 // Pin untuk membaca status pengisian daya
+// 电量检测相关引脚定义
+#define BATTERY_ADC_PIN         GPIO_NUM_1  // 电池电压检测ADC引脚
+#define BATTERY_CHARGING_PIN    GPIO_NUM_41 // 充电状态检测引脚
 
 #endif // _BOARD_CONFIG_H_

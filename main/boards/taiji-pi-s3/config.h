@@ -1,7 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-// Konfigurasi papan Taiji Pi S3
+// Taiji Pi S3 Board configuration
 
 #include <driver/gpio.h>
 #include <driver/spi_master.h>
@@ -15,7 +15,7 @@
 #define AUDIO_I2S_GPIO_BCLK GPIO_NUM_18
 #define AUDIO_I2S_GPIO_DIN  GPIO_NUM_NC
 #define AUDIO_I2S_GPIO_DOUT GPIO_NUM_17
-#define AUDIO_MUTE_PIN      GPIO_NUM_48   // Senyap pada level rendah
+#define AUDIO_MUTE_PIN      GPIO_NUM_48   // 低电平静音
 
 #define AUDIO_MIC_WS_PIN    GPIO_NUM_45
 #define AUDIO_MIC_SD_PIN    GPIO_NUM_46

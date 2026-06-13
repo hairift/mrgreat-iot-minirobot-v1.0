@@ -29,20 +29,20 @@ public:
         WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
         WriteReg(0x27, 0x10);  // hold 4s to power off
 
-        // Nonaktifkan semua DC kecuali DC1
+        // Disable All DCs but DC1
         WriteReg(0x80, 0x01);
-        // Nonaktifkan semua LDO
+        // Disable All LDOs
         WriteReg(0x90, 0x00);
         WriteReg(0x91, 0x00);
 
-        // Atur DC1 ke 3,3 V
+        // Set DC1 to 3.3V
         WriteReg(0x82, (3300 - 1500) / 100);
 
-        // Atur ALDO1 ke 3,3 V
+        // Set ALDO1 to 3.3V
         WriteReg(0x92, (3300 - 500) / 100);
         WriteReg(0x93, (3300 - 500) / 100);
 
-        // Aktifkan ALDO1 untuk mikrofon
+        // Enable ALDO1(MIC)
         WriteReg(0x90, 0x03);
 
         WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
@@ -58,7 +58,7 @@ public:
 #define LCD_OPCODE_WRITE_COLOR (0x32ULL)
 
 static const sh8601_lcd_init_cmd_t vendor_specific_init[] = {
-    // Atur layar ke mode QSPI
+    // set display to qspi mode
     {0x11, (uint8_t []){0x00}, 0, 120},
     {0xC4, (uint8_t []){0x80}, 1, 0},
     {0x44, (uint8_t []){0x01, 0xD1}, 2, 0},
@@ -72,7 +72,7 @@ static const sh8601_lcd_init_cmd_t vendor_specific_init[] = {
     {0x51, (uint8_t []){0xFF}, 1, 0},
 };
 
-// Tambahkan kelas tampilan baru sebelum kelas waveshare_amoled_2_06
+// 在waveshare_amoled_2_06类之前添加新的显示类
 class CustomLcdDisplay : public SpiLcdDisplay {
 public:
     static void rounder_event_cb(lv_event_t* e) {
@@ -83,10 +83,10 @@ public:
         uint16_t y1 = area->y1;
         uint16_t y2 = area->y2;
 
-        // Bulatkan awal koordinat ke bawah ke kelipatan genap terdekat
+        // round the start of coordinate down to the nearest 2M number
         area->x1 = (x1 >> 1) << 1;
         area->y1 = (y1 >> 1) << 1;
-        // Bulatkan akhir koordinat ke atas ke nilai ganjil terdekat
+        // round the end of coordinate up to the nearest 2N+1 number
         area->x2 = ((x2 >> 1) << 1) + 1;
         area->y2 = ((y2 >> 1) << 1) + 1;
     }
@@ -102,12 +102,12 @@ public:
                      bool swap_xy)
         : SpiLcdDisplay(io_handle, panel_handle,
                         width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
@@ -159,7 +159,7 @@ private:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -192,7 +192,7 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            // Saat proses awal sebelum terhubung, tombol BOOT masuk ke mode konfigurasi Wi-Fi tanpa restart
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -214,7 +214,7 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = SH8601_PANEL_IO_QSPI_CONFIG(
             EXAMPLE_PIN_NUM_LCD_CS,
@@ -222,7 +222,7 @@ private:
             nullptr);
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         const sh8601_vendor_config_t vendor_config = {
             .init_cmds = &vendor_specific_init[0],
@@ -249,7 +249,7 @@ private:
         backlight_->RestoreBrightness();
     }
 
-    // Inisialisasi alat
+    // 初始化工具
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",

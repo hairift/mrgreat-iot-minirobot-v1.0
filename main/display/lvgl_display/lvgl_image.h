@@ -3,7 +3,7 @@
 #include <lvgl.h>
 
 
-// Pembungkus untuk lv_img_dsc_t
+// Wrap around lv_img_dsc_t
 class LvglImage {
 public:
     virtual const lv_img_dsc_t* image_dsc() const = 0;

@@ -39,12 +39,12 @@ static const rm69a10_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0x12, (uint8_t[]){0x00}, 1, 0},
     {0x35, (uint8_t[]){0x00}, 1, 0},
 #if CONFIG_SCREEN_PIXEL_FORMAT_RGB565
-    {0x3A, (uint8_t[]){0x75}, 1, 0}, // Format piksel antarmuka 16 bit per piksel
+    {0x3A, (uint8_t[]){0x75}, 1, 0}, // interface pixel format 16bit/pixel
 #elif CONFIG_SCREEN_PIXEL_FORMAT_RGB888
-    {0x3A, (uint8_t[]){0x77}, 1, 0}, // Format piksel antarmuka 24 bit per piksel
+    {0x3A, (uint8_t[]){0x77}, 1, 0}, // interface pixel format 24bit/pixel
 #endif
     // {0x51, (uint8_t[]){0xFE}, 1, 0},
-    {0x51, (uint8_t[]){0x00}, 1, 0}, // Atur kecerahan layar ke 0
+    {0x51, (uint8_t[]){0x00}, 1, 0}, // 设置屏幕亮度为0
     {0x11, (uint8_t[]){0x00}, 0, 120},
     {0x29, (uint8_t[]){0x00}, 0, 0},
     //============ Gamma END===========
@@ -54,7 +54,7 @@ typedef struct
 {
     esp_lcd_panel_io_handle_t io;
     int reset_gpio_num;
-    uint8_t madctl_val; // Simpan nilai register LCD_CMD_MADCTL saat ini
+    uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
     const rm69a10_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
     uint8_t lane_num;
@@ -62,7 +62,7 @@ typedef struct
     {
         unsigned int reset_level : 1;
     } flags;
-    // Simpan fungsi asli panel MIPI DPI
+    // To save the original functions of MIPI DPI panel
     esp_err_t (*del)(esp_lcd_panel_t *panel);
     esp_err_t (*init)(esp_lcd_panel_t *panel);
 } rm69a10_panel_t;
@@ -110,15 +110,15 @@ esp_err_t esp_lcd_new_panel_rm69a10(const esp_lcd_panel_io_handle_t io, const es
     rm69a10->flags.reset_level = panel_dev_config->flags.reset_active_high;
     rm69a10->madctl_val = RM69A10_MDCTL_VALUE_DEFAULT;
 
-    // Buat panel MIPI DPI
+    // Create MIPI DPI panel
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_dpi(vendor_config->mipi_config.dsi_bus, vendor_config->mipi_config.dpi_config, ret_panel), err, TAG,
                       "create MIPI DPI panel failed");
     ESP_LOGD(TAG, "new MIPI DPI panel @%p", *ret_panel);
 
-    // Simpan fungsi asli panel MIPI DPI
+    // Save the original functions of MIPI DPI panel
     rm69a10->del = (*ret_panel)->del;
     rm69a10->init = (*ret_panel)->init;
-    // Timpa fungsi panel MIPI DPI dengan fungsi khusus driver ini
+    // Overwrite the functions of MIPI DPI panel
     (*ret_panel)->del = panel_rm69a10_del;
     (*ret_panel)->init = panel_rm69a10_init;
     (*ret_panel)->reset = panel_rm69a10_reset;
@@ -160,7 +160,7 @@ static esp_err_t panel_rm69a10_send_init_cmds(rm69a10_panel_t *rm69a10)
     // case 4:
     //     lane_command = RM69A10_DSI_4_LANE;
     //     break;
-    // bawaan:
+    // default:
     //     ESP_LOGE(TAG, "Invalid lane number %d", rm69a10->lane_num);
     //     return ESP_ERR_INVALID_ARG;
     // }
@@ -170,8 +170,8 @@ static esp_err_t panel_rm69a10_send_init_cmds(rm69a10_panel_t *rm69a10)
     //                                               1),
     //                     TAG, "send command failed");
 
-    // Inisialisasi khusus vendor dapat berbeda antar pabrikan
-    // sebaiknya rujuk ke pemasok LCD untuk urutan inisialisasinya
+    // vendor specific initialization, it can be different between manufacturers
+    // should consult the LCD supplier for initialization sequence code
     // if (rm69a10->init_cmds)
     // {
     //     init_cmds = rm69a10->init_cmds;
@@ -188,7 +188,7 @@ static esp_err_t panel_rm69a10_send_init_cmds(rm69a10_panel_t *rm69a10)
 
     for (int i = 0; i < init_cmds_size; i++)
     {
-        //     // Periksa apakah perintah sudah dipakai atau bentrok dengan pengaturan internal
+        //     // Check if the command has been used or conflicts with the internal
         //     if (init_cmds[i].data_bytes > 0)
         //     {
         //         switch (init_cmds[i].cmd)
@@ -197,7 +197,7 @@ static esp_err_t panel_rm69a10_send_init_cmds(rm69a10_panel_t *rm69a10)
         //             is_cmd_overwritten = true;
         //             rm69a10->madctl_val = ((uint8_t *)init_cmds[i].data)[0];
         //             break;
-        //         bawaan:
+        //         default:
         //             is_cmd_overwritten = false;
         //             break;
         //         }
@@ -205,12 +205,12 @@ static esp_err_t panel_rm69a10_send_init_cmds(rm69a10_panel_t *rm69a10)
         //         if (is_cmd_overwritten)
         //         {
         //             is_cmd_overwritten = false;
-        //             ESP_LOGW(TAG, "Perintah %02Xh sudah dipakai dan akan ditimpa oleh urutan inisialisasi eksternal",
+        //             ESP_LOGW(TAG, "The %02Xh command has been used and will be overwritten by external initialization sequence",
         //                      init_cmds[i].cmd);
         //         }
         //     }
 
-        // Kirim perintah
+        // Send command
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(init_cmds[i].delay_ms));
         // printf("Ciallo\n");
@@ -229,7 +229,7 @@ static esp_err_t panel_rm69a10_del(esp_lcd_panel_t *panel)
     {
         gpio_reset_pin(static_cast<gpio_num_t>(rm69a10->reset_gpio_num));
     }
-    // Hapus panel MIPI DPI
+    // Delete MIPI DPI panel
     rm69a10->del(panel);
     ESP_LOGD(TAG, "del rm69a10 panel @%p", rm69a10);
     free(rm69a10);
@@ -252,7 +252,7 @@ static esp_err_t panel_rm69a10_reset(esp_lcd_panel_t *panel)
     rm69a10_panel_t *rm69a10 = (rm69a10_panel_t *)panel->user_data;
     esp_lcd_panel_io_handle_t io = rm69a10->io;
 
-    // Lakukan reset perangkat keras
+    // Perform hardware reset
     if (rm69a10->reset_gpio_num >= 0)
     {
         gpio_set_level(static_cast<gpio_num_t>(rm69a10->reset_gpio_num), rm69a10->flags.reset_level);
@@ -261,7 +261,7 @@ static esp_err_t panel_rm69a10_reset(esp_lcd_panel_t *panel)
         vTaskDelay(pdMS_TO_TICKS(20));
     }
     else if (io)
-    { // Lakukan reset perangkat lunak
+    { // Perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(20));
     }
@@ -319,7 +319,7 @@ static esp_err_t panel_rm69a10_mirror(esp_lcd_panel_t *panel, bool mirror_x, boo
 
     ESP_RETURN_ON_FALSE(io, ESP_ERR_INVALID_STATE, TAG, "invalid panel IO");
 
-    // Atur pencerminan melalui perintah LCD
+    // Control mirror through LCD command
     if (mirror_x)
     {
         madctl_val |= RM69A10_CMD_SHLR_BIT;

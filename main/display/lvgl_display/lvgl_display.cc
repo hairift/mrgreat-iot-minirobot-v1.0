@@ -1,7 +1,9 @@
 #include <esp_log.h>
 #include <esp_err.h>
 #include <string>
+#include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <font_awesome.h>
 
@@ -16,7 +18,7 @@
 #define TAG "Display"
 
 LvglDisplay::LvglDisplay() {
-    // Pengatur waktu notifikasi
+    // Timer notifikasi.
     esp_timer_create_args_t notification_timer_args = {
         .callback = [](void *arg) {
             LvglDisplay *display = static_cast<LvglDisplay*>(arg);
@@ -31,7 +33,7 @@ LvglDisplay::LvglDisplay() {
     };
     ESP_ERROR_CHECK(esp_timer_create(&notification_timer_args, &notification_timer_));
 
-    // Buat kunci manajemen daya
+    // Kunci power management agar pembaruan display tetap stabil.
     auto ret = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "display_update", &pm_lock_);
     if (ret == ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGI(TAG, "Power management not supported");
@@ -60,6 +62,9 @@ LvglDisplay::~LvglDisplay() {
     }
     if (battery_label_ != nullptr) {
         lv_obj_del(battery_label_);
+    }
+    if (battery_percent_label_ != nullptr) {
+        lv_obj_del(battery_percent_label_);
     }
     if( low_battery_popup_ != nullptr ) {
         lv_obj_del(low_battery_popup_);
@@ -115,14 +120,14 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
     auto& board = Board::GetInstance();
     auto codec = board.GetAudioCodec();
 
-    // Perbarui ikon bisu
+    // Perbarui ikon mute.
     {
         DisplayLockGuard lock(this);
         if (mute_label_ == nullptr) {
             return;
         }
 
-        // Perbarui ikon jika status bisu berubah
+        // Perbarui ikon hanya saat status mute berubah.
         if (codec->output_volume() == 0 && !muted_) {
             muted_ = true;
             lv_label_set_text(mute_label_, FONT_AWESOME_VOLUME_XMARK);
@@ -132,13 +137,13 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         }
     }
 
-    // Perbarui waktu
+    // Perbarui jam.
     if (app.GetDeviceState() == kDeviceStateIdle) {
         if (last_status_update_time_ + std::chrono::seconds(10) < std::chrono::system_clock::now()) {
-            // Atur status menjadi jam "HH:MM"
+            // Tampilkan jam dalam format "HH:MM".
             time_t now = time(NULL);
             struct tm* tm = localtime(&now);
-            // Periksa apakah waktu sistem sudah pernah diatur
+            // Pastikan waktu sistem sudah tersinkronisasi.
             if (tm->tm_year >= 2025 - 1900) {
                 char time_str[16];
                 strftime(time_str, sizeof(time_str), "%H:%M", tm);
@@ -150,53 +155,60 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
     }
 
     esp_pm_lock_acquire(pm_lock_);
-    // Perbarui ikon baterai
+    // Perbarui ikon dan persentase baterai.
     int battery_level;
     bool charging, discharging;
     const char* icon = nullptr;
     if (board.GetBatteryLevel(battery_level, charging, discharging)) {
+        battery_level = std::max(0, std::min(100, battery_level));
         if (charging) {
             icon = FONT_AWESOME_BATTERY_BOLT;
         } else {
             const char* levels[] = {
-                FONT_AWESOME_BATTERY_EMPTY, // 0-19 persen
-                FONT_AWESOME_BATTERY_QUARTER,    // 20-39 persen
-                FONT_AWESOME_BATTERY_HALF,    // 40-59 persen
-                FONT_AWESOME_BATTERY_THREE_QUARTERS,    // 60-79 persen
-                FONT_AWESOME_BATTERY_FULL, // 80-99 persen
-                FONT_AWESOME_BATTERY_FULL, // 100 persen
+                FONT_AWESOME_BATTERY_EMPTY,
+                FONT_AWESOME_BATTERY_QUARTER,
+                FONT_AWESOME_BATTERY_HALF,
+                FONT_AWESOME_BATTERY_THREE_QUARTERS,
+                FONT_AWESOME_BATTERY_FULL,
+                FONT_AWESOME_BATTERY_FULL,
             };
-            icon = levels[battery_level / 20];
+            icon = levels[std::min(5, battery_level / 20)];
         }
+        char percent_text[8];
+        snprintf(percent_text, sizeof(percent_text), "%d%%", battery_level);
+
         DisplayLockGuard lock(this);
         if (battery_label_ != nullptr && battery_icon_ != icon) {
             battery_icon_ = icon;
             lv_label_set_text(battery_label_, battery_icon_);
         }
+        if (battery_percent_label_ != nullptr && battery_text_ != percent_text) {
+            battery_text_ = percent_text;
+            lv_label_set_text(battery_percent_label_, battery_text_.c_str());
+        }
 
-        // Periksa popup baterai lemah hanya saat kejadian detak jam dipicu.
-        // Alasannya, saat inisialisasi level baterai belum siap.
+        // Popup baterai lemah hanya dicek dari tick berkala karena saat inisialisasi
+        // nilai baterai bisa belum stabil.
         if (low_battery_popup_ != nullptr && !update_all) {
             if (strcmp(icon, FONT_AWESOME_BATTERY_EMPTY) == 0 && discharging) {
-                if (lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) { // Tampilkan jika popup baterai lemah sedang tersembunyi
+                if (lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) {
                     lv_obj_remove_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
                     app.Schedule([&app]() {
                         app.PlaySound(Lang::Sounds::OGG_LOW_BATTERY);
                     });
                 }
             } else {
-                // Sembunyikan popup baterai lemah saat baterai tidak kosong
-                if (!lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) { // Sembunyikan jika popup baterai lemah sedang tampil
+                if (!lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) {
                     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
                 }
             }
         }
     }
 
-    // Perbarui ikon jaringan setiap 10 detik
+    // Perbarui ikon jaringan setiap 10 detik.
     static int seconds_counter = 0;
     if (update_all || seconds_counter++ % 10 == 0) {
-        // Jangan baca status jaringan 4G saat upgrade firmware agar sumber daya UART tidak dipakai
+        // Jangan baca status 4G saat upgrade firmware agar UART tidak terganggu.
         auto device_state = Application::GetInstance().GetDeviceState();
         static const std::vector<DeviceState> allowed_states = {
             kDeviceStateIdle,
@@ -242,17 +254,17 @@ bool LvglDisplay::SnapshotToJpeg(std::string& jpeg_data, int quality) {
         return false;
     }
 
-    // Tukar urutan byte
+    // Tukar urutan byte warna.
     uint16_t* data = (uint16_t*)draw_buffer->data;
     size_t pixel_count = draw_buffer->data_size / 2;
     for (size_t i = 0; i < pixel_count; i++) {
         data[i] = __builtin_bswap16(data[i]);
     }
 
-    // Kosongkan string keluaran dan gunakan versi fungsi panggil balik agar tidak mengalokasikan blok memori besar di awal
+    // Kosongkan output dan pakai callback agar tidak perlu alokasi memori besar.
     jpeg_data.clear();
 
-    // Gunakan pengode JPEG berbasis fungsi panggil balik agar memori lebih hemat
+    // Encoder JPEG berbasis callback lebih hemat memori.
     bool ret = image_to_jpeg_cb((uint8_t*)draw_buffer->data, draw_buffer->data_size, draw_buffer->header.w, draw_buffer->header.h, V4L2_PIX_FMT_RGB565, quality,
         [](void *arg, size_t index, const void *data, size_t len) -> size_t {
         std::string* output = static_cast<std::string*>(arg);

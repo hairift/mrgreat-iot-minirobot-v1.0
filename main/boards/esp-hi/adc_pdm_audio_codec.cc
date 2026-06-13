@@ -5,7 +5,6 @@
 #include <driver/i2c.h>
 #include <driver/i2c_master.h>
 #include <driver/i2s_tdm.h>
-#include "adc_mic.h"
 #include "driver/i2s_pdm.h"
 #include "soc/gpio_sig_map.h"
 #include "soc/io_mux_reg.h"
@@ -26,9 +25,9 @@ static const char TAG[] = "AdcPdmAudioCodec";
     }
 
 /**
- * @brief Struktur konfigurasi I2S dupleks mono
+ * @brief Mono Duplex I2S configuration structure
  *
- * Konfigurasi ini digunakan sebagai bawaan pada bsp_audio_init()
+ * This configuration is used by default in bsp_audio_init()
  */
 #define BSP_I2S_DUPLEX_MONO_CFG(_sample_rate, _dout)                                                         \
     {                                                                                                 \
@@ -44,18 +43,19 @@ AdcPdmAudioCodec::AdcPdmAudioCodec(int input_sample_rate, int output_sample_rate
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
 
-    uint8_t adc_channel[1] = {0};
-    adc_channel[0] = adc_mic_channel;
-
-    audio_codec_adc_cfg_t cfg = {
-        .handle = NULL,
-        .max_store_buf_size = 1024 * 2,
-        .conv_frame_size = 1024,
-        .unit_id = ADC_UNIT_1,
-        .adc_channel_list = adc_channel,
-        .adc_channel_num = sizeof(adc_channel) / sizeof(adc_channel[0]),
-        .sample_rate_hz = (uint32_t)input_sample_rate,
-    };
+    audio_codec_adc_cfg_t cfg = {};
+    cfg.handle = NULL;
+    cfg.continuous_cfg.max_store_buf_size = 1024 * 2;
+    cfg.continuous_cfg.conv_frame_size = 1024;
+    cfg.continuous_cfg.sample_freq_hz = (uint32_t)input_sample_rate;
+    cfg.continuous_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
+    cfg.continuous_cfg.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
+    cfg.continuous_cfg.pattern_num = 1;
+    cfg.continuous_cfg.cfg_mode = AUDIO_CODEC_ADC_CFG_MODE_SINGLE_UNIT;
+    cfg.continuous_cfg.cfg.single_unit.unit_id = ADC_UNIT_1;
+    cfg.continuous_cfg.cfg.single_unit.atten = ADC_ATTEN_DB_12;
+    cfg.continuous_cfg.cfg.single_unit.bit_width = ADC_BITWIDTH_12;
+    cfg.continuous_cfg.cfg.single_unit.channel_id[0] = (uint8_t)adc_mic_channel;
     const audio_codec_data_if_t *adc_if = audio_codec_new_adc_data(&cfg);
 
     esp_codec_dev_cfg_t codec_dev_cfg = {
@@ -69,7 +69,7 @@ AdcPdmAudioCodec::AdcPdmAudioCodec(int input_sample_rate, int output_sample_rate
     }
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    chan_cfg.auto_clear = true; // Bersihkan otomatis data lama di buffer DMA
+    chan_cfg.auto_clear = true; // Auto clear the legacy data in the DMA buffer
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle_, NULL));
 
     i2s_pdm_tx_config_t pdm_cfg_default = BSP_I2S_DUPLEX_MONO_CFG((uint32_t)output_sample_rate, pdm_speak_p);
@@ -112,11 +112,11 @@ AdcPdmAudioCodec::AdcPdmAudioCodec(int input_sample_rate, int output_sample_rate
     if(pdm_speak_n != GPIO_NUM_NC){
         PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pdm_speak_n], PIN_FUNC_GPIO);
         gpio_set_direction(pdm_speak_n, GPIO_MODE_OUTPUT);
-        esp_rom_gpio_connect_out_signal(pdm_speak_n, I2SO_SD_OUT_IDX, 1, 0); // Balik sinyal keluaran SD OUT
+        esp_rom_gpio_connect_out_signal(pdm_speak_n, I2SO_SD_OUT_IDX, 1, 0); //反转输出 SD OUT 信号
         gpio_set_drive_capability(pdm_speak_n, GPIO_DRIVE_CAP_0);
     }
 
-    // Inisialisasi pewaktu keluaran
+    // 初始化输出定时器
     esp_timer_create_args_t output_timer_args = {
         .callback = &AdcPdmAudioCodec::OutputTimerCallback,
         .arg = this,
@@ -129,7 +129,7 @@ AdcPdmAudioCodec::AdcPdmAudioCodec(int input_sample_rate, int output_sample_rate
 }
 
 AdcPdmAudioCodec::~AdcPdmAudioCodec() {
-    // Hapus pewaktu
+    // 删除定时器
     if (output_timer_) {
         esp_timer_stop(output_timer_);
         esp_timer_delete(output_timer_);
@@ -171,7 +171,7 @@ void AdcPdmAudioCodec::EnableOutput(bool enable) {
         return;
     }
     if (enable) {
-        // Putar audio 16 bit 1 kanal
+        // Play 16bit 1 channel
         esp_codec_dev_sample_info_t fs = {
             .bits_per_sample = 16,
             .channel = 1,
@@ -182,8 +182,8 @@ void AdcPdmAudioCodec::EnableOutput(bool enable) {
         ESP_ERROR_CHECK(esp_codec_dev_open(output_dev_, &fs));
         ESP_ERROR_CHECK(esp_codec_dev_set_out_vol(output_dev_, output_volume_));
 
-        // Paksa konfigurasi ulang clock PDM TX sesuai board, menimpa nilai up_sample_fs bawaan pustaka pihak ketiga
-        // Jika kanal sudah aktif, nonaktifkan dulu, konfigurasi ulang, lalu aktifkan kembali
+        // 强制按板卡配置重配PDM TX时钟，覆盖第三方库在set_fmt中的默认up_sample_fs
+        // 若通道已启用，先禁用再重配，最后再启用
         ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(tx_handle_));
         i2s_pdm_tx_clk_config_t clk_cfg = I2S_PDM_TX_CLK_DEFAULT_CONFIG((uint32_t)output_sample_rate_);
         clk_cfg.up_sample_fs = AUDIO_PDM_UPSAMPLE_FS;
@@ -192,13 +192,13 @@ void AdcPdmAudioCodec::EnableOutput(bool enable) {
         if(pa_ctrl_pin_ != GPIO_NUM_NC){
             gpio_set_level(pa_ctrl_pin_, 1);
         }
-        // Saat keluaran diaktifkan, jalankan pewaktu
+        // 启用输出时启动定时器
         if (output_timer_) {
             esp_timer_start_once(output_timer_, TIMER_TIMEOUT_US);
         }
 
     } else {
-        // Saat keluaran dinonaktifkan, hentikan pewaktu
+        // 禁用输出时停止定时器
         if (output_timer_) {
             esp_timer_stop(output_timer_);
         }
@@ -219,7 +219,7 @@ int AdcPdmAudioCodec::Read(int16_t* dest, int samples) {
 int AdcPdmAudioCodec::Write(const int16_t* data, int samples) {
     if (output_enabled_) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_write(output_dev_, (void*)data, samples * sizeof(int16_t)));
-        // Setel ulang pewaktu keluaran
+        // 重置输出定时器
         if (output_timer_) {
             esp_timer_stop(output_timer_);
             esp_timer_start_once(output_timer_, TIMER_TIMEOUT_US);
@@ -241,7 +241,7 @@ void AdcPdmAudioCodec::Start() {
     ESP_LOGI(TAG, "Audio codec started");
 }
 
-// Implementasi fungsi panggil balik pewaktu
+// 定时器回调函数实现
 void AdcPdmAudioCodec::OutputTimerCallback(void* arg) {
     AdcPdmAudioCodec* codec = static_cast<AdcPdmAudioCodec*>(arg);
     if (codec && codec->output_enabled_) {

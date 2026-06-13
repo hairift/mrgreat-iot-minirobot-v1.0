@@ -34,22 +34,22 @@ class Pmic : public Axp2101 {
             WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
             WriteReg(0x27, 0x10);  // hold 4s to power off
     
-            // Nonaktifkan semua DC kecuali DC1
+            // Disable All DCs but DC1
             WriteReg(0x80, 0x01);
-            // Nonaktifkan semua LDO
+            // Disable All LDOs
             WriteReg(0x90, 0x00);
             WriteReg(0x91, 0x00);
     
-            // Atur DC1 ke 3,3 V
+            // Set DC1 to 3.3V
             WriteReg(0x82, (3300 - 1500) / 100);
     
-            // Atur ALDO1 ke 3,3 V
+            // Set ALDO1 to 3.3V
             WriteReg(0x92, (3300 - 500) / 100);
 
             WriteReg(0x96, (1500 - 500) / 100);
             WriteReg(0x97, (2800 - 500) / 100);
     
-            // Aktifkan ALDO1, BLDO1, dan BLDO2
+            // Enable ALDO1 BLDO1 BLDO2 
             WriteReg(0x90, 0x31);
         
             WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
@@ -61,18 +61,18 @@ class Pmic : public Axp2101 {
     };
 
 typedef struct {
-    int cmd;                /*<! Perintah LCD yang spesifik */
-    const void *data;       /*<! Buffer yang menyimpan data khusus untuk perintah */
-    size_t data_bytes;      /*<! Ukuran `data` di memori, dalam byte */
-    unsigned int delay_ms;  /*<! Waktu tunda dalam milidetik setelah perintah ini */
+    int cmd;                /*<! The specific LCD command */
+    const void *data;       /*<! Buffer that holds the command specific data */
+    size_t data_bytes;      /*<! Size of `data` in memory, in bytes */
+    unsigned int delay_ms;  /*<! Delay in milliseconds after this command */
 } st7796_lcd_init_cmd_t;
 
 typedef struct {
-    const st7796_lcd_init_cmd_t *init_cmds;     /*!< Penunjuk ke larik perintah inisialisasi. Atur ke NULL bila memakai perintah bawaan.
-                                                 *   Larik harus dideklarasikan sebagai `static const` dan diletakkan di luar fungsi.
-                                                 *   Silakan lihat `vendor_specific_init_default` pada berkas sumber.
+    const st7796_lcd_init_cmd_t *init_cmds;     /*!< Pointer to initialization commands array. Set to NULL if using default commands.
+                                                 *   The array should be declared as `static const` and positioned outside the function.
+                                                 *   Please refer to `vendor_specific_init_default` in source file.
                                                  */
-    uint16_t init_cmds_size;                    /*<! Jumlah perintah pada larik di atas */
+    uint16_t init_cmds_size;                    /*<! Number of commands in above array */
 } st7796_vendor_config_t;
 
 st7796_lcd_init_cmd_t st7796_lcd_init_cmds[] = {
@@ -125,7 +125,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -192,8 +192,8 @@ private:
         };
 
         esp_video_init_sccb_config_t sccb_config = {
-            .init_sccb = false,  // Jangan inisialisasi SCCB baru; pakai bus I2C yang sudah ada
-            .i2c_handle = i2c_bus_,  // Gunakan handle bus I2C yang sudah ada
+            .init_sccb = false,  // 不初始化新的 SCCB，使用现有的 I2C 总线
+            .i2c_handle = i2c_bus_,  // 使用现有的 I2C 总线句柄
             .freq = 100000,  // 100kHz
         };
 
@@ -232,7 +232,16 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_FT5x06_ADDRESS,
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 8,
+            .flags =
+            {
+                .disable_control_phase = 1,
+            }
+        };
         tp_io_config.scl_speed_hz = 400 * 1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_LOGI(TAG, "Initialize touch controller");
@@ -248,7 +257,7 @@ private:
     void InitializeLcdDisplay() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGI(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_CS_PIN;
@@ -265,7 +274,7 @@ private:
             .init_cmds_size = sizeof(st7796_lcd_init_cmds) / sizeof(st7796_lcd_init_cmd_t),
         };      
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGI(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = DISPLAY_RST_PIN;
@@ -297,7 +306,7 @@ private:
         });
     }
 
-    // Inisialisasi alat
+    // 初始化工具
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",
@@ -318,7 +327,7 @@ public:
         InitializeAxp2101();
         InitializeSpi();
         InitializeLcdDisplay();
-        // Mengatasi sebagian kasus layar hitam saat perangkat baru menyala
+        // 解决部分开机黑屏的问题
         if (esp_reset_reason() == ESP_RST_POWERON) {
             fflush(stdout);
             esp_restart();

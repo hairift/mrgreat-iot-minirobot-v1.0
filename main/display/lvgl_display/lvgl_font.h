@@ -9,7 +9,7 @@ public:
     virtual ~LvglFont() = default;
 };
 
-// Huruf bawaan
+// Built-in font
 class LvglBuiltInFont : public LvglFont {
 public:
     LvglBuiltInFont(const lv_font_t* font) : font_(font) {}

@@ -59,7 +59,7 @@ private:
 
     void InitializeTools() {
         auto& mcp_server = McpServer::GetInstance();
-        mcp_server.AddTool("self.disp.network", "Memulai ulang konfigurasi jaringan", PropertyList(),
+        mcp_server.AddTool("self.disp.network", "重新配网", PropertyList(),
         [this](const PropertyList&) -> ReturnValue {
             EnterWifiConfigMode();
             return true;

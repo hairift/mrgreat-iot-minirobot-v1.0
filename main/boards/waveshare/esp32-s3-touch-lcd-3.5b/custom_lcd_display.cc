@@ -203,8 +203,8 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
         esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
     }
 
-    // Nyalakan layar
-    ESP_LOGI(TAG, "Menyalakan layar");
+    // Set the display to on
+    ESP_LOGI(TAG, "Turning display on");
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
     ESP_LOGI(TAG, "Initialize LVGL library");
@@ -267,7 +267,7 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
     esp_lcd_panel_io_callbacks_t cbs = {
         .on_color_trans_done = lvgl_port_flush_io_ready_callback,
     };
-    /* Daftarkan fungsi panggil balik saat selesai */
+    /* Register done callback */
     esp_lcd_panel_io_register_event_callbacks(panel_io_, &cbs, display_);
 
     esp_lcd_panel_disp_on_off(panel_, false);
@@ -281,6 +281,6 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
         lv_display_set_offset(display_, offset_x, offset_y);
     }
 
-    // Catatan: SetupUI() sebaiknya dipanggil oleh Application::Initialize(), bukan di konstruktor
-    // agar objek LVGL dibuat setelah layar selesai diinisialisasi sepenuhnya.
+    // Note: SetupUI() should be called by Application::Initialize(), not in constructor
+    // to ensure lvgl objects are created after the display is fully initialized.
 }

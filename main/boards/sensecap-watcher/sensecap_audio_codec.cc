@@ -9,15 +9,15 @@ static const char TAG[] = "SensecapAudioCodec";
 SensecapAudioCodec::SensecapAudioCodec(void* i2c_master_handle, int input_sample_rate, int output_sample_rate,
     gpio_num_t mclk, gpio_num_t bclk, gpio_num_t ws, gpio_num_t dout, gpio_num_t din,
     gpio_num_t pa_pin, uint8_t es8311_addr, uint8_t es7243e_addr, bool input_reference) {
-    duplex_ = true; // Menandakan mode audio dua arah
-    input_reference_ = input_reference; // Menentukan apakah masukan referensi dipakai untuk peredaman gema
-    input_channels_ = input_reference_ ? 2 : 1; // Jumlah kanal masukan
+    duplex_ = true; // 是否双工
+    input_reference_ = input_reference; // 是否使用参考输入，实现回声消除
+    input_channels_ = input_reference_ ? 2 : 1; // 输入通道数
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
 
     CreateDuplexChannels(mclk, bclk, ws, dout, din);
 
-    // Inisialisasi antarmuka terkait: data_if, ctrl_if, dan gpio_if
+    // Do initialize of related interface: data_if, ctrl_if and gpio_if
     audio_codec_i2s_cfg_t i2s_cfg = {
         .port = I2S_NUM_0,
         .rx_handle = rx_handle_,
@@ -26,7 +26,7 @@ SensecapAudioCodec::SensecapAudioCodec(void* i2c_master_handle, int input_sample
     data_if_ = audio_codec_new_i2s_data(&i2s_cfg);
     assert(data_if_ != NULL);
 
-    // Jalur keluaran
+    // Output
     audio_codec_i2c_cfg_t i2c_cfg = {
         .port = (i2c_port_t)0,
         .addr = es8311_addr,
@@ -57,7 +57,7 @@ SensecapAudioCodec::SensecapAudioCodec(void* i2c_master_handle, int input_sample
     output_dev_ = esp_codec_dev_new(&dev_cfg);
     assert(output_dev_ != NULL);
 
-    // Jalur masukan
+    // Input
     i2c_cfg.addr = es7243e_addr << 1;
     in_ctrl_if_ = audio_codec_new_i2c_ctrl(&i2c_cfg);
     assert(in_ctrl_if_ != NULL);
@@ -178,7 +178,7 @@ void SensecapAudioCodec::EnableOutput(bool enable) {
         return;
     }
     if (enable) {
-        // Putar audio 16 bit 1 kanal
+        // Play 16bit 1 channel
         esp_codec_dev_sample_info_t fs = {
             .bits_per_sample = 16,
             .channel = 1,

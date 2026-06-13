@@ -35,10 +35,10 @@ public:
         uint16_t x2 = area->x2; 
         uint16_t y1 = area->y1;
         uint16_t y2 = area->y2; 
-        // Bulatkan awal koordinat ke bawah ke kelipatan genap terdekat
+        // round the start of coordinate down to the nearest 2M number
         area->x1 = (x1 >> 1) << 1;
         area->y1 = (y1 >> 1) << 1;
-        // Bulatkan akhir koordinat ke atas ke nilai ganjil terdekat
+        // round the end of coordinate up to the nearest 2N+1 number
         area->x2 = ((x2 >> 1) << 1) + 1;
         area->y2 = ((y2 >> 1) << 1) + 1;
     }
@@ -54,12 +54,12 @@ public:
                     bool swap_xy)
         : SpiLcdDisplay(io_handle, panel_handle,
                     width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-        // Catatan: penyesuaian UI sebaiknya dilakukan di SetupUI(), bukan di konstruktor
-        // agar objek LVGL sudah terbentuk sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu agar semua objek LVGL terbentuk
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
@@ -81,7 +81,7 @@ private:
     uint8_t pwr_flag = 0;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -136,7 +136,7 @@ private:
         };
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle));
         sh8601_vendor_config_t vendor_config = {
-            .init_cmds = lcd_init_cmds,             // Hapus komentar pada baris ini jika ingin memakai perintah inisialisasi kustom
+            .init_cmds = lcd_init_cmds,             // Uncomment these line if use custom initialization commands
             .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(lcd_init_cmds[0]), // sizeof(axs15231b_lcd_init_cmd_t),
             .flags = 
             {
@@ -157,7 +157,7 @@ private:
         EXAMPLE_LCD_H_RES, EXAMPLE_LCD_V_RES, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
-    void InitializeButtons() { // Saat baterai lithium terpasang, tombol PWR bisa ditekan lama untuk hidup atau mati
+    void InitializeButtons() { //接入锂电池时,可长按PWR开机/关机
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
@@ -236,7 +236,7 @@ private:
     void InitializeTools()
     {
         auto& mcp_server = McpServer::GetInstance();
-        mcp_server.AddTool("self.disp.setbacklight", "Mengatur tingkat kecerahan layar", PropertyList({
+        mcp_server.AddTool("self.disp.setbacklight", "设置屏幕亮度", PropertyList({
             Property("level", kPropertyTypeInteger, 0, 255)
         }), [this](const PropertyList& properties) -> ReturnValue {
             int level = properties["level"].value<int>();

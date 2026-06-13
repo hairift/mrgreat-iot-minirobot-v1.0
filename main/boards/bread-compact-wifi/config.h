@@ -38,12 +38,15 @@
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 
 // Tombol sakelar taktil harian untuk membangunkan AI atau mengganti status percakapan.
-// Sambungkan tombol antara GPIO2 dan GND.
-#define ASR_BUTTON_GPIO         GPIO_NUM_2
+// Sambungkan satu kaki tombol ke GPIO1 dan kaki sisi seberangnya ke GND.
+// Untuk tombol taktil 4 kaki, jangan memakai kiri atas + kiri bawah atau kanan atas + kanan bawah
+// jika kedua kaki itu sudah terhubung permanen. Pakai sisi berseberangan, misalnya kiri atas + kanan atas.
+// GPIO2 dipakai untuk ADC baterai, jadi jangan dipakai lagi sebagai tombol.
+#define ASR_BUTTON_GPIO         GPIO_NUM_1
 
 // USB bawaan pada ESP32-S3:
 // D- = GPIO19 dan D+ = GPIO20 dipakai untuk data USB.
-// Jalur ini bukan pembaca baterai dan bukan tombol umum.
+// Jalur ini bukan pembaca baterai, bukan tombol umum, dan tidak dapat menyalakan board tanpa jalur daya.
 
 // OLED SSD1306 0.96" (I2C)
 // SDA=G10, SCK(SCL)=G9
@@ -75,12 +78,13 @@
 #define SERVO_LARM_GPIO     GPIO_NUM_39   // tangan kiri
 
 // Pembacaan baterai:
-// pakai pembagi tegangan 100 kOhm + 100 kOhm, lalu kapasitor 104 (100 nF)
-// dari titik ADC ke GND. Pindahkan titik ADC ke GPIO1, jangan GPIO14,
-// karena GPIO14 berada di ADC2 dan pernah membuat board restart pada rangkaian ini.
-#define BATTERY_ADC_GPIO    GPIO_NUM_1
+// Pakai pembagi tegangan 100 kOhm + 100 kOhm, lalu kapasitor 104 (100 nF)
+// dari titik ADC ke GND. Jalur ADC mengikuti rangkaian terbaru di GPIO2.
+// Untuk membaca baterai asli, masukan pembagi sebaiknya dari baterai/TP4056 OUT+
+// atau MT3608 IN+, bukan dari keluaran boost 5V.
+#define BATTERY_ADC_GPIO    GPIO_NUM_2
 #define BATTERY_ADC_UNIT    ADC_UNIT_1
-#define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
+#define BATTERY_ADC_CHANNEL ADC_CHANNEL_1
 #define BATTERY_CHARGING_GPIO GPIO_NUM_NC
 #define BATTERY_R_UPPER     100000.0f    // resistor atas (ohm)
 #define BATTERY_R_LOWER     100000.0f    // resistor bawah (ohm)

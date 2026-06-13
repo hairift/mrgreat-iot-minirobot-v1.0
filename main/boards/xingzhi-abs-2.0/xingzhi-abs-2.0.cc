@@ -74,7 +74,7 @@ private:
     }
 
     void InitializePowerManager() {
-        power_manager_ = new PowerManager(POWER_USB_IN); // Apakah USB terpasang
+        power_manager_ = new PowerManager(POWER_USB_IN);//USB是否插入
         power_manager_->OnChargingStatusChanged([this](bool is_charging) {
             if (is_charging) {
                 power_save_timer_->SetEnabled(false);
@@ -105,7 +105,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -180,7 +180,7 @@ private:
 
         esp_err_t err = spi_bus_initialize(SD_SPI_HOST, &bus_cnf, SPI_DMA_CH_AUTO);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Inisialisasi bus SPI gagal: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "SPI总线初始化失败: %s", esp_err_to_name(err));
             return;
         }
         
@@ -203,14 +203,14 @@ private:
         sdmmc_host_t host = SDSPI_HOST_DEFAULT();
         err = esp_vfs_fat_sdspi_mount(SD_MOUNT_POINT, &host, &slot_cnf, &mount_cnf, &card);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Pemasangan kartu SD gagal: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "SD卡挂载失败: %s", esp_err_to_name(err));
             is_sdcard_found = false;
             return;
         } else if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Kartu SD berhasil dipasang");
+            ESP_LOGI(TAG, "SD卡挂载成功");
             is_sdcard_found = true;
         }
-        // sdmmc_card_print_info(stdout, card); // Cetak informasi kartu SD
+        // sdmmc_card_print_info(stdout, card); // 打印SD卡信息
     }
 
     void InitializePhysicalButtons() {
@@ -220,7 +220,7 @@ private:
             auto& app = Application::GetInstance();
             if (GetNetworkType() == NetworkType::WIFI) {
                 if (app.GetDeviceState() == kDeviceStateStarting) {
-                    // Ubah ke tipe WifiBoard
+                    // cast to WifiBoard
                     auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
                     wifi_board.EnterWifiConfigMode();
                     return;
@@ -241,9 +241,9 @@ private:
                 ESP_LOGI(TAG, "Button OnFiveClick");
                 this->TriggerVibrateEvent();
                 if (is_sdcard_found) {
-                    display_->SetChatMessage("system", "Saat perangkat menyala, kartu SD terdeteksi berhasil dipasang");
+                    display_->SetChatMessage("system", "开机检测到SD挂载成功");
                 } else {
-                    display_->SetChatMessage("system", "Saat perangkat menyala, kartu SD terdeteksi gagal dipasang");
+                    display_->SetChatMessage("system", "开机检测到SD挂载失败");
                 }
             }, 5);
 
@@ -300,7 +300,7 @@ private:
     void InitializeVibrateTask() {
         vibrate_event_queue_ = xQueueCreate(10, sizeof(VibrateEvent_t));
         if (vibrate_event_queue_ == nullptr) {
-            ESP_LOGE(TAG, "Gagal membuat antrean kejadian getar");
+            ESP_LOGE(TAG, "创建振动事件队列失败");
             return;
         }
 
@@ -314,9 +314,9 @@ private:
         );
 
         if (ret != pdPASS) {
-            ESP_LOGE(TAG, "Gagal membuat tugas getar");
+            ESP_LOGE(TAG, "创建振动任务失败");
         } else {
-            ESP_LOGI(TAG, "Tugas getar berhasil diinisialisasi");
+            ESP_LOGI(TAG, "振动任务初始化成功");
         }
     }
 

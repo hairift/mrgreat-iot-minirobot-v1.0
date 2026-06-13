@@ -92,7 +92,7 @@ public:
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -113,10 +113,10 @@ public:
         xl9535_->pin_mode(XL9535_ESP32P4_VCCA_POWER_EN, Cpp_Bus_Driver::Xl95x5::Mode::OUTPUT);
         xl9535_->pin_mode(XL9535_5_0_V_POWER_EN, Cpp_Bus_Driver::Xl95x5::Mode::OUTPUT);
         xl9535_->pin_mode(XL9535_3_3_V_POWER_EN, Cpp_Bus_Driver::Xl95x5::Mode::OUTPUT);
-        // Saat menyalakan atau mematikan tegangan 3.3V, GPS harus dimatikan lebih dulu
+        // 开关3.3v电压时候必须先将GPS断电
         xl9535_->pin_mode(XL9535_GPS_WAKE_UP, Cpp_Bus_Driver::Xl95x5::Mode::OUTPUT);
         xl9535_->pin_write(XL9535_GPS_WAKE_UP, Cpp_Bus_Driver::Xl95x5::Value::LOW);
-        // Saat menyalakan atau mematikan tegangan 3.3V, ESP32C6 harus dimatikan lebih dulu
+        // 开关3.3v电压时候必须先将ESP32C6断电
         xl9535_->pin_mode(XL9535_ESP32C6_EN, Cpp_Bus_Driver::Xl95x5::Mode::OUTPUT);
         xl9535_->pin_write(XL9535_ESP32C6_EN, Cpp_Bus_Driver::Xl95x5::Value::LOW);
 
@@ -136,7 +136,7 @@ public:
         xl9535_->pin_write(XL9535_3_3_V_POWER_EN, Cpp_Bus_Driver::Xl95x5::Value::LOW);
         vTaskDelay(pdMS_TO_TICKS(10));
 
-        // Atur ulang ESP32C6
+        // ESP32C6复位
         xl9535_->pin_write(XL9535_ESP32C6_EN, Cpp_Bus_Driver::Xl95x5::Value::HIGH);
         vTaskDelay(pdMS_TO_TICKS(100));
         xl9535_->pin_write(XL9535_ESP32C6_EN, Cpp_Bus_Driver::Xl95x5::Value::LOW);
@@ -169,7 +169,7 @@ public:
         esp_lcd_new_dsi_bus(&bus_config, &mipi_dsi_bus);
 
         ESP_LOGI(TAG, "Install MIPI DSI LCD control panel");
-        // gunakan antarmuka DBI untuk mengirim perintah dan parameter LCD
+        // we use DBI interface to send LCD commands and parameters
         esp_lcd_dbi_io_config_t dbi_io_config = {
             .virtual_channel = 0,
             .lcd_cmd_bits = 8,   // according to the LCD spec
@@ -268,7 +268,7 @@ public:
 
     void AppToggleChatState(void){
         auto& app = Application::GetInstance();
-            // Saat startup, sebelum terhubung, menekan tombol BOOT akan masuk ke mode konfigurasi Wi-Fi tanpa reboot
+        // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
         if (app.GetDeviceState() == kDeviceStateStarting) {
             EnterWifiConfigMode();
             return;
@@ -354,23 +354,23 @@ void TouchTask(void *arg) {
             size_t current_time = board->esp32p4_->get_system_time_ms();
             
             if (!waiting_for_second_tap) {
-                // Klik pertama
+                // 第一次点击
                 first_touch_time = current_time;
                 waiting_for_second_tap = true;
                 printf("first touch detected, waiting for second...\n");
             } else {
-                // Klik kedua, periksa jeda waktunya
-                // Klik ganda harus selesai dalam 500 ms
+                // 第二次点击，检查时间间隔
+                // 500ms内完成双击
                 if ((current_time - first_touch_time) <= 500) {
                     printf("double touch trigger\n");
 
                     board->AppToggleChatState();
                     
-                    // Atur ulang status
+                    // 重置状态
                     waiting_for_second_tap = false;
                     first_touch_time = 0;
                 } else {
-                    // Waktu habis, mulai lagi dari awal
+                    // 超时，重新开始
                     first_touch_time = current_time;
                     printf("first touch timeout, restart...\n");
                 }
@@ -379,7 +379,7 @@ void TouchTask(void *arg) {
             touch_lock_flag = true;
         }
         
-        // Tangani batas waktu klik ganda
+        // 处理双击超时
         if (waiting_for_second_tap) {
             size_t current_time = board->esp32p4_->get_system_time_ms();
 

@@ -65,7 +65,7 @@ void EspWakeWord::Feed(const std::vector<int16_t>& data) {
     }
 
     std::lock_guard<std::mutex> lock(input_buffer_mutex_);
-    // Periksa status berjalan di dalam kunci agar tidak terjadi kondisi balapan dengan Stop()
+    // Check running state inside lock to avoid TOCTOU race with Stop()
     if (!running_) {
         return;
     }

@@ -65,7 +65,7 @@ class YunliaoS3 : public DualNetworkBoard {
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -133,7 +133,7 @@ class YunliaoS3 : public DualNetworkBoard {
     void InitializeSt7789Display() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        // Inisialisasi antarmuka IO pengendali layar
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_SPI_PIN_LCD_CS;
@@ -146,7 +146,7 @@ class YunliaoS3 : public DualNetworkBoard {
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(DISPLAY_SPI_LCD_HOST,
                                                  &io_config, &panel_io));
 
-        // Inisialisasi pengendali layar ST7789
+        // 初始化液晶屏驱动芯片ST7789
         ESP_LOGD(TAG, "Install LCD driver");
         Settings settings("display", false);
         bool currentIpsMode = settings.GetBool("ips_mode", DISPLAY_INVERT_COLOR);

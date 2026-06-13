@@ -22,10 +22,10 @@
 class Pi4ioe : public I2cDevice {
 public:
     Pi4ioe(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : I2cDevice(i2c_bus, addr) {
-        WriteReg(PI4IOE_REG_IO_PP, 0x00); // Atur ke impedansi tinggi
-        WriteReg(PI4IOE_REG_IO_PULLUP, 0xFF); // Aktifkan pull-up
-        WriteReg(PI4IOE_REG_IO_DIR, 0x6E); // Atur input=0, output=1
-        WriteReg(PI4IOE_REG_IO_OUT, 0xFF); // Atur keluaran ke 1
+        WriteReg(PI4IOE_REG_IO_PP, 0x00); // Set to high-impedance
+        WriteReg(PI4IOE_REG_IO_PULLUP, 0xFF); // Enable pull-up
+        WriteReg(PI4IOE_REG_IO_DIR, 0x6E); // Set input=0, output=1
+        WriteReg(PI4IOE_REG_IO_OUT, 0xFF); // Set outputs to 1
     }
 
     void SetSpeakerMute(bool mute) {
@@ -41,7 +41,7 @@ private:
     Esp32Camera* camera_;
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -95,7 +95,7 @@ private:
             ESP_LOGE(TAG, "Atomic Echo Base is disconnected");
             vTaskDelay(pdMS_TO_TICKS(1000));
 
-            // Jalankan ulang deteksi
+            // Rerun detection
             I2cDetect();
             if (is_echo_base_connected_) {
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -161,7 +161,7 @@ private:
     }
 public:
     AtomS3rCamM12EchoBaseBoard() {
-        EnableCameraPower(); // IO18 juga mengendalikan lampu indikator
+        EnableCameraPower(); // IO18 还会控制指示灯
         InitializeCamera();
         InitializeI2c();
         I2cDetect();

@@ -15,32 +15,32 @@
 #include "assets.h"
 
 /**
- * Kejadian jaringan untuk fungsi panggil balik terpadu.
+ * Network events for unified callback
  */
 enum class NetworkEvent {
-    Scanning,              // Jaringan sedang dipindai (pemindaian Wi-Fi dan sejenisnya)
-    Connecting,            // Jaringan sedang terhubung (data: SSID/nama jaringan)
-    Connected,             // Jaringan berhasil terhubung (data: SSID/nama jaringan)
-    Disconnected,          // Jaringan terputus
-    WifiConfigModeEnter,   // Masuk ke mode konfigurasi WiFi
-    WifiConfigModeExit,    // Keluar dari mode konfigurasi WiFi
-    // Kejadian khusus modem seluler
-    ModemDetecting,        // Mendeteksi modem (baud rate, tipe modul)
-    ModemErrorNoSim,       // Kartu SIM tidak terdeteksi
-    ModemErrorRegDenied,   // Registrasi jaringan ditolak
-    ModemErrorInitFailed,  // Inisialisasi modem gagal
-    ModemErrorTimeout      // Waktu operasi habis
+    Scanning,              // Network is scanning (WiFi scanning, etc.)
+    Connecting,            // Network is connecting (data: SSID/network name)
+    Connected,             // Network connected successfully (data: SSID/network name)
+    Disconnected,          // Network disconnected
+    WifiConfigModeEnter,   // Entered WiFi configuration mode
+    WifiConfigModeExit,    // Exited WiFi configuration mode
+    // Cellular modem specific events
+    ModemDetecting,        // Detecting modem (baud rate, module type)
+    ModemErrorNoSim,       // No SIM card detected
+    ModemErrorRegDenied,   // Network registration denied
+    ModemErrorInitFailed,  // Modem initialization failed
+    ModemErrorTimeout      // Operation timeout
 };
 
-// Enumerasi level penghematan daya
+// Power save level enumeration
 enum class PowerSaveLevel {
-    LOW_POWER,    // Penghematan daya maksimum (konsumsi daya terendah)
-    BALANCED,     // Penghematan daya sedang (seimbang)
-    PERFORMANCE,  // Tanpa penghematan daya (konsumsi daya maksimum / performa penuh)
+    LOW_POWER,    // Maximum power saving (lowest power consumption)
+    BALANCED,     // Medium power saving (balanced)
+    PERFORMANCE,  // No power saving (maximum power consumption / full performance)
 };
 
-// Tipe fungsi panggil balik kejadian jaringan (kejadian, data)
-// data berisi informasi tambahan seperti SSID untuk kejadian Connecting/Connected
+// Network event callback type (event, data)
+// data contains additional info like SSID for Connecting/Connected events
 using NetworkEventCallback = std::function<void(NetworkEvent event, const std::string& data)>;
 
 void* create_board();
@@ -48,14 +48,14 @@ class AudioCodec;
 class Display;
 class Board {
 private:
-    Board(const Board&) = delete; // Nonaktifkan konstruktor salin
-    Board& operator=(const Board&) = delete; // Nonaktifkan operator penugasan
+    Board(const Board&) = delete; // 禁用拷贝构造函数
+    Board& operator=(const Board&) = delete; // 禁用赋值操作
 
 protected:
     Board();
     std::string GenerateUuid();
 
-    // Identitas unik perangkat yang dihasilkan oleh perangkat lunak
+    // 软件生成的设备唯一标识
     std::string uuid_;
 
 public:

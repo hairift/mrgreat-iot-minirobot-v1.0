@@ -11,7 +11,7 @@
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
-#include "esp_video.h"
+#include "esp32_camera.h"
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
@@ -34,7 +34,7 @@ private:
     HardwareConfig hw_config_;
     AudioCodec* audio_codec_;
     i2c_master_bus_handle_t i2c_bus_;
-    EspVideo* camera_;
+    Camera* camera_;
     bool has_camera_;
     OttoCameraType camera_type_;
 
@@ -106,7 +106,7 @@ private:
                 ret = i2c_master_transmit_receive(dev_handle, &reg_addr_8bit, 1, data, 2, 200);
                 if (ret == ESP_OK && (data[0] != 0 || data[1] != 0)) {
                     detected_pid = (data[0] << 8) | data[1];
-                    ESP_LOGI(TAG, "Kamera terdeteksi (mode OV2640) PID=0x%04X (alamat=0x%02X)",
+                    ESP_LOGI(TAG, "检测到摄像头 (OV2640方式) PID=0x%04X (地址=0x%02X)",
                              detected_pid, addr);
                     camera_found = true;
                     i2c_master_bus_rm_device(dev_handle);
@@ -124,7 +124,7 @@ private:
                     if (ret == ESP_OK) {
                         detected_pid = (pid_high << 8) | pid_low;
                         if (detected_pid != 0) {
-                            ESP_LOGI(TAG, "Kamera terdeteksi (mode OV3660) PID=0x%04X (alamat=0x%02X)",
+                            ESP_LOGI(TAG, "检测到摄像头 (OV3660方式) PID=0x%04X (地址=0x%02X)",
                                      detected_pid, addr);
                             camera_found = true;
                             i2c_master_bus_rm_device(dev_handle);
@@ -143,16 +143,16 @@ private:
             ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL, 0);
             camera_type_ = OTTO_CAMERA_NONE;
         } else {
-            // Tentukan jenis kamera berdasarkan PID
-            if (detected_pid == OV2640_PID_1 || detected_pid == OV2640_PID_2) {
+            // 根据 PID 判断摄像头类型
+            if (detected_pid == OTTO_OV2640_PID_1 || detected_pid == OTTO_OV2640_PID_2) {
                 camera_type_ = OTTO_CAMERA_OV2640;
-                ESP_LOGI(TAG, "Jenis kamera: OV2640 (PID=0x%04X)", detected_pid);
-            } else if (detected_pid == OV3660_PID) {
+                ESP_LOGI(TAG, "摄像头类型: OV2640 (PID=0x%04X)", detected_pid);
+            } else if (detected_pid == OTTO_OV3660_PID) {
                 camera_type_ = OTTO_CAMERA_OV3660;
-                ESP_LOGI(TAG, "Jenis kamera: OV3660 (PID=0x%04X)", detected_pid);
+                ESP_LOGI(TAG, "摄像头类型: OV3660 (PID=0x%04X)", detected_pid);
             } else {
                 camera_type_ = OTTO_CAMERA_UNKNOWN;
-                ESP_LOGW(TAG, "Jenis kamera tidak dikenal, PID=0x%04X", detected_pid);
+                ESP_LOGW(TAG, "未知摄像头类型，PID=0x%04X", detected_pid);
             }
         }
         return camera_found;
@@ -230,7 +230,14 @@ private:
         if (!ws_control_server_->Start(8080)) {
             delete ws_control_server_;
             ws_control_server_ = nullptr;
+            return;
         }
+        // 将 MCP 响应同时广播回连接到 8080 端口的 WebSocket 客户端
+        Application::GetInstance().RegisterMcpBroadcastCallback([this](const std::string& payload) {
+            if (ws_control_server_) {
+                ws_control_server_->BroadcastMessage(payload);
+            }
+        });
     }
 
     void StartNetwork() override {
@@ -246,57 +253,54 @@ private:
         }
 
         try {
-            static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
-                .data_width = CAM_CTLR_DATA_WIDTH_8,
-                .data_io =
-                    {
-                        [0] = CAMERA_D0,
-                        [1] = CAMERA_D1,
-                        [2] = CAMERA_D2,
-                        [3] = CAMERA_D3,
-                        [4] = CAMERA_D4,
-                        [5] = CAMERA_D5,
-                        [6] = CAMERA_D6,
-                        [7] = CAMERA_D7,
-                    },
-                .vsync_io = CAMERA_VSYNC,
-                .de_io = CAMERA_HSYNC,
-                .pclk_io = CAMERA_PCLK,
-                .xclk_io = CAMERA_XCLK,
-            };
+            // 释放检测阶段占用的 I2C 资源，避免与 esp_camera 初始化冲突。
+            i2c_del_master_bus(i2c_bus_);
+            i2c_bus_ = nullptr;
+            // 停止检测阶段输出的 XCLK，交由 esp_camera 自行接管。
+            ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL, 0);
 
-            esp_video_init_sccb_config_t sccb_config = {
-                .init_sccb = false,
-                .i2c_handle = i2c_bus_,
-                .freq = 100000,
-            };
+            camera_config_t config = {};
+            config.ledc_channel = LEDC_CHANNEL_0;
+            config.ledc_timer = LEDC_TIMER_0;
+            config.pin_d0 = CAMERA_D0;
+            config.pin_d1 = CAMERA_D1;
+            config.pin_d2 = CAMERA_D2;
+            config.pin_d3 = CAMERA_D3;
+            config.pin_d4 = CAMERA_D4;
+            config.pin_d5 = CAMERA_D5;
+            config.pin_d6 = CAMERA_D6;
+            config.pin_d7 = CAMERA_D7;
+            config.pin_xclk = CAMERA_XCLK;
+            config.pin_pclk = CAMERA_PCLK;
+            config.pin_vsync = CAMERA_VSYNC;
+            config.pin_href = CAMERA_HSYNC;
+            config.pin_sccb_sda = CAMERA_VERSION_CONFIG.i2c_sda_pin;
+            config.pin_sccb_scl = CAMERA_VERSION_CONFIG.i2c_scl_pin;
+            config.sccb_i2c_port = 0;
+            config.pin_pwdn = CAMERA_PWDN;
+            config.pin_reset = CAMERA_RESET;
+            config.xclk_freq_hz = CAMERA_XCLK_FREQ;
+            config.pixel_format = PIXFORMAT_RGB565;
+            config.frame_size = FRAMESIZE_240X240;
+            config.jpeg_quality = 12;
+            config.fb_count = 1;
+            config.fb_location = CAMERA_FB_IN_PSRAM;
+            config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
-            esp_video_init_dvp_config_t dvp_config = {
-                .sccb_config = sccb_config,
-                .reset_pin = CAMERA_RESET,
-                .pwdn_pin = CAMERA_PWDN,
-                .dvp_pin = dvp_pin_config,
-                .xclk_freq = CAMERA_XCLK_FREQ,
-            };
+            camera_ = new Esp32Camera(config);
 
-            esp_video_init_config_t video_config = {
-                .dvp = &dvp_config,
-            };
-
-            camera_ = new EspVideo(video_config);
-
-            // Atur parameter pembalikan sesuai jenis kamera
+            // 根据摄像头类型设置不同的翻转参数
             switch (camera_type_) {
                 case OTTO_CAMERA_OV3660:
                     camera_->SetVFlip(true);
                     camera_->SetHMirror(true);
-                    ESP_LOGI(TAG, "OV3660: atur VFlip=true, HMirror=true");
+                    ESP_LOGI(TAG, "OV3660: 设置 VFlip=true, HMirror=true");
                     break;
                 case OTTO_CAMERA_OV2640:
                 default:
                     camera_->SetVFlip(true);
-                    camera_->SetHMirror(false);
-                    ESP_LOGI(TAG, "OV2640: atur VFlip=true, HMirror=false");
+                    camera_->SetHMirror(true);
+                    ESP_LOGI(TAG, "OV2640: 设置 VFlip=true, HMirror=true");
                     break;
             }
             return true;
@@ -330,18 +334,18 @@ public:
           has_camera_(false),
           camera_type_(OTTO_CAMERA_NONE) {
 #if OTTO_HARDWARE_VERSION == OTTO_VERSION_AUTO
-        // Deteksi versi perangkat keras secara otomatis sekaligus jenis kamera
+        // 自动检测硬件版本（同时检测摄像头类型）
         has_camera_ = DetectHardwareVersion();
-        ESP_LOGI(TAG, "Versi perangkat keras terdeteksi otomatis: %s", has_camera_ ? "versi berkamera" : "versi tanpa kamera");
+        ESP_LOGI(TAG, "自动检测硬件版本: %s", has_camera_ ? "摄像头版" : "无摄像头版");
 #elif OTTO_HARDWARE_VERSION == OTTO_VERSION_CAMERA
-        // Paksa memakai konfigurasi dengan kamera, tetapi tetap deteksi jenis kameranya
+        // 强制使用摄像头版本，但仍检测具体摄像头类型
         has_camera_ = DetectHardwareVersion();
         if (!has_camera_) {
-            // Jika deteksi gagal, tetap pakai konfigurasi kamera tanpa mengetahui tipe pastinya
+            // 检测失败时仍使用摄像头配置，但不知道具体类型
             has_camera_ = true;
             camera_type_ = OTTO_CAMERA_UNKNOWN;
-            ESP_LOGW(TAG, "Dipaksa memakai konfigurasi versi berkamera, tetapi jenis kamera tidak terdeteksi");
-            // Inisialisasi bus I2C untuk kamera
+            ESP_LOGW(TAG, "强制使用摄像头版本配置，但未能检测到摄像头类型");
+            // 初始化 I2C 总线用于摄像头
             i2c_master_bus_config_t i2c_bus_cfg = {
                 .i2c_port = I2C_NUM_0,
                 .sda_io_num = CAMERA_VERSION_CONFIG.i2c_sda_pin,
@@ -357,16 +361,16 @@ public:
             };
             i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_);
         } else {
-            ESP_LOGI(TAG, "Dipaksa memakai konfigurasi versi berkamera");
+            ESP_LOGI(TAG, "强制使用摄像头版本配置");
         }
 #elif OTTO_HARDWARE_VERSION == OTTO_VERSION_NO_CAMERA
-        // Paksa memakai konfigurasi tanpa kamera
+        // 强制使用无摄像头版本
         has_camera_ = false;
         camera_type_ = OTTO_CAMERA_NONE;
-        ESP_LOGI(TAG, "Dipaksa memakai konfigurasi versi tanpa kamera");
+        ESP_LOGI(TAG, "强制使用无摄像头版本配置");
 #else
 #error \
-    "Nilai OTTO_HARDWARE_VERSION tidak valid. Gunakan OTTO_VERSION_AUTO, OTTO_VERSION_CAMERA, atau OTTO_VERSION_NO_CAMERA"
+    "OTTO_HARDWARE_VERSION 设置无效，请使用 OTTO_VERSION_AUTO, OTTO_VERSION_CAMERA 或 OTTO_VERSION_NO_CAMERA"
 #endif
 
         if (has_camera_)

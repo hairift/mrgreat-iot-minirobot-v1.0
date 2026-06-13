@@ -30,16 +30,16 @@ void AudioCodec::Start() {
     Settings settings("audio", false);
     output_volume_ = settings.GetInt("output_volume", output_volume_);
     if (output_volume_ <= 0) {
-        ESP_LOGW(TAG, "Nilai volume output (%d) terlalu kecil, mengatur ke default (10)", output_volume_);
+        ESP_LOGW(TAG, "Output volume value (%d) is too small, setting to default (10)", output_volume_);
         output_volume_ = 10;
     }
 
-    ESP_LOGI(TAG, "Audio codec dimulai");
+    ESP_LOGI(TAG, "Audio codec started");
 }
 
 void AudioCodec::SetOutputVolume(int volume) {
     output_volume_ = volume;
-    ESP_LOGI(TAG, "Mengatur volume output ke %d", output_volume_);
+    ESP_LOGI(TAG, "Set output volume to %d", output_volume_);
     
     Settings settings("audio", true);
     settings.SetInt("output_volume", output_volume_);
@@ -47,7 +47,7 @@ void AudioCodec::SetOutputVolume(int volume) {
 
 void AudioCodec::SetInputGain(float gain) {
     input_gain_ = gain;
-    ESP_LOGI(TAG, "Mengatur gain input ke %.1f", input_gain_);
+    ESP_LOGI(TAG, "Set input gain to %.1f", input_gain_);
 }
 
 void AudioCodec::EnableInput(bool enable) {
@@ -55,7 +55,7 @@ void AudioCodec::EnableInput(bool enable) {
         return;
     }
     input_enabled_ = enable;
-    ESP_LOGI(TAG, "Mengatur enable input ke %s", enable ? "true" : "false");
+    ESP_LOGI(TAG, "Set input enable to %s", enable ? "true" : "false");
 }
 
 void AudioCodec::EnableOutput(bool enable) {
@@ -63,5 +63,5 @@ void AudioCodec::EnableOutput(bool enable) {
         return;
     }
     output_enabled_ = enable;
-    ESP_LOGI(TAG, "Mengatur enable output ke %s", enable ? "true" : "false");
+    ESP_LOGI(TAG, "Set output enable to %s", enable ? "true" : "false");
 }

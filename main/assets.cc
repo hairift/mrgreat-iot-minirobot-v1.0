@@ -20,11 +20,11 @@
 #define PARTITION_LABEL "assets"
 
 struct mmap_assets_table {
-    char asset_name[32];          /*!< Nama aset */
-    uint32_t asset_size;          /*!< Ukuran aset */
-    uint32_t asset_offset;        /*!< Offset aset */
-    uint16_t asset_width;         /*!< Lebar aset */
-    uint16_t asset_height;        /*!< Tinggi aset */
+    char asset_name[32];          /*!< Name of the asset */
+    uint32_t asset_size;          /*!< Size of the asset */
+    uint32_t asset_offset;        /*!< Offset of the asset */
+    uint16_t asset_width;         /*!< Width of the asset */
+    uint16_t asset_height;        /*!< Height of the asset */
 };
 
 Assets::Assets() {
@@ -33,7 +33,7 @@ Assets::Assets() {
 #else
     strategy_ = std::make_unique<Assets::EmoteStrategy>();
 #endif
-    // Inisialisasi partisi
+    // Initialize the partition
     InitializePartition();
 }
 
@@ -50,8 +50,8 @@ bool Assets::FindPartition(Assets* assets) {
     return true;
 }
 
-bool Assets::Apply() {
-    return strategy_ ? strategy_->Apply(this) : false;
+bool Assets::Apply(bool refresh_display_theme) {
+    return strategy_ ? strategy_->Apply(this, refresh_display_theme) : false;
 }
 
 bool Assets::InitializePartition() {
@@ -73,7 +73,7 @@ bool Assets::LoadSrmodelsFromIndex(Assets* assets, cJSON* root) {
     size_t size = 0;
     bool need_delete_root = false;
 
-    // Jika root tidak diberikan, baca dari index.json
+    // If root is not provided, parse index.json
     if (root == nullptr) {
         if (!assets->GetAssetData("index.json", ptr, size)) {
             ESP_LOGE(TAG, "The index.json file is not found");
@@ -192,7 +192,7 @@ void Assets::LvglStrategy::UnApplyPartition(Assets* assets) {
     }
     checksum_valid_ = false;
     assets_.clear();
-    (void)assets; // Parameter tidak digunakan
+    (void)assets; // Unused parameter
 }
 
 bool Assets::LvglStrategy::GetAssetData(Assets* assets, const std::string& name, void*& ptr, size_t& size) {
@@ -211,7 +211,7 @@ bool Assets::LvglStrategy::GetAssetData(Assets* assets, const std::string& name,
     return true;
 }
 
-bool Assets::LvglStrategy::Apply(Assets* assets) {
+bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
     void* ptr = nullptr;
     size_t size = 0;
     if (!assets->GetAssetData("index.json", ptr, size)) {
@@ -332,22 +332,24 @@ bool Assets::LvglStrategy::Apply(Assets* assets) {
         }
     }
 
-    auto display = Board::GetInstance().GetDisplay();
-    ESP_LOGI(TAG, "Refreshing display theme...");
+    if (refresh_display_theme) {
+        auto display = Board::GetInstance().GetDisplay();
+        ESP_LOGI(TAG, "Refreshing display theme...");
 
-    auto current_theme = display->GetTheme();
-    if (current_theme != nullptr) {
-        display->SetTheme(current_theme);
-    }
+        auto current_theme = display->GetTheme();
+        if (current_theme != nullptr) {
+            display->SetTheme(current_theme);
+        }
 
-    // Baca konfigurasi hide_subtitle
-    cJSON* hide_subtitle = cJSON_GetObjectItem(root, "hide_subtitle");
-    if (cJSON_IsBool(hide_subtitle)) {
-        bool hide = cJSON_IsTrue(hide_subtitle);
-        auto lcd_display = dynamic_cast<LcdDisplay*>(display);
-        if (lcd_display != nullptr) {
-            lcd_display->SetHideSubtitle(hide);
-            ESP_LOGI(TAG, "Set hide_subtitle to %s", hide ? "true" : "false");
+        // Parse hide_subtitle configuration
+        cJSON* hide_subtitle = cJSON_GetObjectItem(root, "hide_subtitle");
+        if (cJSON_IsBool(hide_subtitle)) {
+            bool hide = cJSON_IsTrue(hide_subtitle);
+            auto lcd_display = dynamic_cast<LcdDisplay*>(display);
+            if (lcd_display != nullptr) {
+                lcd_display->SetHideSubtitle(hide);
+                ESP_LOGI(TAG, "Set hide_subtitle to %s", hide ? "true" : "false");
+            }
         }
     }
     
@@ -373,7 +375,7 @@ bool Assets::EmoteStrategy::InitializePartition(Assets* assets) {
                 .partition_label = PARTITION_LABEL,
             },
             .flags = {
-                .mmap_enable = true, // harus bernilai true di sini
+                .mmap_enable = true, //must be true here!!!
             },
         };
         ret = emote_mount_assets(emote_display->GetEmoteHandle(), &data);
@@ -390,7 +392,7 @@ void Assets::EmoteStrategy::UnApplyPartition(Assets* assets) {
     if (emote_display && emote_display->GetEmoteHandle() != nullptr) {
         emote_unmount_assets(emote_display->GetEmoteHandle());
     }
-    (void)assets; // Parameter tidak digunakan
+    (void)assets; // Unused parameter
 }
 
 bool Assets::EmoteStrategy::GetAssetData(Assets* assets, const std::string& name, void*& ptr, size_t& size) {
@@ -407,11 +409,11 @@ bool Assets::EmoteStrategy::GetAssetData(Assets* assets, const std::string& name
         ESP_LOGE(TAG, "Failed to get asset data by name: %s", name.c_str());
         return false;
     }
-    (void)assets; // Parameter tidak digunakan
+    (void)assets; // Unused parameter
     return false;
 }
 
-bool Assets::EmoteStrategy::Apply(Assets* assets) {
+bool Assets::EmoteStrategy::Apply(Assets* assets, bool refresh_display_theme) {
     Assets::LoadSrmodelsFromIndex(assets);
 
     auto display = Board::GetInstance().GetDisplay();
@@ -426,10 +428,6 @@ bool Assets::EmoteStrategy::Apply(Assets* assets) {
 bool Assets::Download(std::string url, std::function<void(int progress, size_t speed)> progress_callback) {
     ESP_LOGI(TAG, "Downloading new version of assets from %s", url.c_str());
 
-    // Lepaskan peta memori partisi aset yang sedang aktif
-    UnApplyPartition();
-
-    // Unduh berkas aset yang baru
     auto network = Board::GetInstance().GetNetwork();
     auto http = network->CreateHttp(0);
 
@@ -444,113 +442,170 @@ bool Assets::Download(std::string url, std::function<void(int progress, size_t s
     }
 
     size_t content_length = http->GetBodyLength();
+
     if (content_length == 0) {
         ESP_LOGE(TAG, "Failed to get content length");
         return false;
     }
 
     if (content_length > partition_->size) {
-        ESP_LOGE(TAG, "Assets file size (%u) is larger than partition size (%lu)", content_length, partition_->size);
+        ESP_LOGE(TAG, "Assets file size (%u) is larger than partition size (%lu)",
+                 content_length, partition_->size);
         return false;
     }
 
-    // Ambil ukuran sektor utama flash yang dipakai untuk partisi aset
+    constexpr size_t HEADER_SIZE = 12;
+
+    if (content_length < HEADER_SIZE) {
+        ESP_LOGE(TAG, "Content length (%u) is smaller than header size (%u)",
+                 content_length, HEADER_SIZE);
+        return false;
+    }
+
     const size_t SECTOR_SIZE = esp_partition_get_main_flash_sector_size();
+    using BufferPtr = std::unique_ptr<char, decltype(&heap_caps_free)>;
 
-    // Hitung jumlah sektor yang perlu dihapus, dibulatkan ke atas
-    size_t sectors_to_erase = (content_length + SECTOR_SIZE - 1) / SECTOR_SIZE; // Pembulatan ke atas
-    size_t total_erase_size = sectors_to_erase * SECTOR_SIZE;
+    BufferPtr buffer(
+        static_cast<char *>(heap_caps_malloc(SECTOR_SIZE, MALLOC_CAP_INTERNAL)),
+        &heap_caps_free);
 
-    ESP_LOGI(TAG, "Sector size: %u, content length: %u, sectors to erase: %u, total erase size: %u",
-        SECTOR_SIZE, content_length, sectors_to_erase, total_erase_size);
-
-    // Tulis berkas aset baru ke partisi sambil menghapus sektor yang dibutuhkan
-    char* buffer = (char*)heap_caps_malloc(SECTOR_SIZE, MALLOC_CAP_INTERNAL);
-    if (buffer == nullptr) {
+    if (!buffer) {
         ESP_LOGE(TAG, "Failed to allocate buffer");
         return false;
     }
+
+    // Unapply the partition
+    UnApplyPartition();
+
+    size_t sectors_to_erase = (content_length + SECTOR_SIZE - 1) / SECTOR_SIZE;
+    size_t total_erase_size = sectors_to_erase * SECTOR_SIZE;
+    ESP_LOGI(TAG,
+             "Sector size: %u, content length: %u, "
+             "sectors to erase: %u, total erase size: %u",
+             SECTOR_SIZE, content_length,
+             sectors_to_erase, total_erase_size);
+
     size_t total_written = 0;
     size_t recent_written = 0;
     size_t current_sector = 0;
-    auto last_calc_time = esp_timer_get_time();
 
+    int64_t last_calc_time = esp_timer_get_time();
+
+    uint8_t header_buf[HEADER_SIZE];
+    size_t header_collected = 0;
+    bool success = false;
     while (true) {
-        int ret = http->Read(buffer, SECTOR_SIZE);
+        int ret = http->Read(buffer.get(), SECTOR_SIZE);
         if (ret < 0) {
             ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
-            heap_caps_free(buffer);
-            return false;
-        }
-
-        if (ret == 0) {
             break;
         }
 
-        // Periksa apakah ada sektor baru yang harus dihapus
-        size_t write_end_offset = total_written + ret;
-        size_t needed_sectors = (write_end_offset + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        if (ret == 0) {
+            // End of data
+            success = true;
+            break;
+        }
 
-        // Hapus sektor tambahan yang memang dibutuhkan
-        while (current_sector < needed_sectors) {
-            size_t sector_start = current_sector * SECTOR_SIZE;
-            size_t sector_end = (current_sector + 1) * SECTOR_SIZE;
+        size_t buf_pos = 0;
 
-            // Pastikan rentang hapus tidak melewati ukuran partisi
-            if (sector_end > partition_->size) {
-                ESP_LOGE(TAG, "Sector end (%u) exceeds partition size (%lu)", sector_end, partition_->size);
-                heap_caps_free(buffer);
-                return false;
+        // Collect header
+        if (header_collected < HEADER_SIZE) {
+            size_t need = HEADER_SIZE - header_collected;
+            size_t take = std::min(static_cast<size_t>(ret), need);
+            memcpy(header_buf + header_collected, buffer.get(), take);
+            header_collected += take;
+            buf_pos += take;
+        }
+
+        // Write payload
+        if ((size_t)ret > buf_pos) {
+            size_t write_len = (size_t)ret - buf_pos;
+            size_t write_end_offset = HEADER_SIZE + total_written + write_len;
+            size_t needed_sectors = (write_end_offset + SECTOR_SIZE - 1) / SECTOR_SIZE;
+            // Erase sectors
+            bool erase_failed = false;
+            while (current_sector < needed_sectors) {
+                size_t sector_start = current_sector * SECTOR_SIZE;
+                size_t sector_end = sector_start + SECTOR_SIZE;
+                if (sector_end > partition_->size) {
+                    ESP_LOGE(TAG, "Sector end (%u) exceeds partition size (%lu)",
+                             sector_end, partition_->size);
+                    erase_failed = true;
+                    break;
+                }
+                ESP_LOGD(TAG, "Erasing sector %u (offset: %u, size: %u)",
+                         current_sector, sector_start, SECTOR_SIZE);
+                esp_err_t err = esp_partition_erase_range(partition_, sector_start, SECTOR_SIZE);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to erase sector %u at offset %u: %s",
+                             current_sector, sector_start, esp_err_to_name(err));
+                    erase_failed = true;
+                    break;
+                }
+                current_sector++;
             }
 
-            ESP_LOGD(TAG, "Erasing sector %u (offset: %u, size: %u)", current_sector, sector_start, SECTOR_SIZE);
-            esp_err_t err = esp_partition_erase_range(partition_, sector_start, SECTOR_SIZE);
+            if (erase_failed) {
+                break;
+            }
+
+            esp_err_t err = esp_partition_write(partition_, HEADER_SIZE + total_written,
+                                                buffer.get() + buf_pos, write_len);
             if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to erase sector %u at offset %u: %s", current_sector, sector_start, esp_err_to_name(err));
-                heap_caps_free(buffer);
-                return false;
+                ESP_LOGE(TAG, "Failed to write to assets partition at offset %u: %s",
+                         (unsigned int)(HEADER_SIZE + total_written), esp_err_to_name(err));
+                break;
             }
 
-            current_sector++;
+            total_written += write_len;
+            recent_written += write_len;
         }
 
-        // Tulis data yang baru diunduh ke partisi
-        esp_err_t err = esp_partition_write(partition_, total_written, buffer, ret);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to write to assets partition at offset %u: %s", total_written, esp_err_to_name(err));
-            heap_caps_free(buffer);
-            return false;
-        }
-
-        total_written += ret;
-        recent_written += ret;
-
-        // Hitung kemajuan unduhan dan kecepatan tulis
-        if (esp_timer_get_time() - last_calc_time >= 1000000 || total_written == content_length || ret == 0) {
-            size_t progress = total_written * 100 / content_length;
-            size_t speed = recent_written; // Jumlah byte per detik
+        // Calculate progress
+        if (esp_timer_get_time() - last_calc_time >= 1000000 || (header_collected + total_written) == content_length) {
+            size_t progress = (header_collected + total_written) * 100 / content_length;
+            size_t speed = recent_written;
             ESP_LOGI(TAG, "Progress: %u%% (%u/%u), Speed: %u B/s, Sectors erased: %u",
-                progress, total_written, content_length, speed, current_sector);
+                     progress,
+                     (unsigned int)(header_collected + total_written),
+                     (unsigned int)content_length,
+                     (unsigned int)speed,
+                     (unsigned int)current_sector);
+
             if (progress_callback) {
                 progress_callback(progress, speed);
             }
             last_calc_time = esp_timer_get_time();
-            recent_written = 0; // Setel ulang penghitung byte yang baru saja ditulis
+            recent_written = 0;
         }
     }
 
-    http->Close();
-    heap_caps_free(buffer);
+    // Check if the downloaded size matches the expected size
+    if (success && (header_collected + total_written != content_length)) {
+        ESP_LOGE(TAG, "Downloaded size (%u) does not match expected size (%u)",
+                 (unsigned int)(header_collected + total_written), (unsigned int)content_length);
+        success = false;
+    }
 
-    if (total_written != content_length) {
-        ESP_LOGE(TAG, "Downloaded size (%u) does not match expected size (%u)", total_written, content_length);
+    // Write header
+    if (success) {
+        esp_err_t err = esp_partition_write(partition_, 0, header_buf, HEADER_SIZE);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to write assets header to partition: %s", esp_err_to_name(err));
+            success = false;
+        }
+    }
+
+    if (!success) {
+        ESP_LOGE(TAG, "Assets download failed");
         return false;
     }
 
-    ESP_LOGI(TAG, "Assets download completed, total written: %u bytes, total sectors erased: %u",
-        total_written, current_sector);
+    ESP_LOGI(TAG, "Header written, assets download completed, total written: %u bytes, total sectors erased: %u",
+             (unsigned int)(header_collected + total_written), (unsigned int)current_sector);
 
-    // Inisialisasi ulang partisi aset setelah unduhan selesai
+    // Re-initialize the assets partition
     if (!InitializePartition()) {
         ESP_LOGE(TAG, "Failed to re-initialize assets partition");
         return false;

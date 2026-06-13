@@ -5,7 +5,7 @@
 
 static const char* TAG = "StateMachine";
 
-// Nama status dalam bentuk string untuk keperluan log
+// State name strings for logging
 static const char* const STATE_STRINGS[] = {
     "unknown",
     "starting",
@@ -32,44 +32,44 @@ const char* DeviceStateMachine::GetStateName(DeviceState state) {
 }
 
 bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) const {
-    // Izinkan perpindahan ke status yang sama (tanpa operasi)
+    // Allow transition to the same state (no-op)
     if (from == to) {
         return true;
     }
 
-    // Tentukan perpindahan status yang valid berdasarkan diagram status
+    // Define valid state transitions based on the state diagram
     switch (from) {
         case kDeviceStateUnknown:
-            // Hanya boleh pindah ke starting
+            // Can only go to starting
             return to == kDeviceStateStarting;
 
         case kDeviceStateStarting:
-            // Bisa pindah ke pengaturan Wi-Fi atau aktivasi
+            // Can go to wifi configuring or activating
             return to == kDeviceStateWifiConfiguring ||
                    to == kDeviceStateActivating;
 
         case kDeviceStateWifiConfiguring:
-            // Bisa pindah ke aktivasi setelah Wi-Fi tersambung atau ke uji audio
+            // Can go to activating (after wifi connected) or audio testing
             return to == kDeviceStateActivating ||
                    to == kDeviceStateAudioTesting;
 
         case kDeviceStateAudioTesting:
-            // Bisa kembali ke pengaturan Wi-Fi
+            // Can go back to wifi configuring
             return to == kDeviceStateWifiConfiguring;
 
         case kDeviceStateActivating:
-            // Bisa pindah ke upgrade, idle, atau kembali ke pengaturan Wi-Fi saat error
+            // Can go to upgrading, idle, or back to wifi configuring (on error)
             return to == kDeviceStateUpgrading ||
                    to == kDeviceStateIdle ||
                    to == kDeviceStateWifiConfiguring;
 
         case kDeviceStateUpgrading:
-            // Bisa pindah ke idle jika upgrade gagal, atau kembali ke aktivasi
+            // Can go to idle (upgrade failed) or activating
             return to == kDeviceStateIdle ||
                    to == kDeviceStateActivating;
 
         case kDeviceStateIdle:
-            // Bisa pindah ke connecting, listening, speaking, activating, upgrading, atau pengaturan Wi-Fi
+            // Can go to connecting, listening (manual mode), speaking, activating, upgrading, or wifi configuring
             return to == kDeviceStateConnecting ||
                    to == kDeviceStateListening ||
                    to == kDeviceStateSpeaking ||
@@ -78,22 +78,22 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
                    to == kDeviceStateWifiConfiguring;
 
         case kDeviceStateConnecting:
-            // Bisa pindah ke idle saat gagal atau ke listening saat berhasil
+            // Can go to idle (failed) or listening (success)
             return to == kDeviceStateIdle ||
                    to == kDeviceStateListening;
 
         case kDeviceStateListening:
-            // Bisa pindah ke speaking atau idle
+            // Can go to speaking or idle
             return to == kDeviceStateSpeaking ||
                    to == kDeviceStateIdle;
 
         case kDeviceStateSpeaking:
-            // Bisa pindah ke listening atau idle
+            // Can go to listening or idle
             return to == kDeviceStateListening ||
                    to == kDeviceStateIdle;
 
         case kDeviceStateFatalError:
-            // Tidak boleh pindah dari status fatal error
+            // Cannot transition out of fatal error
             return false;
 
         default:
@@ -108,24 +108,24 @@ bool DeviceStateMachine::CanTransitionTo(DeviceState target) const {
 bool DeviceStateMachine::TransitionTo(DeviceState new_state) {
     DeviceState old_state = current_state_.load();
     
-    // Tidak melakukan apa-apa jika status tujuan sudah sama
+    // No-op if already in the target state
     if (old_state == new_state) {
         return true;
     }
 
-    // Validasi perpindahan status
+    // Validate transition
     if (!IsValidTransition(old_state, new_state)) {
         ESP_LOGW(TAG, "Invalid state transition: %s -> %s",
                  GetStateName(old_state), GetStateName(new_state));
         return false;
     }
 
-    // Jalankan perpindahan status
+    // Perform transition
     current_state_.store(new_state);
     ESP_LOGI(TAG, "State: %s -> %s",
              GetStateName(old_state), GetStateName(new_state));
 
-    // Beri tahu semua fungsi panggil balik
+    // Notify callback
     NotifyStateChange(old_state, new_state);
     return true;
 }

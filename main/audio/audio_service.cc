@@ -1,5 +1,6 @@
 #include "audio_service.h"
 #include <esp_log.h>
+#include <cstdint>
 #include <cstring>
 
 #define RATE_CVT_CFG(_src_rate, _dest_rate, _channel)        \
@@ -36,6 +37,44 @@
 #endif
 
 #define TAG "AudioService"
+
+namespace {
+
+void BoostLocalPromptPcm(std::vector<int16_t>& pcm) {
+    int peak = 0;
+    for (int16_t sample : pcm) {
+        int value = sample < 0 ? -sample : sample;
+        if (value > peak) {
+            peak = value;
+        }
+    }
+    if (peak <= 0) {
+        return;
+    }
+
+    constexpr float kTargetPeak = 0.92f * INT16_MAX;
+    constexpr float kMaxGain = 3.0f;
+    float gain = kTargetPeak / static_cast<float>(peak);
+    if (gain <= 1.05f) {
+        return;
+    }
+    if (gain > kMaxGain) {
+        gain = kMaxGain;
+    }
+
+    for (int16_t& sample : pcm) {
+        int32_t value = static_cast<int32_t>(sample * gain);
+        if (value > INT16_MAX) {
+            sample = INT16_MAX;
+        } else if (value < -INT16_MAX) {
+            sample = -INT16_MAX;
+        } else {
+            sample = static_cast<int16_t>(value);
+        }
+    }
+}
+
+}  // namespace
 
 AudioService::AudioService() {
     event_group_ = xEventGroupCreate();
@@ -137,7 +176,7 @@ void AudioService::Start() {
     WaitForTaskStop(audio_output_task_handle_, "audio_output");
     WaitForTaskStop(opus_codec_task_handle_, "opus_codec");
     if (audio_input_task_handle_ != nullptr || audio_output_task_handle_ != nullptr || opus_codec_task_handle_ != nullptr) {
-        ESP_LOGE(TAG, "Audio tasks belum berhenti sepenuhnya, start dibatalkan");
+        ESP_LOGE(TAG, "Tugas audio belum berhenti sepenuhnya, start dibatalkan");
         return;
     }
 
@@ -151,28 +190,28 @@ void AudioService::Start() {
     }
 
 #if CONFIG_USE_AUDIO_PROCESSOR
-    /* Mulai tugas masukan audio */
+    /* Mulai tugas input audio. */
     xTaskCreatePinnedToCore([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioInputTask();
         vTaskDelete(NULL);
     }, "audio_input", 2048 * 3, this, 8, &audio_input_task_handle_, 0);
 
-    /* Mulai tugas keluaran audio */
+    /* Mulai tugas output audio. */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioOutputTask();
         vTaskDelete(NULL);
     }, "audio_output", 2048 * 2, this, 4, &audio_output_task_handle_);
 #else
-    /* Mulai tugas masukan audio */
+    /* Mulai tugas input audio. */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioInputTask();
         vTaskDelete(NULL);
     }, "audio_input", 2048 * 2, this, 8, &audio_input_task_handle_);
 
-    /* Mulai tugas keluaran audio */
+    /* Mulai tugas output audio. */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioOutputTask();
@@ -180,7 +219,7 @@ void AudioService::Start() {
     }, "audio_output", 2048, this, 4, &audio_output_task_handle_);
 #endif
 
-    /* Mulai tugas codec Opus */
+    /* Mulai tugas codec Opus. */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->OpusCodecTask();
@@ -212,12 +251,13 @@ void AudioService::Stop() {
 
     {
         std::lock_guard<std::mutex> lock(audio_queue_mutex_);
-        timestamp_queue_.clear();
         audio_encode_queue_.clear();
         audio_decode_queue_.clear();
+        audio_send_queue_.clear();
         audio_playback_queue_.clear();
         audio_testing_queue_.clear();
-        audio_send_queue_.clear();
+        timestamp_queue_.clear();
+        audio_output_busy_ = false;
     }
     audio_queue_cv_.notify_all();
 
@@ -270,12 +310,12 @@ bool AudioService::ReadAudioData(std::vector<int16_t>& data, int sample_rate, in
         }
     }
 
-    /* Perbarui waktu masukan terakhir */
+    /* Perbarui waktu input terakhir. */
     last_input_time_ = std::chrono::steady_clock::now();
     debug_statistics_.input_count++;
 
 #if CONFIG_USE_AUDIO_DEBUGGER
-    // Pengujian audio: kirim data audio mentah
+    // Debug audio: kirim data audio mentah.
     if (audio_debugger_ == nullptr) {
         audio_debugger_ = std::make_unique<AudioDebugger>();
     }
@@ -300,7 +340,7 @@ void AudioService::AudioInputTask() {
             continue;
         }
 
-        /* Dipakai untuk uji audio pada mode pengaturan jaringan lewat tombol BOOT */
+        /* Dipakai untuk uji audio di mode konfigurasi jaringan lewat tombol BOOT. */
         if (bits & AS_EVENT_AUDIO_TESTING_RUNNING) {
             if (audio_testing_queue_.size() >= AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
                 ESP_LOGW(TAG, "Audio testing queue is full, stopping audio testing");
@@ -310,7 +350,7 @@ void AudioService::AudioInputTask() {
             std::vector<int16_t> data;
             int samples = OPUS_FRAME_DURATION_MS * 16000 / 1000;
             if (ReadAudioData(data, 16000, samples)) {
-                // Jika kanal masukan berjumlah dua, ambil data kanal kiri saja
+                // Jika input stereo, ambil kanal kiri.
                 if (codec_->input_channels() == 2) {
                     auto mono_data = std::vector<int16_t>(data.size() / 2);
                     for (size_t i = 0, j = 0; i < mono_data.size(); ++i, j += 2) {
@@ -323,9 +363,9 @@ void AudioService::AudioInputTask() {
             }
         }
 
-        /* Umpankan data ke deteksi kata bangun dan atau pemroses audio */
+        /* Kirim data ke wake word dan/atau pemroses audio. */
         if (bits & (AS_EVENT_WAKE_WORD_RUNNING | AS_EVENT_AUDIO_PROCESSOR_RUNNING)) {
-            int samples = 160; // 10ms
+            int samples = 160; // 10 ms
             std::vector<int16_t> data;
             if (ReadAudioData(data, 16000, samples)) {
                 if (bits & AS_EVENT_WAKE_WORD_RUNNING) {
@@ -338,7 +378,7 @@ void AudioService::AudioInputTask() {
             }
         }
 
-        // Batas waktu atau galat baca tidak boleh menghentikan tugas masukan
+        // Timeout/error baca tidak boleh menghentikan tugas input.
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
@@ -368,24 +408,21 @@ void AudioService::AudioOutputTask() {
 
         codec_->OutputData(task->pcm);
 
-        /* Perbarui waktu output terakhir */
+        /* Perbarui waktu keluaran terakhir */
         last_output_time_ = std::chrono::steady_clock::now();
         debug_statistics_.playback_count++;
+        lock.lock();
+        audio_output_busy_ = false;
+        audio_queue_cv_.notify_all();
+        lock.unlock();
 
 #if CONFIG_USE_SERVER_AEC
-        /* Catat stempel waktu untuk AEC sisi server */
-        lock.lock();
+        /* Catat timestamp untuk AEC dari server */
         if (task->timestamp > 0) {
+            lock.lock();
             timestamp_queue_.push_back(task->timestamp);
+            lock.unlock();
         }
-        audio_output_busy_ = false;
-        lock.unlock();
-        audio_queue_cv_.notify_all();
-#else
-        lock.lock();
-        audio_output_busy_ = false;
-        lock.unlock();
-        audio_queue_cv_.notify_all();
 #endif
     }
 
@@ -405,7 +442,7 @@ void AudioService::OpusCodecTask() {
             break;
         }
 
-        /* Dekode audio dari antrean dekode */
+        /* Decode audio dari antrean decode. */
         if (!audio_decode_queue_.empty() && audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {
             auto packet = std::move(audio_decode_queue_.front());
             audio_decode_queue_.pop_front();
@@ -447,9 +484,13 @@ void AudioService::OpusCodecTask() {
                         resampled.resize(actual_output);
                         task->pcm = std::move(resampled);
                     }
+                    if (packet->boost_volume) {
+                        BoostLocalPromptPcm(task->pcm);
+                    }
                     lock.lock();
                     if (!service_stopped_ && decoder_generation == decoder_generation_) {
                         audio_playback_queue_.push_back(std::move(task));
+                        debug_statistics_.decode_count++;
                     }
                     audio_queue_cv_.notify_all();
                 } else {
@@ -460,9 +501,8 @@ void AudioService::OpusCodecTask() {
                 ESP_LOGE(TAG, "Audio decoder is not configured");
                 lock.lock();
             }
-            debug_statistics_.decode_count++;
         }
-        /* Enkode audio ke antrean kirim */
+        /* Encode audio ke antrean kirim. */
         if (!audio_encode_queue_.empty() && audio_send_queue_.size() < MAX_SEND_PACKETS_IN_QUEUE) {
             auto task = std::move(audio_encode_queue_.front());
             audio_encode_queue_.pop_front();
@@ -557,10 +597,12 @@ void AudioService::PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t
     auto task = std::make_unique<AudioTask>();
     task->type = type;
     task->pcm = std::move(pcm);
-    /* Masukkan tugas ke antrean enkode */
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
+    if (service_stopped_) {
+        return;
+    }
 
-    /* Jika tugas akan masuk ke antrean kirim, kita perlu menetapkan stempel waktu */
+    // Paket yang dikirim ke server perlu timestamp untuk sinkronisasi AEC dari server.
     if (type == kAudioTaskTypeEncodeToSendQueue && !timestamp_queue_.empty()) {
         if (timestamp_queue_.size() <= MAX_TIMESTAMPS_IN_QUEUE) {
             task->timestamp = timestamp_queue_.front();
@@ -570,7 +612,9 @@ void AudioService::PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t
         timestamp_queue_.pop_front();
     }
 
-    audio_queue_cv_.wait(lock, [this]() { return service_stopped_ || audio_encode_queue_.size() < MAX_ENCODE_TASKS_IN_QUEUE; });
+    audio_queue_cv_.wait(lock, [this]() {
+        return service_stopped_ || audio_encode_queue_.size() < MAX_ENCODE_TASKS_IN_QUEUE;
+    });
     if (service_stopped_) {
         return;
     }
@@ -580,9 +624,14 @@ void AudioService::PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t
 
 bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> packet, bool wait) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
+    if (service_stopped_) {
+        return false;
+    }
     if (audio_decode_queue_.size() >= MAX_DECODE_PACKETS_IN_QUEUE) {
         if (wait) {
-            audio_queue_cv_.wait(lock, [this]() { return service_stopped_ || audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE; });
+            audio_queue_cv_.wait(lock, [this]() {
+                return service_stopped_ || audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE;
+            });
             if (service_stopped_) {
                 return false;
             }
@@ -645,8 +694,8 @@ void AudioService::EnableWakeWordDetection(bool enable) {
             }
             wake_word_initialized_ = true;
         }
-        // Setel ulang resampler masukan untuk membersihkan data tembolok dari mode sebelumnya, misalnya mode pemroses audio
-        // Ini mencegah luapan penyangga saat berpindah antarukuran data masukan
+        // Reset resampler input agar cache mode sebelumnya bersih.
+        // Ini mencegah overflow saat ukuran feed berubah.
         {
             std::lock_guard<std::mutex> lock(input_resampler_mutex_);
             if (input_resampler_ != nullptr) {
@@ -669,11 +718,11 @@ void AudioService::EnableVoiceProcessing(bool enable) {
             audio_processor_initialized_ = true;
         }
 
-        /* Pastikan tidak ada audio yang sedang diputar */
+        /* Pastikan tidak ada audio yang sedang diputar. */
         ResetDecoder();
         audio_input_need_warmup_ = true;
-        // Setel ulang penyesuai laju sampel masukan untuk membersihkan data tembolok dari mode sebelumnya, misalnya mode deteksi kata pemicu
-        // Ini mencegah luapan penyangga saat berpindah antarukuran data masukan
+        // Reset resampler input agar cache wake word sebelumnya bersih.
+        // Ini mencegah overflow saat ukuran feed berubah.
         {
             std::lock_guard<std::mutex> lock(input_resampler_mutex_);
             if (input_resampler_ != nullptr) {
@@ -694,7 +743,7 @@ void AudioService::EnableAudioTesting(bool enable) {
         xEventGroupSetBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING);
     } else {
         xEventGroupClearBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING);
-        /* Salin audio_testing_queue_ ke audio_decode_queue_ */
+        /* Salin audio_testing_queue_ ke audio_decode_queue_. */
         std::lock_guard<std::mutex> lock(audio_queue_mutex_);
         audio_decode_queue_ = std::move(audio_testing_queue_);
         audio_queue_cv_.notify_all();
@@ -716,11 +765,11 @@ void AudioService::SetCallbacks(AudioServiceCallbacks& callbacks) {
 }
 
 void AudioService::PlaySound(const std::string_view& ogg) {
-    std::lock_guard<std::mutex> sound_lock(sound_play_mutex_);
     if (ogg.empty()) {
         return;
     }
 
+    std::lock_guard<std::mutex> sound_lock(sound_play_mutex_);
     if (!codec_->output_enabled()) {
         esp_timer_stop(audio_power_timer_);
         esp_timer_start_periodic(audio_power_timer_, AUDIO_POWER_CHECK_INTERVAL_MS * 1000);
@@ -735,6 +784,7 @@ void AudioService::PlaySound(const std::string_view& ogg) {
         auto packet = std::make_unique<AudioStreamPacket>();
         packet->sample_rate = sample_rate;
         packet->frame_duration = 60;
+        packet->boost_volume = true;
         packet->payload.resize(size);
         std::memcpy(packet->payload.data(), data, size);
         PushPacketToDecodeQueue(std::move(packet), true);
@@ -745,24 +795,20 @@ void AudioService::PlaySound(const std::string_view& ogg) {
 
 bool AudioService::IsIdle() {
     std::lock_guard<std::mutex> lock(audio_queue_mutex_);
-    return audio_encode_queue_.empty() && audio_decode_queue_.empty() && audio_playback_queue_.empty() &&
-           audio_testing_queue_.empty() && !audio_output_busy_;
+    return audio_encode_queue_.empty() && audio_decode_queue_.empty() && audio_playback_queue_.empty()
+        && audio_testing_queue_.empty() && !audio_output_busy_;
 }
 
 bool AudioService::WaitForPlaybackQueueEmpty(int timeout_ms) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
-    auto is_empty = [this]() {
+    auto done = [this]() {
         return service_stopped_ || (audio_decode_queue_.empty() && audio_playback_queue_.empty() && !audio_output_busy_);
     };
     if (timeout_ms < 0) {
-        audio_queue_cv_.wait(lock, is_empty);
+        audio_queue_cv_.wait(lock, done);
         return true;
     }
-    bool finished = audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), is_empty);
-    if (!finished) {
-        ESP_LOGW(TAG, "Menunggu antrean playback kosong melewati batas %d ms", timeout_ms);
-    }
-    return finished;
+    return audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), done);
 }
 
 void AudioService::ResetDecoder() {
@@ -777,6 +823,7 @@ void AudioService::ResetDecoder() {
     audio_decode_queue_.clear();
     audio_playback_queue_.clear();
     audio_testing_queue_.clear();
+    audio_output_busy_ = false;
     audio_queue_cv_.notify_all();
 }
 
@@ -788,7 +835,7 @@ void AudioService::CheckAndUpdateAudioPowerState() {
         codec_->EnableInput(false);
     }
     if (output_elapsed > AUDIO_POWER_TIMEOUT_MS && codec_->output_enabled()) {
-        // Pertahankan clock TX saat RX dupleks aktif; jika tidak, RX bisa macet di beberapa board
+        // Pertahankan clock TX saat RX duplex aktif agar RX tidak macet di beberapa board.
         if (!(codec_->duplex() && codec_->input_enabled())) {
             codec_->EnableOutput(false);
         }
@@ -843,6 +890,6 @@ void AudioService::WaitForTaskStop(TaskHandle_t& task_handle, const char* task_n
     }
 
     if (task_handle != nullptr) {
-        ESP_LOGW(TAG, "Timed out waiting for %s task to stop", task_name);
+        ESP_LOGW(TAG, "Batas tunggu task %s berhenti terlewati", task_name);
     }
 }

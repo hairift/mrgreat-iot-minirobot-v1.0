@@ -10,30 +10,29 @@ class WifiBoard : public Board {
 protected:
     esp_timer_handle_t connect_timer_ = nullptr;
     bool in_config_mode_ = false;
-    bool is_connected_ = false;
     NetworkEventCallback network_event_callback_ = nullptr;
 
     virtual std::string GetBoardJson() override;
 
     /**
-     * Tangani kejadian jaringan yang dipanggil dari fungsi panggil balik pengelola Wi-Fi.
-     * @param event Tipe kejadian jaringan.
-     * @param data Data tambahan, misalnya SSID untuk kejadian Connecting atau Connected.
+     * Handle network event (called from WiFi manager callbacks)
+     * @param event The network event type
+     * @param data Additional data (e.g., SSID for Connecting/Connected events)
      */
     void OnNetworkEvent(NetworkEvent event, const std::string& data = "");
 
     /**
-     * Mulai percobaan koneksi Wi-Fi.
+     * Start WiFi connection attempt
      */
     void TryWifiConnect();
 
     /**
-     * Masuk ke mode konfigurasi Wi-Fi.
+     * Enter WiFi configuration mode
      */
     void StartWifiConfigMode();
 
     /**
-     * Callback saat koneksi Wi-Fi melewati batas waktu.
+     * WiFi connection timeout callback
      */
     static void OnWifiConnectTimeout(void* arg);
 
@@ -44,8 +43,8 @@ public:
     virtual std::string GetBoardType() override;
     
     /**
-     * Mulai koneksi jaringan secara asinkron.
-     * Fungsi ini kembali segera. Kejadian jaringan diberitahukan melalui fungsi panggil balik yang diatur oleh SetNetworkEventCallback().
+     * Start network connection asynchronously
+     * This function returns immediately. Network events are notified through the callback set by SetNetworkEventCallback().
      */
     virtual void StartNetwork() override;
     
@@ -57,12 +56,12 @@ public:
     virtual std::string GetDeviceStatusJson() override;
     
     /**
-     * Masuk ke mode konfigurasi Wi-Fi, aman untuk utas dan dapat dipanggil dari task apa pun.
+     * Enter WiFi configuration mode (thread-safe, can be called from any task)
      */
     void EnterWifiConfigMode();
     
     /**
-     * Periksa apakah perangkat sedang berada di mode konfigurasi Wi-Fi.
+     * Check if in WiFi config mode
      */
     bool IsInWifiConfigMode() const;
 };

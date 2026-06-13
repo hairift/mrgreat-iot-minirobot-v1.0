@@ -1,76 +1,37 @@
 # Panduan Gaya Kode
 
-## Tujuan
+Panduan ini dipakai agar perubahan firmware Mr Great tetap aman, mudah diaudit, dan tidak merusak perilaku bawaan XiaoZhi.
 
-Panduan ini dipakai untuk menjaga konsistensi format dan keterbacaan kode di seluruh proyek.
+## Prinsip
 
-## Alat yang Dipakai
+- Jangan menghapus fitur yang sudah berjalan kecuali ada keputusan eksplisit.
+- Perubahan harus kecil, jelas, dan mudah dibandingkan dengan kode awal.
+- Komentar kode memakai bahasa Indonesia.
+- Nama fungsi, variabel, konstanta, dan API bawaan boleh tetap mengikuti gaya proyek asal.
+- Hindari perubahan besar pada komponen vendor di `managed_components/`.
 
-Proyek ini menggunakan `clang-format` dengan file konfigurasi `.clang-format` di akar repositori.
+## C++
 
-## Instalasi
+- Gunakan pola RAII dan mutex yang sudah ada di proyek.
+- Jangan menahan lock saat operasi jaringan atau audio yang bisa lama.
+- Untuk audio, hindari timeout tidak terbatas pada jalur output agar sistem tidak macet.
+- Untuk servo, bedakan gerakan manual dan gerakan emosi.
 
-### Windows
+## Python
+
+- Script di `scripts/` harus aman dijalankan ulang.
+- Output audit harus jelas dan memakai bahasa Indonesia bila ditampilkan ke pengguna.
+- Jangan menulis file sementara ke folder source utama jika bisa memakai folder build atau temp.
+
+## Dokumentasi
+
+- Dokumentasi proyek utama memakai bahasa Indonesia.
+- Jangan memakai ikon dekoratif atau emot di dokumentasi.
+- Jika ada informasi wiring baru, perbarui `README.md`, `SERVO_README.md`, dan `docs/production-hardware-checklist.md`.
+
+## Verifikasi Minimal
 
 ```powershell
-winget install LLVM
+idf.py build
+python scripts\audit_campus_rag_server.py
 ```
-
-### Linux
-
-```bash
-sudo apt install clang-format
-```
-
-### macOS
-
-```bash
-brew install clang-format
-```
-
-## Cara Pakai
-
-### Format satu file
-
-```bash
-clang-format -i path/to/file.cc
-```
-
-### Format banyak file
-
-```bash
-find main -iname "*.h" -o -iname "*.cc" | xargs clang-format -i
-```
-
-### Cek tanpa mengubah file
-
-```bash
-clang-format --dry-run -Werror path/to/file.cc
-```
-
-## Aturan Umum
-
-- gunakan indentasi 4 spasi
-- batasi lebar baris secara wajar
-- ikuti urutan include yang konsisten
-- jangan merapikan alignment manual jika sudah ditangani formatter
-- komentar kode dan dokumentasi proyek harus memakai bahasa Indonesia
-
-## Integrasi Editor
-
-### Visual Studio Code
-
-- pasang ekstensi C atau C++
-- aktifkan formatter `clang-format`
-- aktifkan format saat simpan jika diperlukan
-
-### CLion
-
-- arahkan formatter ke `clang-format`
-- gunakan file `.clang-format` dari repositori
-
-## Catatan Penting
-
-- format kode sebelum commit
-- hindari perubahan format yang tidak perlu
-- jika ada blok yang harus dikecualikan, gunakan penonaktifan `clang-format` secara lokal dan seperlunya

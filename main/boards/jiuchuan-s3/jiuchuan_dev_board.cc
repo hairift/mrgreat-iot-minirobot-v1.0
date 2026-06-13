@@ -24,7 +24,7 @@
 #define BOARD_TAG "JiuchuanDevBoard"
 #define __USER_GPIO_PWRDOWN__
 
-// Kelas tampilan LCD kustom untuk penyesuaian layar bundar
+// 自定义LCD显示器类，用于圆形屏幕适配
 class CustomLcdDisplay : public SpiLcdDisplay
 {
 public:
@@ -39,23 +39,23 @@ public:
                      bool swap_xy)
         : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy)
     {
-        // Penyesuaian UI harus dilakukan di SetupUI(), bukan di konstruktor
-        // Tujuannya agar objek LVGL sudah dibuat sebelum diakses
+        // Note: UI customization should be done in SetupUI(), not in constructor
+        // to ensure lvgl objects are created before accessing them
     }
 
     virtual void SetupUI() override {
-        // Panggil SetupUI() milik induk lebih dulu untuk membuat semua objek LVGL
+        // Call parent SetupUI() first to create all lvgl objects
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
 
-        // Penyesuaian wadah bilah status
-        lv_obj_set_style_pad_left(top_bar_, LV_HOR_RES * 0.12, 0);  // Tambah ruang kiri 12%
-        lv_obj_set_style_pad_right(top_bar_, LV_HOR_RES * 0.12, 0); // Tambah ruang kanan 12%
-        // Penyesuaian posisi wadah emoji
-        lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, -30);          // Geser ke atas 30
-        // Penyesuaian bilah pesan
-        lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, -20);     // Geser ke atas 20
+        // 状态栏容器适配
+        lv_obj_set_style_pad_left(top_bar_, LV_HOR_RES * 0.12, 0);  // 左侧填充12%
+        lv_obj_set_style_pad_right(top_bar_, LV_HOR_RES * 0.12, 0); // 右侧填充12%
+        // 表情容器上移适配
+        lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, -30);          // 向上偏移30
+        // 消息栏适配
+        lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, -20);     // 向上偏移20
     }
 };
 
@@ -72,14 +72,14 @@ private:
     esp_lcd_panel_io_handle_t panel_io = NULL;
     esp_lcd_panel_handle_t panel = NULL;
 
-    // Fungsi pemetaan volume: ubah volume internal 0-80 menjadi tampilan 0-100%
+    // 音量映射函数：将内部音量(0-80)映射为显示音量(0-100%)
     int MapVolumeForDisplay(int internal_volume) {
-        // Pastikan masukan tetap pada rentang valid
+        // 确保输入在有效范围内
         if (internal_volume < 0) internal_volume = 0;
         if (internal_volume > 80) internal_volume = 80;
         
-        // Petakan rentang 0-80 ke 0-100
-        // Rumus: volume tampil = (volume internal / 80) * 100
+        // 将0-80映射到0-100
+        // 公式: 显示音量 = (内部音量 / 80) * 100
         return (internal_volume * 100) / 80;
     }
     
@@ -116,15 +116,15 @@ private:
             } else {
                 ESP_LOGI(TAG, "Short press, return to sleep");
                 ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(PWR_BUTTON_GPIO, 0));
-                ESP_ERROR_CHECK(rtc_gpio_pullup_en(PWR_BUTTON_GPIO));  // Aktifkan pull-up internal
+                ESP_ERROR_CHECK(rtc_gpio_pullup_en(PWR_BUTTON_GPIO));  // 内部上拉
                 ESP_ERROR_CHECK(rtc_gpio_pulldown_dis(PWR_BUTTON_GPIO));
                 esp_deep_sleep_start();
             }
         }
         #endif
-        // Setelah 1 menit masuk tidur ringan, setelah 5 menit masuk tidur dalam
+        //一分钟进入浅睡眠，5分钟进入深睡眠关机
         power_save_timer_ = new PowerSaveTimer(-1, (60*5), -1);
-        // power_save_timer_ = new PowerSaveTimer(-1, 6, 10);//uji coba
+        // power_save_timer_ = new PowerSaveTimer(-1, 6, 10);//test
         power_save_timer_->OnEnterSleepMode([this]() {
             GetDisplay()->SetPowerSaveMode(true);
             GetBacklight()->SetBrightness(1);
@@ -137,10 +137,10 @@ private:
             ESP_LOGI(TAG, "Shutting down");
             #ifndef __USER_GPIO_PWRDOWN__
             ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(PWR_BUTTON_GPIO, 0));
-            ESP_ERROR_CHECK(rtc_gpio_pullup_en(PWR_BUTTON_GPIO));  // Aktifkan pull-up internal
+            ESP_ERROR_CHECK(rtc_gpio_pullup_en(PWR_BUTTON_GPIO));  // 内部上拉
             ESP_ERROR_CHECK(rtc_gpio_pulldown_dis(PWR_BUTTON_GPIO));
 
-            esp_lcd_panel_disp_on_off(panel, false); // Matikan tampilan
+            esp_lcd_panel_disp_on_off(panel, false); //关闭显示
             esp_deep_sleep_start();
             #else
             rtc_gpio_set_level(PWR_EN_GPIO, 0);
@@ -151,7 +151,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -174,7 +174,7 @@ private:
         if (gpio_get_level(GPIO_NUM_3) == 1) {
             pwrbutton_unreleased = true;
         }
-        // Konfigurasikan GPIO
+        // 配置GPIO
         ESP_LOGI(TAG, "Configuring power button GPIO");
         GpioManager::Config(GPIO_NUM_3, GpioManager::GpioMode::INPUT_PULLDOWN);
 
@@ -183,10 +183,10 @@ private:
             power_save_timer_->WakeUp();
         });
 
-        // Periksa status awal tombol daya
+        // 检查电源按钮初始状态
         ESP_LOGI(TAG, "Power button initial state: %d", GpioManager::GetLevel(PWR_BUTTON_GPIO));
 
-        // Logika mati dengan tekan lama aktif level tinggi
+        // 高电平有效长按关机逻辑
         pwr_button_.OnPressDown([this]() {
             pwrbutton_unreleased = false;
         });
@@ -195,11 +195,11 @@ private:
         ESP_LOGI(TAG, "Power button long press detected (high-active)");
 
             if (pwrbutton_unreleased){
-                ESP_LOGI(TAG, "Tombol daya belum dilepas setelah boot, batalkan mati");
+                ESP_LOGI(TAG, "开机后电源键未松开,取消关机");
                 return;
             }
             
-            // Konfirmasi debounce untuk tombol aktif level tinggi
+            // 高电平有效防抖确认
             for (int i = 0; i < 5; i++) {
                 int level = GpioManager::GetLevel(PWR_BUTTON_GPIO);
                 ESP_LOGD(TAG, "Debounce check %d: GPIO%d level=%d", i+1, PWR_BUTTON_GPIO, level);
@@ -214,36 +214,36 @@ private:
             ESP_LOGI(TAG, "Confirmed power button pressed - initiating shutdown");
             power_manager_->SetPowerState(PowerState::SHUTDOWN); });
 
-        // Klik tunggal untuk mengganti status
+        //单击切换状态
         pwr_button_.OnClick([this]()
                             {
-            // Ambil instance aplikasi dan status saat ini
+            // 获取当前应用实例和状态
             auto &app = Application::GetInstance();
             auto current_state = app.GetDeviceState();
 
-            ESP_LOGI(TAG, "Status perangkat saat ini: %d", current_state);
+            ESP_LOGI(TAG, "当前设备状态: %d", current_state);
             
             if (current_state == kDeviceStateIdle) {
-                // Jika saat ini siaga, pindah ke mode mendengarkan
-                ESP_LOGI(TAG, "Beralih dari siaga ke mendengarkan");
-                app.ToggleChatState(); // Pindah ke mode mendengarkan
+                // 如果当前是待命状态，切换到聆听状态
+                ESP_LOGI(TAG, "从待命状态切换到聆听状态");
+                app.ToggleChatState(); // 切换到聆听状态
             } else if (current_state == kDeviceStateListening) {
-                // Jika saat ini mendengarkan, pindah ke mode siaga
-                ESP_LOGI(TAG, "Beralih dari mendengarkan ke siaga");
-                app.ToggleChatState(); // Pindah ke mode siaga
+                // 如果当前是聆听状态，切换到待命状态
+                ESP_LOGI(TAG, "从聆听状态切换到待命状态");
+                app.ToggleChatState(); // 切换到待命状态
             } else if (current_state == kDeviceStateSpeaking) {
-                // Jika saat ini sedang berbicara, hentikan lalu kembali ke siaga
-                ESP_LOGI(TAG, "Beralih dari berbicara ke siaga");
-                app.ToggleChatState(); // Hentikan percakapan
+                // 如果当前是说话状态，终止说话并切换到待命状态
+                ESP_LOGI(TAG, "从说话状态切换到待命状态");
+                app.ToggleChatState(); // 终止说话
             } else {
-                // Pada status lain cukup bangunkan perangkat
-                ESP_LOGI(TAG, "Membangunkan perangkat");
+                // 其他状态下只唤醒设备
+                ESP_LOGI(TAG, "唤醒设备");
                 power_save_timer_->WakeUp();
             } });
 
-        // Klik tiga kali pada tombol daya untuk setel ulang Wi-Fi
+        // 电源键三击：重置WiFi
         pwr_button_.OnMultipleClick([this]() {
-            ESP_LOGI(TAG, "Tombol daya diklik tiga kali: reset Wi-Fi");
+            ESP_LOGI(TAG, "Power button triple click: 重置WiFi");
             power_save_timer_->WakeUp();
             EnterWifiConfigMode();
         }, 3);
@@ -254,7 +254,7 @@ private:
             power_save_timer_->WakeUp();
 
             auto codec = GetAudioCodec();
-            int current_vol = codec->output_volume(); // Ambil volume aktual saat ini
+            int current_vol = codec->output_volume(); // 获取实际当前音量
             current_vol = (current_vol + 8 > 80) ? 80 : current_vol + 8;
             
             codec->SetOutputVolume(current_vol);
@@ -269,7 +269,7 @@ private:
             power_save_timer_->WakeUp();
 
             auto codec = GetAudioCodec();
-            int current_vol = codec->output_volume(); // Ambil volume aktual saat ini
+            int current_vol = codec->output_volume(); // 获取实际当前音量
             current_vol = (current_vol - 8 < 0) ? 0 : current_vol - 8;
             
             codec->SetOutputVolume(current_vol);
@@ -285,7 +285,7 @@ private:
 
         void InitializeGC9301isplay()
         {
-            // Inisialisasi IO pengendali layar LCD
+            // 液晶屏控制IO初始化
             ESP_LOGI(TAG, "test Install panel IO");
             spi_bus_config_t buscfg = {};
             buscfg.mosi_io_num = DISPLAY_SPI_MOSI_PIN;
@@ -296,7 +296,7 @@ private:
             buscfg.max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
             ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
-            // Inisialisasi bus SPI
+            // 初始化SPI总线
             esp_lcd_panel_io_spi_config_t io_config = {};
             io_config.cs_gpio_num = DISPLAY_SPI_CS_PIN;
             io_config.dc_gpio_num = DISPLAY_DC_PIN;
@@ -307,7 +307,7 @@ private:
             io_config.lcd_param_bits = 8;
             esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io);
 
-            // Inisialisasi chip pengendali LCD GC9309
+            // 初始化液晶屏驱动芯片9309
             ESP_LOGI(TAG, "Install LCD driver");
             esp_lcd_panel_dev_config_t panel_config = {};
             panel_config.reset_gpio_num = GPIO_NUM_NC;

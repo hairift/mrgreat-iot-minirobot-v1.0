@@ -20,28 +20,28 @@
 class Pmic : public Axp2101 {
 public:
     Pmic(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : Axp2101(i2c_bus, addr) {
-        // Nilai bawaan EFUSE
-        WriteReg(0x22, 0b110); // Aktifkan PWRON > OFFLEVEL sebagai sumber mati daya
-        WriteReg(0x27, 0x10);  // Tahan 4 detik untuk mematikan daya
+        // ** EFUSE defaults **
+        WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
+        WriteReg(0x27, 0x10);  // hold 4s to power off
     
-        WriteReg(0x93, 0x1C); // Atur keluaran ALDO2 menjadi 3,3 V
+        WriteReg(0x93, 0x1C); // 配置 aldo2 输出为 3.3V
     
         uint8_t value = ReadReg(0x90); // XPOWERS_AXP2101_LDO_ONOFF_CTRL0
-        value = value | 0x02; // Atur bit 1 untuk ALDO2
-        WriteReg(0x90, value);  // Lalu aktifkan kanal dayanya
+        value = value | 0x02; // set bit 1 (ALDO2)
+        WriteReg(0x90, value);  // and power channels now enabled
     
-        WriteReg(0x64, 0x03); // Atur tegangan pengisian CV ke 4,2 V
+        WriteReg(0x64, 0x03); // CV charger voltage setting to 4.2V
         
-        WriteReg(0x61, 0x05); // Atur arus pra-pengisian baterai utama ke 125 mA
-        WriteReg(0x62, 0x0A); // Atur arus pengisian baterai utama ke 400 mA, 0x08=200, 0x09=300, 0x0A=400
-        WriteReg(0x63, 0x15); // Atur arus akhir pengisian baterai utama ke 125 mA
+        WriteReg(0x61, 0x05); // set Main battery precharge current to 125mA
+        WriteReg(0x62, 0x0A); // set Main battery charger current to 400mA ( 0x08-200mA, 0x09-300mA, 0x0A-400mA )
+        WriteReg(0x63, 0x15); // set Main battery term charge current to 125mA
     
-        WriteReg(0x14, 0x00); // Atur tegangan minimum sistem ke 4,1 V, bawaan 4,7 V, agar lebih toleran kabel USB kurang baik
-        WriteReg(0x15, 0x00); // Atur batas tegangan masuk ke 3,88 V agar lebih toleran kabel USB kurang baik
-        WriteReg(0x16, 0x05); // Atur batas arus masuk ke 2000 mA
+        WriteReg(0x14, 0x00); // set minimum system voltage to 4.1V (default 4.7V), for poor USB cables
+        WriteReg(0x15, 0x00); // set input voltage limit to 3.88v, for poor USB cables
+        WriteReg(0x16, 0x05); // set input current limit to 2000mA
     
-        WriteReg(0x24, 0x01); // Atur ambang PWROFF Vsys ke 3,2 V, bawaan 2,6 V terlalu rendah untuk baterai
-        WriteReg(0x50, 0x14); // Atur pin TS menjadi masukan eksternal, bukan sensor suhu
+        WriteReg(0x24, 0x01); // set Vsys for PWROFF threshold to 3.2V (default - 2.6V and kill battery)
+        WriteReg(0x50, 0x14); // set TS pin to EXTERNAL input (not temperature)
     }
 };
 
@@ -70,7 +70,7 @@ private:
     }
 
     void Enable4GModule() {
-        // Naikkan GPIO ke HIGH untuk mengaktifkan modul 4G
+        // Make GPIO HIGH to enable the 4G module
         gpio_config_t ml307_enable_config = {
             .pin_bit_mask = (1ULL << 4),
             .mode = GPIO_MODE_OUTPUT,
@@ -99,7 +99,7 @@ private:
     }
 
     void InitializeSsd1306Display() {
-        // Konfigurasi SSD1306
+        // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
             .on_color_trans_done = nullptr,
@@ -117,7 +117,7 @@ private:
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(display_i2c_bus_, &io_config, &panel_io_));
 
-        ESP_LOGI(TAG, "Memasang driver SSD1306");
+        ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = -1;
         panel_config.bits_per_pixel = 1;
@@ -128,25 +128,25 @@ private:
         panel_config.vendor_config = &ssd1306_config;
 
         ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(panel_io_, &panel_config, &panel_));
-        ESP_LOGI(TAG, "Driver SSD1306 berhasil dipasang");
+        ESP_LOGI(TAG, "SSD1306 driver installed");
 
-        // Atur ulang layar
+        // Reset the display
         ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
         if (esp_lcd_panel_init(panel_) != ESP_OK) {
-            ESP_LOGE(TAG, "Gagal menginisialisasi layar");
+            ESP_LOGE(TAG, "Failed to initialize display");
             display_ = new NoDisplay();
             return;
         }
 
-        // Nyalakan layar
-        ESP_LOGI(TAG, "Menyalakan layar");
+        // Set the display to on
+        ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
     }
 
     void InitializeCodecI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,

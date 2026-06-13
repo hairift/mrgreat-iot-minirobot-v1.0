@@ -5,23 +5,24 @@
 #include "settings.h"
 #include <esp_log.h>
 
-static const char* TAG = "DualNetworkBoard";
+static const char *TAG = "DualNetworkBoard";
 
-DualNetworkBoard::DualNetworkBoard(gpio_num_t ml307_tx_pin, gpio_num_t ml307_rx_pin, gpio_num_t ml307_dtr_pin, int32_t default_net_type)
-    : Board(),
-      ml307_tx_pin_(ml307_tx_pin),
-      ml307_rx_pin_(ml307_rx_pin),
+DualNetworkBoard::DualNetworkBoard(gpio_num_t ml307_tx_pin, gpio_num_t ml307_rx_pin, gpio_num_t ml307_dtr_pin, int32_t default_net_type) 
+    : Board(), 
+      ml307_tx_pin_(ml307_tx_pin), 
+      ml307_rx_pin_(ml307_rx_pin), 
       ml307_dtr_pin_(ml307_dtr_pin) {
-    // Muat jenis jaringan dari Settings.
+    
+    // 从Settings加载网络类型
     network_type_ = LoadNetworkTypeFromSettings(default_net_type);
-
-    // Hanya inisialisasi board yang sesuai dengan jaringan aktif.
+    
+    // 只初始化当前网络类型对应的板卡
     InitializeCurrentBoard();
 }
 
 NetworkType DualNetworkBoard::LoadNetworkTypeFromSettings(int32_t default_net_type) {
     Settings settings("network", true);
-    int network_type = settings.GetInt("type", default_net_type); // Nilai bawaan ML307 adalah 1.
+    int network_type = settings.GetInt("type", default_net_type); // 默认使用ML307 (1)
     return network_type == 1 ? NetworkType::ML307 : NetworkType::WIFI;
 }
 
@@ -43,7 +44,7 @@ void DualNetworkBoard::InitializeCurrentBoard() {
 
 void DualNetworkBoard::SwitchNetworkType() {
     auto display = GetDisplay();
-    if (network_type_ == NetworkType::WIFI) {
+    if (network_type_ == NetworkType::WIFI) {    
         SaveNetworkTypeToSettings(NetworkType::ML307);
         display->ShowNotification(Lang::Strings::SWITCH_TO_4G_NETWORK);
     } else {
@@ -55,13 +56,14 @@ void DualNetworkBoard::SwitchNetworkType() {
     app.Reboot();
 }
 
+ 
 std::string DualNetworkBoard::GetBoardType() {
     return current_board_->GetBoardType();
 }
 
 void DualNetworkBoard::StartNetwork() {
     auto display = Board::GetInstance().GetDisplay();
-
+    
     if (network_type_ == NetworkType::WIFI) {
         display->SetStatus(Lang::Strings::CONNECTING);
     } else {
@@ -71,7 +73,7 @@ void DualNetworkBoard::StartNetwork() {
 }
 
 void DualNetworkBoard::SetNetworkEventCallback(NetworkEventCallback callback) {
-    // Teruskan fungsi panggil balik ke board yang sedang aktif.
+    // Forward the callback to the current board
     current_board_->SetNetworkEventCallback(std::move(callback));
 }
 
@@ -87,7 +89,7 @@ void DualNetworkBoard::SetPowerSaveLevel(PowerSaveLevel level) {
     current_board_->SetPowerSaveLevel(level);
 }
 
-std::string DualNetworkBoard::GetBoardJson() {
+std::string DualNetworkBoard::GetBoardJson() {   
     return current_board_->GetBoardJson();
 }
 

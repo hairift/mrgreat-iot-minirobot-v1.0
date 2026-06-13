@@ -12,6 +12,7 @@
 
 #include <cJSON.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <sdkconfig.h>
 
 #ifndef CONFIG_CAMPUS_RAG_ENABLE
@@ -32,6 +33,20 @@ namespace {
 
 constexpr int kCampusRagHttpConnectId = 3;
 constexpr int kCampusRagMaxResponseBytes = 12288;
+constexpr int64_t kCampusRagFailureCooldownUs = 60LL * 1000LL * 1000LL;
+int64_t s_campus_rag_disabled_until_us = 0;
+
+bool CampusRagInCooldown() {
+    return esp_timer_get_time() < s_campus_rag_disabled_until_us;
+}
+
+void MarkCampusRagFailure() {
+    s_campus_rag_disabled_until_us = esp_timer_get_time() + kCampusRagFailureCooldownUs;
+}
+
+void MarkCampusRagSuccess() {
+    s_campus_rag_disabled_until_us = 0;
+}
 
 std::string UrlEncode(const char* input) {
     static const char* hex = "0123456789ABCDEF";
@@ -111,6 +126,9 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
     if (base_url.empty()) {
         return nullptr;
     }
+    if (CampusRagInCooldown()) {
+        return nullptr;
+    }
 
     auto network = Board::GetInstance().GetNetwork();
     if (!network) {
@@ -120,6 +138,7 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
     std::string url = base_url + "/query?q=" + UrlEncode(query);
     auto http = network->CreateHttp(kCampusRagHttpConnectId);
     if (!http) {
+        MarkCampusRagFailure();
         return nullptr;
     }
 
@@ -130,6 +149,7 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
 
     if (!http->Open("GET", url)) {
         ESP_LOGW(TAG, "Tidak dapat membuka Campus RAG Server: %s", base_url.c_str());
+        MarkCampusRagFailure();
         return nullptr;
     }
 
@@ -137,6 +157,7 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
     if (status_code != 200) {
         ESP_LOGW(TAG, "Campus RAG Server status HTTP %d", status_code);
         http->Close();
+        MarkCampusRagFailure();
         return nullptr;
     }
 
@@ -144,18 +165,21 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
     bool read_ok = ReadHttpLimited(http, response);
     http->Close();
     if (!read_ok) {
+        MarkCampusRagFailure();
         return nullptr;
     }
 
     cJSON* root = cJSON_Parse(response.c_str());
     if (root == nullptr) {
         ESP_LOGW(TAG, "Respons Campus RAG Server bukan JSON valid");
+        MarkCampusRagFailure();
         return nullptr;
     }
 
     cJSON* status = cJSON_GetObjectItem(root, "status");
     if (!JsonStringEquals(status, "found")) {
         cJSON_Delete(root);
+        MarkCampusRagFailure();
         return nullptr;
     }
 
@@ -170,6 +194,7 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
 
     if (text == nullptr || text[0] == '\0') {
         cJSON_Delete(root);
+        MarkCampusRagFailure();
         return nullptr;
     }
 
@@ -177,9 +202,11 @@ const char* QueryCampusRagServer(const char* query, char* buf, int buf_size) {
     cJSON_Delete(root);
     if (written <= 0 || written >= buf_size) {
         ESP_LOGW(TAG, "Respons Campus RAG terlalu panjang untuk buffer");
+        MarkCampusRagFailure();
         return nullptr;
     }
 
+    MarkCampusRagSuccess();
     ESP_LOGI(TAG, "Campus RAG Server digunakan untuk query: %s", query);
     return buf;
 }

@@ -49,7 +49,7 @@ static const ili9341_lcd_init_cmd_t vendor_specific_init[] = {
     {0x35, (uint8_t []){0x00}, 1, 0},
     {0x3A, (uint8_t []){0x05}, 1, 0},
     {0x36, (uint8_t []){0xC8}, 1, 0},
-    {0x29, NULL, 0, 0},     // Nyalakan layar
+    {0x29, NULL, 0, 0},     // Display on
     {0x2C, NULL, 0, 0},     // Memory write
 };
 
@@ -170,7 +170,7 @@ private:
 
         boot_button_.OnClick([this]() {
             auto &app = Application::GetInstance();
-            // Saat proses awal sebelum terhubung, tombol BOOT masuk ke mode konfigurasi Wi-Fi tanpa restart
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
@@ -247,7 +247,7 @@ private:
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
 
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_CS_PIN;
@@ -259,7 +259,7 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGD(TAG, "Install LCD driver");
         const ili9341_vendor_config_t vendor_config = {
             .init_cmds = &vendor_specific_init[0],
@@ -280,7 +280,7 @@ private:
         esp_lcd_panel_set_gap(panel, 0, 24);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
-        ESP_LOGI(TAG, "Pembuatan panel LCD berhasil, %p", panel);
+        ESP_LOGI(TAG, "LCD panel create success, %p", panel);
 
         esp_lcd_panel_disp_on_off(panel, true);
 
@@ -303,9 +303,9 @@ private:
     {
         auto& mcp_server = McpServer::GetInstance();
         
-        // Kontrol gerakan dasar
-        mcp_server.AddTool("self.dog.basic_control", "Gerakan dasar robot. Robot dapat melakukan aksi berikut:\n"
-            "forward: bergerak maju\nbackward: bergerak mundur\nturn_left: belok kiri\nturn_right: belok kanan\nstop: segera hentikan aksi saat ini", 
+        // 基础动作控制
+        mcp_server.AddTool("self.dog.basic_control", "机器人的基础动作。机器人可以做以下基础动作：\n"
+            "forward: 向前移动\nbackward: 向后移动\nturn_left: 向左转\nturn_right: 向右转\nstop: 立即停止当前动作", 
             PropertyList({
                 Property("action", kPropertyTypeString),
             }), [this](const PropertyList& properties) -> ReturnValue {
@@ -326,10 +326,10 @@ private:
                 return true;
             });
         
-        // Kontrol gerakan lanjutan
-        mcp_server.AddTool("self.dog.advanced_control", "Gerakan lanjutan robot. Robot dapat melakukan aksi berikut:\n"
-            "sway_back_forth: bergoyang maju mundur\nlay_down: tiarap\nsway: bergoyang ke kiri dan kanan\nretract_legs: menarik kaki\n"
-            "shake_hand: berjabat tangan\nshake_back_legs: meregangkan kaki belakang\njump_forward: melompat ke depan", 
+        // 扩展动作控制
+        mcp_server.AddTool("self.dog.advanced_control", "机器人的扩展动作。机器人可以做以下扩展动作：\n"
+            "sway_back_forth: 前后摇摆\nlay_down: 趴下\nsway: 左右摇摆\nretract_legs: 收回腿部\n"
+            "shake_hand: 握手\nshake_back_legs: 伸懒腰\njump_forward: 向前跳跃", 
             PropertyList({
                 Property("action", kPropertyTypeString),
             }), [this](const PropertyList& properties) -> ReturnValue {
@@ -357,24 +357,24 @@ private:
                 return true;
             });
 
-        // Kontrol lampu
-        mcp_server.AddTool("self.light.get_power", "Ambil status apakah lampu sedang menyala", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+        // 灯光控制
+        mcp_server.AddTool("self.light.get_power", "获取灯是否打开", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
             return led_on_;
         });
 
-        mcp_server.AddTool("self.light.turn_on", "Nyalakan lampu", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+        mcp_server.AddTool("self.light.turn_on", "打开灯", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
             SetLedColor(0xFF, 0xFF, 0xFF);
             led_on_ = true;
             return true;
         });
 
-        mcp_server.AddTool("self.light.turn_off", "Matikan lampu", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+        mcp_server.AddTool("self.light.turn_off", "关闭灯", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
             SetLedColor(0x00, 0x00, 0x00);
             led_on_ = false;
             return true;
         });
 
-        mcp_server.AddTool("self.light.set_rgb", "Atur warna RGB", PropertyList({
+        mcp_server.AddTool("self.light.set_rgb", "设置RGB颜色", PropertyList({
             Property("r", kPropertyTypeInteger, 0, 255),
             Property("g", kPropertyTypeInteger, 0, 255),
             Property("b", kPropertyTypeInteger, 0, 255)

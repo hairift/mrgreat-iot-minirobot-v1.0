@@ -7,111 +7,111 @@
 #include <functional>
 
 /**
- * Implementasi C++ untuk widget GIF LVGL.
- * Menyediakan fungsi animasi GIF dengan memakai pustaka gifdec.
+ * C++ implementation of LVGL GIF widget
+ * Provides GIF animation functionality using gifdec library
  */
 class LvglGif {
 public:
     explicit LvglGif(const lv_img_dsc_t* img_dsc);
     virtual ~LvglGif();
 
-    // Implementasi antarmuka LvglImage
+    // LvglImage interface implementation
     virtual const lv_img_dsc_t* image_dsc() const;
 
     /**
-     * Mulai atau mulai ulang animasi GIF.
+     * Start/restart GIF animation
      */
     void Start();
 
     /**
-     * Jeda animasi GIF.
+     * Pause GIF animation
      */
     void Pause();
 
     /**
-     * Lanjutkan animasi GIF.
+     * Resume GIF animation
      */
     void Resume();
 
     /**
-     * Hentikan animasi GIF dan kembali ke frame pertama.
+     * Stop GIF animation and rewind to first frame
      */
     void Stop();
 
     /**
-     * Periksa apakah GIF sedang diputar.
+     * Check if GIF is currently playing
      */
     bool IsPlaying() const;
 
     /**
-     * Periksa apakah GIF berhasil dimuat.
+     * Check if GIF was loaded successfully
      */
     bool IsLoaded() const;
 
     /**
-     * Ambil jumlah pengulangan.
+     * Get loop count
      */
     int32_t GetLoopCount() const;
 
     /**
-     * Atur jumlah pengulangan.
+     * Set loop count
      */
     void SetLoopCount(int32_t count);
 
     /**
-     * Ambil jeda pengulangan dalam milidetik, yaitu jeda antar loop.
+     * Get loop delay in milliseconds (delay between loops)
      */
     uint32_t GetLoopDelay() const;
 
     /**
-     * Atur jeda pengulangan dalam milidetik, yaitu jeda antar loop.
-     * @param delay_ms Jeda dalam milidetik sebelum memulai loop berikutnya. Nilai 0 berarti tanpa jeda.
+     * Set loop delay in milliseconds (delay between loops)
+     * @param delay_ms Delay in milliseconds before starting next loop. 0 means no delay.
      */
     void SetLoopDelay(uint32_t delay_ms);
 
     /**
-     * Ambil dimensi GIF.
+     * Get GIF dimensions
      */
     uint16_t width() const;
     uint16_t height() const;
 
     /**
-     * Atur fungsi panggil balik pembaruan frame.
+     * Set frame update callback
      */
     void SetFrameCallback(std::function<void()> callback);
 
 private:
-    // Instance dekoder GIF
+    // GIF decoder instance
     gd_GIF* gif_;
     
-    // Deskriptor gambar LVGL
+    // LVGL image descriptor
     lv_img_dsc_t img_dsc_;
     
-    // Pengatur waktu animasi
+    // Animation timer
     lv_timer_t* timer_;
     
-    // Waktu pembaruan bingkai terakhir
+    // Last frame update time
     uint32_t last_call_;
     
-    // Status animasi
+    // Animation state
     bool playing_;
     bool loaded_;
     
-    // Konfigurasi jeda pengulangan
-    uint32_t loop_delay_ms_;      // Jeda antar loop dalam milidetik
-    bool loop_waiting_;           // Menandakan apakah sedang menunggu loop berikutnya
-    uint32_t loop_wait_start_;    // Penanda waktu saat masa tunggu loop dimulai
+    // Loop delay configuration
+    uint32_t loop_delay_ms_;      // Delay between loops in milliseconds
+    bool loop_waiting_;           // Whether we're waiting for the next loop
+    uint32_t loop_wait_start_;    // Timestamp when loop wait started
     
-    // Fungsi panggil balik pembaruan bingkai
+    // Frame update callback
     std::function<void()> frame_callback_;
     
     /**
-     * Perbarui ke frame berikutnya.
+     * Update to next frame
      */
     void NextFrame();
     
     /**
-     * Bersihkan sumber daya.
+     * Cleanup resources
      */
     void Cleanup();
 };

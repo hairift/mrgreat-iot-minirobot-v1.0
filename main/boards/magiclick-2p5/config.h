@@ -17,8 +17,8 @@
 #define AUDIO_CODEC_I2C_SCL_PIN GPIO_NUM_6
 #define AUDIO_CODEC_ES8311_ADDR ES8311_CODEC_DEFAULT_ADDR
 
-// Daya LED bawaan
-#define BUILTIN_LED_POWER GPIO_NUM_39 // Aktif pada level rendah
+//led power
+#define BUILTIN_LED_POWER GPIO_NUM_39 // 低电平有效
 #define BUILTIN_LED_POWER_OUTPUT_INVERT true
 
 #define BUILTIN_LED_NUM 2
@@ -28,7 +28,7 @@
 #define LEFT_BUTTON_GPIO GPIO_NUM_0
 #define RIGHT_BUTTON_GPIO GPIO_NUM_47
 
-// Layar
+// display
 #define DISPLAY_SDA_PIN GPIO_NUM_16
 #define DISPLAY_SCL_PIN GPIO_NUM_15
 #define DISPLAY_CS_PIN GPIO_NUM_14
@@ -38,9 +38,9 @@
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 128
 
-// Pilih jenis dan konfigurasi layar secara dinamis berdasarkan versi PCB
-#define PCB_VERSION_2_5A  1 // Menggunakan GC9107
-#define PCB_VERSION_2_5A1 2 // Menggunakan ST7735
+// 根据PCB版本动态选择屏幕类型和配置 
+#define PCB_VERSION_2_5A  1 // 使用GC9107
+#define PCB_VERSION_2_5A1 2 // 使用ST7735
 
 #define DISPLAY_OFFSET_X 0
 #define DISPLAY_OFFSET_Y 0

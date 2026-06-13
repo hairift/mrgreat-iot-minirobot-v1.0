@@ -47,6 +47,7 @@ enum class WifiEvent {
 // Konfigurasi
 struct WifiManagerConfig {
     std::string ssid_prefix = "ESP32";    // Awalan SSID untuk mode AP
+    bool append_mac_suffix = true;        // Tambahkan 4 digit akhir MAC agar SSID unik
     std::string language = "zh-CN";       // Bahasa antarmuka web
 
     // Interval pindai mode stasiun dengan backoff eksponensial

@@ -9,7 +9,7 @@
 #include "wifi_manager.h"
 #include "application.h"
 
-// Konstanta pemrosesan sinyal audio untuk konfigurasi WiFi melalui suara
+// Audio signal processing constants for WiFi configuration via audio
 const size_t kAudioSampleRate = 6400;
 const size_t kMarkFrequency = 1800;
 const size_t kSpaceFrequency = 1500;
@@ -18,160 +18,160 @@ const size_t kWindowSize = 64;
 
 namespace audio_wifi_config
 {
-    // Fungsi utama untuk menerima kredensial WiFi melalui sinyal audio
+    // Main function to receive WiFi credentials through audio signal
     void ReceiveWifiCredentialsFromAudio(Application *app, WifiManager *wifi_manager, Display *display, 
                                          size_t input_channels = 1);
 
     /**
-     * Implementasi algoritma Goertzel untuk mendeteksi satu frekuensi
-     * Dipakai untuk mendeteksi frekuensi audio tertentu pada proses demodulasi AFSK
+     * Goertzel algorithm implementation for single frequency detection
+     * Used to detect specific audio frequencies in the AFSK demodulation process
      */
     class FrequencyDetector
     {
     private:
-        float frequency_;              // Frekuensi target yang sudah dinormalisasi, yaitu f / fs
-        size_t window_size_;           // Ukuran jendela analisis
-        float frequency_bin_;          // Bin frekuensi
-        float angular_frequency_;      // Frekuensi sudut
-        float cos_coefficient_;        // Nilai cos(w)
-        float sin_coefficient_;        // Nilai sin(w)
-        float filter_coefficient_;     // Nilai 2 * cos(w)
-        std::deque<float> state_buffer_;  // Buffer melingkar untuk menyimpan S[-1] dan S[-2]
+        float frequency_;              // Target frequency (normalized, i.e., f / fs)
+        size_t window_size_;           // Window size for analysis
+        float frequency_bin_;          // Frequency bin
+        float angular_frequency_;      // Angular frequency
+        float cos_coefficient_;        // cos(w)
+        float sin_coefficient_;        // sin(w)
+        float filter_coefficient_;     // 2 * cos(w)
+        std::deque<float> state_buffer_;  // Circular buffer for storing S[-1] and S[-2]
 
     public:
         /**
-         * Konstruktor
-         * @param frequency Frekuensi yang telah dinormalisasi (f / fs)
-         * @param window_size Ukuran jendela analisis
+         * Constructor
+         * @param frequency Normalized frequency (f / fs)
+         * @param window_size Window size for analysis
          */
         FrequencyDetector(float frequency, size_t window_size);
 
         /**
-         * Reset status detektor
+         * Reset the detector state
          */
         void Reset();
 
         /**
-         * Proses satu sampel audio
-         * @param sample Sampel audio masukan
+         * Process one audio sample
+         * @param sample Input audio sample
          */
         void ProcessSample(float sample);
 
         /**
-         * Hitung amplitudo saat ini
-         * @return Nilai amplitudo
+         * Calculate current amplitude
+         * @return Amplitude value
          */
         float GetAmplitude() const;
     };
 
     /**
-     * Pemroses sinyal audio untuk mendeteksi pasangan frekuensi Mark/Space
-     * Mengolah sinyal audio untuk mengekstrak data digital dengan demodulasi AFSK
+     * Audio signal processor for Mark/Space frequency pair detection
+     * Processes audio signals to extract digital data using AFSK demodulation
      */
     class AudioSignalProcessor
     {
     private:
-        std::deque<float> input_buffer_;             // Buffer sampel masukan
-        size_t input_buffer_size_;                   // Ukuran buffer masukan = ukuran jendela
-        size_t output_sample_count_;                 // Penghitung sampel keluaran
-        size_t samples_per_bit_;                     // Ambang jumlah sampel per bit
-        std::unique_ptr<FrequencyDetector> mark_detector_;   // Detektor frekuensi Mark
-        std::unique_ptr<FrequencyDetector> space_detector_;  // Detektor frekuensi Space
+        std::deque<float> input_buffer_;             // Input sample buffer
+        size_t input_buffer_size_;                   // Input buffer size = window size
+        size_t output_sample_count_;                 // Output sample counter
+        size_t samples_per_bit_;                     // Samples per bit threshold
+        std::unique_ptr<FrequencyDetector> mark_detector_;   // Mark frequency detector
+        std::unique_ptr<FrequencyDetector> space_detector_;  // Space frequency detector
 
     public:
         /**
-         * Konstruktor
-         * @param sample_rate Laju sampling audio
-         * @param mark_frequency Frekuensi Mark untuk bit digital '1'
-         * @param space_frequency Frekuensi Space untuk bit digital '0'
-         * @param bit_rate Laju bit transmisi data
-         * @param window_size Ukuran jendela analisis
+         * Constructor
+         * @param sample_rate Audio sampling rate
+         * @param mark_frequency Mark frequency for digital '1'
+         * @param space_frequency Space frequency for digital '0'
+         * @param bit_rate Data transmission bit rate
+         * @param window_size Analysis window size
          */
         AudioSignalProcessor(size_t sample_rate, size_t mark_frequency, size_t space_frequency,
                            size_t bit_rate, size_t window_size);
 
         /**
-         * Proses sampel audio masukan
-         * @param samples Vektor sampel audio masukan
-         * @return Vektor nilai probabilitas Mark (0.0 sampai 1.0)
+         * Process input audio samples
+         * @param samples Input audio sample vector
+         * @return Vector of Mark probability values (0.0 to 1.0)
          */
         std::vector<float> ProcessAudioSamples(const std::vector<float> &samples);
     };
 
     /**
-     * Status mesin keadaan untuk penerimaan data
+     * Data reception state machine states
      */
     enum class DataReceptionState
     {
-        kInactive,  // Menunggu sinyal awal
-        kWaiting,   // Awal sinyal terdeteksi, menunggu konfirmasi
-        kReceiving  // Sedang aktif menerima data
+        kInactive,  // Waiting for start signal
+        kWaiting,   // Detected potential start, waiting for confirmation
+        kReceiving  // Actively receiving data
     };
 
     /**
-     * Buffer data untuk mengelola konversi audio menjadi data digital
-     * Menangani alur lengkap dari sinyal audio hingga menjadi teks terdekode
+     * Data buffer for managing audio-to-digital data conversion
+     * Handles the complete process from audio signal to decoded text data
      */
     class AudioDataBuffer
     {
     private:
-        DataReceptionState current_state_;       // Status penerimaan saat ini
-        std::deque<uint8_t> identifier_buffer_;  // Buffer untuk mendeteksi penanda awal/akhir
-        size_t identifier_buffer_size_;          // Ukuran buffer penanda
-        std::vector<uint8_t> bit_buffer_;        // Buffer untuk menyimpan aliran bit
-        size_t max_bit_buffer_size_;             // Ukuran maksimum buffer bit
-        const std::vector<uint8_t> start_of_transmission_;  // Penanda awal transmisi
-        const std::vector<uint8_t> end_of_transmission_;    // Penanda akhir transmisi
-        bool enable_checksum_validation_;       // Menentukan apakah checksum divalidasi
+        DataReceptionState current_state_;       // Current reception state
+        std::deque<uint8_t> identifier_buffer_;  // Buffer for start/end identifier detection
+        size_t identifier_buffer_size_;          // Identifier buffer size
+        std::vector<uint8_t> bit_buffer_;        // Buffer for storing bit stream
+        size_t max_bit_buffer_size_;             // Maximum bit buffer size
+        const std::vector<uint8_t> start_of_transmission_;  // Start-of-transmission identifier
+        const std::vector<uint8_t> end_of_transmission_;    // End-of-transmission identifier
+        bool enable_checksum_validation_;       // Whether to validate checksum
 
     public:
-        std::optional<std::string> decoded_text; // Teks hasil dekode bila berhasil
+        std::optional<std::string> decoded_text; // Successfully decoded text data
 
         /**
-         * Konstruktor bawaan dengan penanda awal dan akhir yang sudah ditetapkan
+         * Default constructor using predefined start and end identifiers
          */
         AudioDataBuffer();
 
         /**
-         * Konstruktor dengan parameter khusus
-         * @param max_byte_size Perkiraan ukuran data maksimum dalam byte
-         * @param start_identifier Penanda awal transmisi
-         * @param end_identifier Penanda akhir transmisi
-         * @param enable_checksum Menentukan apakah validasi checksum diaktifkan
+         * Constructor with custom parameters
+         * @param max_byte_size Expected maximum data size in bytes
+         * @param start_identifier Start-of-transmission identifier
+         * @param end_identifier End-of-transmission identifier
+         * @param enable_checksum Whether to enable checksum validation
          */
         AudioDataBuffer(size_t max_byte_size, const std::vector<uint8_t> &start_identifier,
                       const std::vector<uint8_t> &end_identifier, bool enable_checksum = false);
 
         /**
-         * Proses data probabilitas lalu coba dekode
-         * @param probabilities Vektor probabilitas Mark
-         * @param threshold Ambang keputusan untuk deteksi bit
-         * @return true jika seluruh data berhasil diterima dan didekode
+         * Process probability data and attempt to decode
+         * @param probabilities Vector of Mark probabilities
+         * @param threshold Decision threshold for bit detection
+         * @return true if complete data was successfully received and decoded
          */
         bool ProcessProbabilityData(const std::vector<float> &probabilities, float threshold = 0.5f);
 
         /**
-         * Hitung checksum untuk teks ASCII
-         * @param text Teks masukan
-         * @return Nilai checksum (0-255)
+         * Calculate checksum for ASCII text
+         * @param text Input text string
+         * @return Checksum value (0-255)
          */
         static uint8_t CalculateChecksum(const std::string &text);
 
     private:
         /**
-         * Ubah vektor bit menjadi vektor byte
-         * @param bits Vektor bit masukan
-         * @return Vektor byte hasil konversi
+         * Convert bit vector to byte vector
+         * @param bits Input bit vector
+         * @return Converted byte vector
          */
         std::vector<uint8_t> ConvertBitsToBytes(const std::vector<uint8_t> &bits) const;
 
         /**
-         * Bersihkan semua buffer dan setel ulang status
+         * Clear all buffers and reset state
          */
         void ClearBuffers();
     };
 
-    // Penanda bawaan untuk awal dan akhir transmisi
+    // Default start and end transmission identifiers
     extern const std::vector<uint8_t> kDefaultStartTransmissionPattern;
     extern const std::vector<uint8_t> kDefaultEndTransmissionPattern;
 }

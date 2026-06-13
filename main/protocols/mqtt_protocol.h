@@ -17,9 +17,10 @@
 #include <mutex>
 #include <memory>
 #include <atomic>
+#include <cstdint>
 
 #define MQTT_PING_INTERVAL_SECONDS 90
-#define MQTT_RECONNECT_INTERVAL_MS 60000
+#define MQTT_RECONNECT_INTERVAL_MS 10000
 
 #define MQTT_PROTOCOL_SERVER_HELLO_EVENT (1 << 0)
 
@@ -35,7 +36,7 @@ public:
     bool IsAudioChannelOpened() const override;
 
 private:
-    // Penanda hidup untuk fungsi panggil balik terjadwal yang aman, diatur menjadi false di destruktor
+    // Penanda masa hidup mencegah fungsi terjadwal mengakses objek yang sudah dihapus.
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
     
     EventGroupHandle_t event_group_handle_;
@@ -45,7 +46,7 @@ private:
     std::mutex channel_mutex_;
     std::unique_ptr<Mqtt> mqtt_;
     std::unique_ptr<Udp> udp_;
-    mbedtls_aes_context aes_ctx_;
+    mbedtls_aes_context aes_ctx_{};
     std::string aes_nonce_;
     std::string udp_server_;
     int udp_port_;
@@ -57,6 +58,7 @@ private:
     bool StartMqttClient(bool report_error=false);
     void ParseServerHello(const cJSON* root);
     std::string DecodeHexString(const std::string& hex_string);
+    bool PublishText(const std::string& text, bool report_error);
 
     bool SendText(const std::string& text) override;
     std::string GetHelloMessage();

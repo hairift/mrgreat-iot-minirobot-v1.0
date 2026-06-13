@@ -44,7 +44,7 @@
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT true
 
 
-/* Pin kamera */
+/* Camera pins */
 #define CAMERA_PIN_PWDN -1
 #define CAMERA_PIN_RESET -1
 #define CAMERA_PIN_XCLK 17

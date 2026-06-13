@@ -1,9 +1,17 @@
 #include "movements.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include "oscillator.h"
+
+namespace {
+float EaseOutCubic(float t) {
+    float inv = 1.0f - t;
+    return 1.0f - inv * inv * inv;
+}
+}  // namespace
 
 Otto::Otto() {
     is_otto_resting_ = false;
@@ -35,7 +43,7 @@ void Otto::Init(int right_pitch, int right_roll, int left_pitch, int left_roll, 
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- FUNGSI PASANG DAN LEPAS ------------------------------------//
+//-- ATTACH & DETACH FUNCTIONS ----------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::AttachServos() {
     for (int i = 0; i < SERVO_COUNT; i++) {
@@ -54,7 +62,7 @@ void Otto::DetachServos() {
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- TRIM OSILATOR ----------------------------------------------//
+//-- OSCILLATORS TRIMS ------------------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::SetTrims(int right_pitch, int right_roll, int left_pitch, int left_roll, int body,
                     int head) {
@@ -73,60 +81,46 @@ void Otto::SetTrims(int right_pitch, int right_roll, int left_pitch, int left_ro
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- FUNGSI GERAK DASAR -----------------------------------------//
+//-- BASIC MOTION FUNCTIONS -------------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::MoveServos(int time, int servo_target[]) {
     if (GetRestState() == true) {
         SetRestState(false);
     }
 
-    final_time_ = millis() + time;
-    if (time > 10) {
-        for (int i = 0; i < SERVO_COUNT; i++) {
-            if (servo_pins_[i] != -1) {
-                increment_[i] = (servo_target[i] - servo_[i].GetPosition()) / (time / 10.0);
-            }
-        }
-
-        for (int iteration = 1; millis() < final_time_; iteration++) {
-            partial_time_ = millis() + 10;
-            for (int i = 0; i < SERVO_COUNT; i++) {
-                if (servo_pins_[i] != -1) {
-                    servo_[i].SetPosition(servo_[i].GetPosition() + increment_[i]);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-    } else {
+    if (time <= 10) {
         for (int i = 0; i < SERVO_COUNT; i++) {
             if (servo_pins_[i] != -1) {
                 servo_[i].SetPosition(servo_target[i]);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(time));
+        return;
     }
 
-    // Penyesuaian akhir ke posisi target.
-    bool f = true;
-    int adjustment_count = 0;
-    while (f && adjustment_count < 10) {
-        f = false;
+    int start[SERVO_COUNT];
+    for (int i = 0; i < SERVO_COUNT; i++) {
+        start[i] = servo_[i].GetPosition();
+    }
+
+    int steps = std::max(1, time / 10);
+    for (int step = 1; step <= steps; step++) {
+        float t = static_cast<float>(step) / static_cast<float>(steps);
+        float eased_t = EaseOutCubic(t);
         for (int i = 0; i < SERVO_COUNT; i++) {
-            if (servo_pins_[i] != -1 && servo_target[i] != servo_[i].GetPosition()) {
-                f = true;
-                break;
+            if (servo_pins_[i] != -1) {
+                float interpolated = start[i] + (servo_target[i] - start[i]) * eased_t;
+                servo_[i].SetPosition(static_cast<int>(std::round(interpolated)));
             }
         }
-        if (f) {
-            for (int i = 0; i < SERVO_COUNT; i++) {
-                if (servo_pins_[i] != -1) {
-                    servo_[i].SetPosition(servo_target[i]);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-            adjustment_count++;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    for (int i = 0; i < SERVO_COUNT; i++) {
+        if (servo_pins_[i] != -1) {
+            servo_[i].SetPosition(servo_target[i]);
         }
-    };
+    }
 }
 
 void Otto::MoveSingle(int position, int servo_number) {
@@ -177,26 +171,33 @@ void Otto::Execute(int amplitude[SERVO_COUNT], int offset[SERVO_COUNT], int peri
 
     int cycles = (int)steps;
 
-    //-- Jalankan siklus penuh
+    //-- Execute complete cycles
     if (cycles >= 1)
         for (int i = 0; i < cycles; i++)
             OscillateServos(amplitude, offset, period, phase_diff);
 
-    //-- Jalankan sisa siklus yang belum penuh
+    //-- Execute the final not complete cycle
     OscillateServos(amplitude, offset, period, phase_diff, (float)steps - cycles);
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- POSISI ISTIRAHAT OTTO --------------------------------------//
+//-- HOME = Otto at rest position -------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::Home(bool hands_down) {
-    if (is_otto_resting_ == false) {  // Hanya kembali ke posisi istirahat jika perlu
-        MoveServos(1000, servo_initial_);
+    if (is_otto_resting_ == false) {  // Go to rest position only if necessary
+        int max_delta = 0;
+        for (int i = 0; i < SERVO_COUNT; i++) {
+            if (servo_pins_[i] != -1) {
+                max_delta = std::max(max_delta, std::abs(servo_initial_[i] - servo_[i].GetPosition()));
+            }
+        }
+        int home_time = std::clamp(500 + max_delta * 9, 500, 1700);
+        MoveServos(home_time, servo_initial_);
         is_otto_resting_ = true;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(200));
 }
 
 bool Otto::GetRestState() {
@@ -208,24 +209,20 @@ void Otto::SetRestState(bool state) {
 }
 
 ///////////////////////////////////////////////////////////////////
-//-- RANGKAIAN GERAK SIAP PAKAI ---------------------------------//
+//-- PREDETERMINED MOTION SEQUENCES -----------------------------//
 ///////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------
-//-- Fungsi terpadu untuk aksi tangan
-//--  Parameter:
-//--    action: jenis aksi 1=angkat tangan kiri, 2=angkat tangan kanan,
-//--            3=angkat kedua tangan, 4=turunkan tangan kiri,
-//--            5=turunkan tangan kanan, 6=turunkan kedua tangan,
-//--            7=lambaikan tangan kiri, 8=lambaikan tangan kanan,
-//--            9=lambaikan kedua tangan, 10=tepukkan tangan kiri,
-//--            11=tepukkan tangan kanan, 12=tepukkan kedua tangan
-//--    times: jumlah pengulangan
-//--    amount: besar gerakan (10-50)
-//--    period: durasi gerakan
+//-- 统一手部动作函数
+//--  Parameters:
+//--    action: 动作类型 1=举左手, 2=举右手, 3=举双手, 4=放左手, 5=放右手, 6=放双手,
+//--            7=挥左手, 8=挥右手, 9=挥双手, 10=拍打左手, 11=拍打右手, 12=拍打双手
+//--    times: 重复次数
+//--    amount: 动作幅度 (10-50)
+//--    period: 动作时间
 //---------------------------------------------------------
 void Otto::HandAction(int action, int times, int amount, int period) {
-    // Batasi rentang parameter
+    // 限制参数范围
     times = 2 * std::max(3, std::min(100, times));
     amount = std::max(10, std::min(50, amount));
     period = std::max(100, std::min(1000, period));
@@ -236,31 +233,31 @@ void Otto::HandAction(int action, int times, int amount, int period) {
     }
 
     switch (action) {
-        case 1:  // Angkat tangan kiri
+        case 1:  // 举左手
             current_positions[LEFT_PITCH] = 180;
             MoveServos(period, current_positions);
             break;
 
-        case 2:  // Angkat tangan kanan
+        case 2:  // 举右手
             current_positions[RIGHT_PITCH] = 0;
             MoveServos(period, current_positions);
             break;
 
-        case 3:  // Angkat kedua tangan
+        case 3:  // 举双手
             current_positions[LEFT_PITCH] = 180;
             current_positions[RIGHT_PITCH] = 0;
             MoveServos(period, current_positions);
             break;
 
-        case 4:  // Turunkan tangan kiri
-        case 5:  // Turunkan tangan kanan
-        case 6:  // Turunkan kedua tangan
-            // Kembali ke posisi awal
+        case 4:  // 放左手
+        case 5:  // 放右手
+        case 6:  // 放双手
+            // 回到初始位置
             memcpy(current_positions, servo_initial_, sizeof(current_positions));
             MoveServos(period, current_positions);
             break;
 
-        case 7:  // Lambaikan tangan kiri
+        case 7:  // 挥左手
             current_positions[LEFT_PITCH] = 150;
             MoveServos(period, current_positions);
             for (int i = 0; i < times; i++) {
@@ -272,7 +269,7 @@ void Otto::HandAction(int action, int times, int amount, int period) {
             MoveServos(period, current_positions);
             break;
 
-        case 8:  // Lambaikan tangan kanan
+        case 8:  // 挥右手
             current_positions[RIGHT_PITCH] = 30;
             MoveServos(period, current_positions);
             for (int i = 0; i < times; i++) {
@@ -284,7 +281,7 @@ void Otto::HandAction(int action, int times, int amount, int period) {
             MoveServos(period, current_positions);
             break;
 
-        case 9:  // Lambaikan kedua tangan
+        case 9:  // 挥双手
             current_positions[LEFT_PITCH] = 150;
             current_positions[RIGHT_PITCH] = 30;
             MoveServos(period, current_positions);
@@ -298,7 +295,7 @@ void Otto::HandAction(int action, int times, int amount, int period) {
             MoveServos(period, current_positions);
             break;
 
-        case 10:  // Tepuk tangan kiri
+        case 10:  // 拍打左手
             current_positions[LEFT_ROLL] = 20;
             MoveServos(period, current_positions);
             for (int i = 0; i < times; i++) {
@@ -311,7 +308,7 @@ void Otto::HandAction(int action, int times, int amount, int period) {
             MoveServos(period, current_positions);
             break;
 
-        case 11:  // Tepuk tangan kanan
+        case 11:  // 拍打右手
             current_positions[RIGHT_ROLL] = 160;
             MoveServos(period, current_positions);
             for (int i = 0; i < times; i++) {
@@ -324,7 +321,7 @@ void Otto::HandAction(int action, int times, int amount, int period) {
             MoveServos(period, current_positions);
             break;
 
-        case 12:  // Tepuk kedua tangan
+        case 12:  // 拍打双手
             current_positions[LEFT_ROLL] = 20;
             current_positions[RIGHT_ROLL] = 160;
             MoveServos(period, current_positions);
@@ -344,15 +341,15 @@ void Otto::HandAction(int action, int times, int amount, int period) {
 }
 
 //---------------------------------------------------------
-//-- Fungsi terpadu untuk aksi badan
-//--  Parameter:
-//--    action: jenis aksi 1=putar kiri, 2=putar kanan, 3=kembali ke tengah
-//--    times: jumlah putaran
-//--    amount: sudut putar (0-90 derajat, berpusat di 90 derajat)
-//--    period: durasi gerakan
+//-- 统一身体动作函数
+//--  Parameters:
+//--    action: 动作类型 1=左转, 2=右转，3=回中心
+//--    times: 转动次数
+//--    amount: 旋转角度 (0-90度，以90度为中心左右旋转)
+//--    period: 动作时间
 //---------------------------------------------------------
 void Otto::BodyAction(int action, int times, int amount, int period) {
-    // Batasi rentang parameter
+    // 限制参数范围
     times = std::max(1, std::min(10, times));
     amount = std::max(0, std::min(90, amount));
     period = std::max(500, std::min(3000, period));
@@ -370,19 +367,19 @@ void Otto::BodyAction(int action, int times, int amount, int period) {
     int target_angle = body_center;
 
     switch (action) {
-        case 1:  // Putar ke kiri
+        case 1:  // 左转
             target_angle = body_center + amount;
             target_angle = std::min(180, target_angle);
             break;
-        case 2:  // Putar ke kanan
+        case 2:  // 右转
             target_angle = body_center - amount;
             target_angle = std::max(0, target_angle);
             break;
-        case 3:  // Kembali ke tengah
+        case 3:  // 回中心
             target_angle = body_center;
             break;
         default:
-            return;  // Aksi tidak valid
+            return;  // 无效动作
     }
 
     current_positions[BODY] = target_angle;
@@ -391,16 +388,15 @@ void Otto::BodyAction(int action, int times, int amount, int period) {
 }
 
 //---------------------------------------------------------
-//-- Fungsi terpadu untuk aksi kepala
-//--  Parameter:
-//--    action: jenis aksi 1=angkat kepala, 2=tundukkan kepala,
-//--            3=mengangguk, 4=kembali ke tengah, 5=mengangguk berulang
-//--    times: jumlah pengulangan (hanya berlaku untuk anggukan berulang)
-//--    amount: simpangan sudut (rentang 1-15 derajat)
-//--    period: durasi gerakan
+//-- 统一头部动作函数
+//--  Parameters:
+//--    action: 动作类型 1=抬头, 2=低头, 3=点头, 4=回中心, 5=连续点头
+//--    times: 重复次数 (仅对连续点头有效)
+//--    amount: 角度偏移 (1-15度范围内)
+//--    period: 动作时间
 //---------------------------------------------------------
 void Otto::HeadAction(int action, int times, int amount, int period) {
-    // Batasi rentang parameter
+    // 限制参数范围
     times = std::max(1, std::min(10, times));
     amount = std::max(1, std::min(15, abs(amount)));
     period = std::max(300, std::min(3000, period));
@@ -414,60 +410,60 @@ void Otto::HeadAction(int action, int times, int amount, int period) {
         }
     }
 
-    int head_center = 90;  // Posisi tengah kepala
+    int head_center = 90;  // 头部中心位置
 
     switch (action) {
-        case 1:                                              // Angkat kepala
-            current_positions[HEAD] = head_center + amount;  // Mengangkat kepala berarti menambah sudut
+        case 1:                                              // 抬头
+            current_positions[HEAD] = head_center + amount;  // 抬头是增加角度
             MoveServos(period, current_positions);
             break;
 
-        case 2:                                              // Tundukkan kepala
-            current_positions[HEAD] = head_center - amount;  // Menundukkan kepala berarti mengurangi sudut
+        case 2:                                              // 低头
+            current_positions[HEAD] = head_center - amount;  // 低头是减少角度
             MoveServos(period, current_positions);
             break;
 
-        case 3:  // Mengangguk (gerak naik turun)
-            // Angkat kepala terlebih dahulu
+        case 3:  // 点头 (上下运动)
+            // 先抬头
             current_positions[HEAD] = head_center + amount;
             MoveServos(period / 3, current_positions);
             vTaskDelay(pdMS_TO_TICKS(period / 6));
 
-            // Lalu tundukkan kepala
+            // 再低头
             current_positions[HEAD] = head_center - amount;
             MoveServos(period / 3, current_positions);
             vTaskDelay(pdMS_TO_TICKS(period / 6));
 
-            // Kembali ke tengah
+            // 回到中心
             current_positions[HEAD] = head_center;
             MoveServos(period / 3, current_positions);
             break;
 
-        case 4:  // Kembali ke posisi tengah
+        case 4:  // 回到中心位置
             current_positions[HEAD] = head_center;
             MoveServos(period, current_positions);
             break;
 
-        case 5:  // Mengangguk berulang
+        case 5:  // 连续点头
             for (int i = 0; i < times; i++) {
-                // Angkat kepala
+                // 抬头
                 current_positions[HEAD] = head_center + amount;
                 MoveServos(period / 2, current_positions);
 
-                // Tundukkan kepala
+                // 低头
                 current_positions[HEAD] = head_center - amount;
                 MoveServos(period / 2, current_positions);
 
-                vTaskDelay(pdMS_TO_TICKS(50));  // Jeda singkat
+                vTaskDelay(pdMS_TO_TICKS(50));  // 短暂停顿
             }
 
-            // Kembali ke tengah
+            // 回到中心
             current_positions[HEAD] = head_center;
             MoveServos(period / 2, current_positions);
             break;
 
         default:
-            // Jika aksi tidak valid, kembali ke tengah
+            // 无效动作，回到中心
             current_positions[HEAD] = head_center;
             MoveServos(period, current_positions);
             break;

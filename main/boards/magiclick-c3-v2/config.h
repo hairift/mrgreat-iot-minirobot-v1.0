@@ -25,7 +25,7 @@
 //battery
 #define BUILTIN_BATTERY_GPIO GPIO_NUM_1
 
-// layar
+// display
 #define DISPLAY_SDA_PIN GPIO_NUM_13
 #define DISPLAY_SCL_PIN GPIO_NUM_12
 #define DISPLAY_CS_PIN GPIO_NUM_20

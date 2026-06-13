@@ -68,7 +68,7 @@ typedef enum {
     LIGHT_MODE_MAX
 } light_mode_t;
 
-/* Pin kamera */
+/* Camera PINs*/
 #define SPARKBOT_CAMERA_XCLK      (GPIO_NUM_15)
 #define SPARKBOT_CAMERA_PCLK      (GPIO_NUM_13)
 #define SPARKBOT_CAMERA_VSYNC     (GPIO_NUM_6)

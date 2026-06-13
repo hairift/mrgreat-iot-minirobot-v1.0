@@ -1,12 +1,12 @@
 /*
- * @Description: Konfigurasi t_display_p4
+ * @Description: t_display_p4_config
  * @Author: LILYGO_L
  * @Date: 2024-12-06 10:32:28
  * @LastEditTime: 2025-09-10 11:56:28
  */
 #pragma once
 
-////////////////////////////////////////////////// konfigurasi GPIO //////////////////////////////////////////////////
+////////////////////////////////////////////////// gpio config //////////////////////////////////////////////////
 
 // IIC
 #define IIC_1_SDA 7
@@ -21,7 +21,7 @@
 #define XL9535_SDA IIC_1_SDA
 #define XL9535_SCL IIC_1_SCL
 #define XL9535_INT 5
-// Fungsi pin XL9535
+// XL9535引脚功能
 #define XL9535_3_3_V_POWER_EN Cpp_Bus_Driver::Xl95x5::Pin::IO0
 #define XL9535_SKY13453_VCTL Cpp_Bus_Driver::Xl95x5::Pin::IO1
 #define XL9535_SCREEN_RST Cpp_Bus_Driver::Xl95x5::Pin::IO2
@@ -93,7 +93,7 @@
 #define GT9895_TOUCH_SDA IIC_1_SDA
 #define GT9895_TOUCH_SCL IIC_1_SCL
 
-// Kamera
+// Camera
 #define CAMERA_SDA IIC_2_SDA
 #define CAMERA_SCL IIC_2_SCL
 
@@ -134,7 +134,7 @@
 #define ESP32C6_SDIO_D2 SDIO_2_D2
 #define ESP32C6_SDIO_D3 SDIO_2_D3
 
-// IO ekstensi
+// Extended io
 #define EXT_2X8P_SPI_SCLK SPI_1_SCLK
 #define EXT_2X8P_SPI_MOSI SPI_1_MOSI
 #define EXT_2X8P_SPI_MISO SPI_1_MISO
@@ -152,9 +152,9 @@
 #define EXT_1X4P_2_IO_45 45
 #define EXT_1X4P_2_IO_46 46
 
-////////////////////////////////////////////////// konfigurasi GPIO //////////////////////////////////////////////////
+////////////////////////////////////////////////// gpio config //////////////////////////////////////////////////
 
-////////////////////////////////////////////////// konfigurasi definisi lain //////////////////////////////////////////////////
+////////////////////////////////////////////////// other define config //////////////////////////////////////////////////
 
 // XL9535
 #define XL9535_IIC_ADDRESS 0x20
@@ -230,4 +230,4 @@
 // SD
 #define SD_BASE_PATH "/sdcard"
 
-////////////////////////////////////////////////// konfigurasi definisi lain //////////////////////////////////////////////////
+////////////////////////////////////////////////// other define config //////////////////////////////////////////////////

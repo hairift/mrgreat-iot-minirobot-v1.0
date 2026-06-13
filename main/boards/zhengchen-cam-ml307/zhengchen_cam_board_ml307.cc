@@ -25,7 +25,7 @@
 
 #define TAG "ZhengchenCamBoard_ML307"
 
-// Deklarasi fungsi inisialisasi pengendali
+//控制器初始化函数声明
 void InitializeMCPController();
 
 LV_FONT_DECLARE(font_puhui_20_4);
@@ -89,7 +89,7 @@ private:
     PowerManager* power_manager_ = new PowerManager(GPIO_NUM_47);
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -104,7 +104,7 @@ private:
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
 
-        // Inisialisasi PCA9557
+        // Initialize PCA9557
         pca9557_ = new Pca9557(i2c_bus_, 0x19);
     }
 
@@ -124,7 +124,7 @@ private:
             auto& app = Application::GetInstance();
             if (GetNetworkType() == NetworkType::WIFI) {
                 if (app.GetDeviceState() == kDeviceStateStarting && !WifiManager::GetInstance().IsConnected()) {
-                    // Ubah ke tipe WifiBoard
+                    // cast to WifiBoard
                     auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
                     wifi_board.EnterWifiConfigMode();
                 }
@@ -137,16 +137,16 @@ private:
             Settings settings(FIRST_BOOT_NS, true);
             bool is_first_boot = settings.GetInt(FIRST_BOOT_KEY, 1) != 0;
             if (is_first_boot) {
-                ESP_LOGI(TAG, "Boot pertama, aktifkan fitur foto dengan ketuk dua kali");
+                ESP_LOGI(TAG, "首次启动，启用双击拍照功能");
                 auto camera = GetCamera();
                 if (!camera->Capture()) {
-                    ESP_LOGE(TAG, "Pengambilan gambar kamera gagal");
+                    ESP_LOGE(TAG, "Camera capture failed");
                 }
                 settings.SetInt(FIRST_BOOT_KEY, 0);
 
                 
             } else {
-                ESP_LOGI(TAG, "Bukan boot pertama, nonaktifkan fitur foto dengan ketuk dua kali");
+                ESP_LOGI(TAG, "非首次启动，禁用双击拍照功能");
                 auto& app = Application::GetInstance();
                 if (app.GetDeviceState() == kDeviceStateIdle) {
                     app.SetAecMode(app.GetAecMode() == kAecOff ? kAecOnDeviceSide : kAecOff);
@@ -197,7 +197,7 @@ private:
     void InitializeSt7789Display() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        // Inisialisasi antarmuka IO pengendali layar
+        // 液晶屏控制IO初始化
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = GPIO_NUM_NC;
@@ -209,7 +209,7 @@ private:
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
-        // Inisialisasi pengendali layar ST7789
+        // 初始化液晶屏驱动芯片ST7789
         ESP_LOGD(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
         panel_config.reset_gpio_num = GPIO_NUM_NC;
@@ -227,14 +227,14 @@ private:
         bool is_landscape = settings.GetInt("lcd_mode", 1) != 0;
         
         if(is_landscape) {
-            // Mode lanskap
+            // 横屏模式
             esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
             esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
             display_ = new SpiLcdDisplay(panel_io, panel,
                                         DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
 
         } else {
-            // Mode potret
+            // 竖屏模式
             esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY_1);
             esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X_1, DISPLAY_MIRROR_Y_1);
             display_ = new SpiLcdDisplay(panel_io, panel,
@@ -244,12 +244,12 @@ private:
     }
 
     void InitializeCamera() {
-        // Nyalakan daya kamera
+        // Open camera power
         pca9557_->SetOutputState(2, 0);
 
         camera_config_t config = {};
-        config.ledc_channel = LEDC_CHANNEL_2;  // Pilihan kanal LEDC untuk pembangkit XCLK, tetapi tidak dipakai di ESP32-S3
-        config.ledc_timer = LEDC_TIMER_2; // Pilihan pewaktu LEDC untuk pembangkit XCLK, tetapi tidak dipakai di ESP32-S3
+        config.ledc_channel = LEDC_CHANNEL_2;  // LEDC通道选择  用于生成XCLK时钟 但是S3不用
+        config.ledc_timer = LEDC_TIMER_2; // LEDC timer选择  用于生成XCLK时钟 但是S3不用
         config.pin_d0 = CAMERA_PIN_D0;
         config.pin_d1 = CAMERA_PIN_D1;
         config.pin_d2 = CAMERA_PIN_D2;
@@ -262,7 +262,7 @@ private:
         config.pin_pclk = CAMERA_PIN_PCLK;
         config.pin_vsync = CAMERA_PIN_VSYNC;
         config.pin_href = CAMERA_PIN_HREF;
-        config.pin_sccb_sda = -1;   // Nilai -1 berarti memakai antarmuka I2C yang sudah diinisialisasi
+        config.pin_sccb_sda = -1;   // 这里写-1 表示使用已经初始化的I2C接口
         config.pin_sccb_scl = CAMERA_PIN_SIOC;
         config.sccb_i2c_port = 1;
         config.pin_pwdn = CAMERA_PIN_PWDN;

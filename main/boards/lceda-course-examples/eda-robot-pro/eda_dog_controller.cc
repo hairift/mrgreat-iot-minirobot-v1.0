@@ -1,5 +1,5 @@
 /*
-    Pengendali anjing robot EDA - versi protokol MCP
+    EDA机器狗控制器 - MCP协议版本
 */
 
 #include <esp_log.h>
@@ -54,7 +54,7 @@ private:
     while (true) {
       if (xQueueReceive(controller->action_queue_, &params,
                         pdMS_TO_TICKS(1000)) == pdTRUE) {
-        ESP_LOGI(TAG, "Menjalankan aksi: %d", params.action_type);
+        ESP_LOGI(TAG, "执行动作: %d", params.action_type);
         controller->is_action_in_progress_ = true;
 
         switch (params.action_type) {
@@ -112,7 +112,7 @@ private:
 
   void QueueAction(int action_type, int steps, int speed, int direction,
                    int height) {
-    ESP_LOGI(TAG, "Kontrol aksi: jenis=%d, langkah=%d, kecepatan=%d, arah=%d, tinggi=%d",
+    ESP_LOGI(TAG, "动作控制: 类型=%d, 步数=%d, 速度=%d, 方向=%d, 高度=%d",
              action_type, steps, speed, direction, height);
 
     DogActionParams params = {action_type, steps, speed, direction, height};
@@ -129,7 +129,7 @@ private:
     int right_rear_leg = settings.GetInt("right_rear_leg", 0);
 
     ESP_LOGI(TAG,
-             "Memuat pengaturan trim dari NVS: kaki depan kiri=%d, kaki belakang kiri=%d, kaki depan kanan=%d, kaki belakang kanan=%d",
+             "从NVS加载微调设置: 左前腿=%d, 左后腿=%d, 右前腿=%d, 右后腿=%d",
              left_front_leg, left_rear_leg, right_front_leg, right_rear_leg);
 
     dog_.SetTrims(left_front_leg, left_rear_leg, right_front_leg,
@@ -141,7 +141,7 @@ public:
     dog_.Init(LEFT_FRONT_LEG_PIN, LEFT_REAR_LEG_PIN, RIGHT_FRONT_LEG_PIN,
               RIGHT_REAR_LEG_PIN);
 
-    ESP_LOGI(TAG, "Inisialisasi anjing robot EDA selesai");
+    ESP_LOGI(TAG, "EDA机器狗初始化完成");
 
     LoadTrimsFromNVS();
 
@@ -155,13 +155,14 @@ public:
   void RegisterMcpTools() {
     auto &mcp_server = McpServer::GetInstance();
 
-    ESP_LOGI(TAG, "Mulai mendaftarkan alat MCP...");
+    ESP_LOGI(TAG, "开始注册MCP工具...");
 
-    // Gerakan dasar berpindah
+    // 基础移动动作
     mcp_server.AddTool(
         "self.dog.walk",
-        "Berjalan. steps: jumlah langkah (1-100); speed: kecepatan berjalan "
-        "(500-2000, makin kecil makin cepat); direction: arah berjalan (-1=mundur, 1=maju)",
+        "行走。steps: 行走步数(1-100); speed: "
+        "行走速度(500-2000，数值越小越快); "
+        "direction: 行走方向(-1=后退, 1=前进)",
         PropertyList({Property("steps", kPropertyTypeInteger, 4, 1, 100),
                       Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
                       Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
@@ -175,8 +176,9 @@ public:
 
     mcp_server.AddTool(
         "self.dog.turn",
-        "Berputar. steps: jumlah langkah putar (1-100); speed: kecepatan putar "
-        "(500-2000, makin kecil makin cepat); direction: arah putar (1=kiri, -1=kanan)",
+        "转身。steps: 转身步数(1-100); speed: "
+        "转身速度(500-2000，数值越小越快); "
+        "direction: 转身方向(1=左转, -1=右转)",
         PropertyList({Property("steps", kPropertyTypeInteger, 4, 1, 100),
                       Property("speed", kPropertyTypeInteger, 2000, 500, 2000),
                       Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
@@ -188,9 +190,9 @@ public:
           return true;
         });
 
-    // Gerakan perubahan postur
+    // 姿态动作
     mcp_server.AddTool("self.dog.sit",
-                       "Duduk. speed: kecepatan aksi (500-2000, makin kecil makin cepat)",
+                       "坐下。speed: 坐下速度(500-2000，数值越小越快)",
                        PropertyList({Property("speed", kPropertyTypeInteger,
                                               1500, 500, 2000)}),
                        [this](const PropertyList &properties) -> ReturnValue {
@@ -200,7 +202,7 @@ public:
                        });
 
     mcp_server.AddTool("self.dog.stand",
-                       "Berdiri. speed: kecepatan aksi (500-2000, makin kecil makin cepat)",
+                       "站立。speed: 站立速度(500-2000，数值越小越快)",
                        PropertyList({Property("speed", kPropertyTypeInteger,
                                               1500, 500, 2000)}),
                        [this](const PropertyList &properties) -> ReturnValue {
@@ -210,7 +212,7 @@ public:
                        });
 
     mcp_server.AddTool("self.dog.stretch",
-                       "Meregangkan badan. speed: kecepatan aksi (500-2000, makin kecil makin cepat)",
+                       "伸展。speed: 伸展速度(500-2000，数值越小越快)",
                        PropertyList({Property("speed", kPropertyTypeInteger,
                                               2000, 500, 2000)}),
                        [this](const PropertyList &properties) -> ReturnValue {
@@ -220,7 +222,7 @@ public:
                        });
 
     mcp_server.AddTool("self.dog.shake",
-                       "Bergoyang. speed: kecepatan aksi (500-2000, makin kecil makin cepat)",
+                       "摇摆。speed: 摇摆速度(500-2000，数值越小越快)",
                        PropertyList({Property("speed", kPropertyTypeInteger,
                                               1000, 500, 2000)}),
                        [this](const PropertyList &properties) -> ReturnValue {
@@ -229,11 +231,11 @@ public:
                          return true;
                        });
 
-    // Gerakan mengangkat satu kaki
+    // 单腿抬起动作
     mcp_server.AddTool(
         "self.dog.lift_left_front_leg",
-        "Angkat kaki depan kiri. speed: kecepatan aksi (500-2000, makin kecil makin cepat); "
-        "height: tinggi angkat (10-90 derajat)",
+        "抬起左前腿。speed: 动作速度(500-2000，数值越小越快); height: "
+        "抬起高度(10-90度)",
         PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
                       Property("height", kPropertyTypeInteger, 45, 10, 90)}),
         [this](const PropertyList &properties) -> ReturnValue {
@@ -245,8 +247,8 @@ public:
 
     mcp_server.AddTool(
         "self.dog.lift_left_rear_leg",
-        "Angkat kaki belakang kiri. speed: kecepatan aksi (500-2000, makin kecil makin cepat); "
-        "height: tinggi angkat (10-90 derajat)",
+        "抬起左后腿。speed: 动作速度(500-2000，数值越小越快); height: "
+        "抬起高度(10-90度)",
         PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
                       Property("height", kPropertyTypeInteger, 45, 10, 90)}),
         [this](const PropertyList &properties) -> ReturnValue {
@@ -258,8 +260,8 @@ public:
 
     mcp_server.AddTool(
         "self.dog.lift_right_front_leg",
-        "Angkat kaki depan kanan. speed: kecepatan aksi (500-2000, makin kecil makin cepat); "
-        "height: tinggi angkat (10-90 derajat)",
+        "抬起右前腿。speed: 动作速度(500-2000，数值越小越快); height: "
+        "抬起高度(10-90度)",
         PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
                       Property("height", kPropertyTypeInteger, 45, 10, 90)}),
         [this](const PropertyList &properties) -> ReturnValue {
@@ -271,8 +273,8 @@ public:
 
     mcp_server.AddTool(
         "self.dog.lift_right_rear_leg",
-        "Angkat kaki belakang kanan. speed: kecepatan aksi (500-2000, makin kecil makin cepat); "
-        "height: tinggi angkat (10-90 derajat)",
+        "抬起右后腿。speed: 动作速度(500-2000，数值越小越快); height: "
+        "抬起高度(10-90度)",
         PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
                       Property("height", kPropertyTypeInteger, 45, 10, 90)}),
         [this](const PropertyList &properties) -> ReturnValue {
@@ -282,8 +284,8 @@ public:
           return true;
         });
 
-    // Alat sistem
-    mcp_server.AddTool("self.dog.stop", "Segera hentikan", PropertyList(),
+    // 系统工具
+    mcp_server.AddTool("self.dog.stop", "立即停止", PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue {
                          if (action_task_handle_ != nullptr) {
                            vTaskDelete(action_task_handle_);
@@ -298,10 +300,12 @@ public:
 
     mcp_server.AddTool(
         "self.dog.set_trim",
-        "Kalibrasi posisi satu servo. Atur nilai trim servo tertentu untuk menyesuaikan "
-        "postur berdiri awal anjing robot, dan hasilnya akan disimpan permanen. "
-        "servo_type: jenis servo (left_front_leg/left_rear_leg/right_front_leg/right_rear_leg); "
-        "trim_value: nilai trim (-50 sampai 50 derajat)",
+        "校准单个舵机位置。设置指定舵机的微调参数以调整机器狗的初始站立姿态，设"
+        "置将永久保存。"
+        "servo_type: "
+        "舵机类型(left_front_leg/left_rear_leg/right_front_leg/"
+        "right_rear_leg); "
+        "trim_value: 微调值(-50到50度)",
         PropertyList(
             {Property("servo_type", kPropertyTypeString, "left_front_leg"),
              Property("trim_value", kPropertyTypeInteger, 0, -50, 50)}),
@@ -310,17 +314,17 @@ public:
               properties["servo_type"].value<std::string>();
           int trim_value = properties["trim_value"].value<int>();
 
-          ESP_LOGI(TAG, "Atur trim servo: %s = %d derajat", servo_type.c_str(),
+          ESP_LOGI(TAG, "设置舵机微调: %s = %d度", servo_type.c_str(),
                    trim_value);
 
-          // Ambil semua nilai trim saat ini
+          // 获取当前所有微调值
           Settings settings("dog_trims", true);
           int left_front_leg = settings.GetInt("left_front_leg", 0);
           int left_rear_leg = settings.GetInt("left_rear_leg", 0);
           int right_front_leg = settings.GetInt("right_front_leg", 0);
           int right_rear_leg = settings.GetInt("right_rear_leg", 0);
 
-          // Perbarui nilai trim servo yang dipilih
+          // 更新指定舵机的微调值
           if (servo_type == "left_front_leg") {
             left_front_leg = trim_value;
             settings.SetInt("left_front_leg", left_front_leg);
@@ -334,7 +338,7 @@ public:
             right_rear_leg = trim_value;
             settings.SetInt("right_rear_leg", right_rear_leg);
           } else {
-            return "Kesalahan: jenis servo tidak valid, gunakan: left_front_leg, "
+            return "错误：无效的舵机类型，请使用: left_front_leg, "
                    "left_rear_leg, right_front_leg, right_rear_leg";
           }
 
@@ -343,12 +347,12 @@ public:
 
           QueueAction(ACTION_HOME, 1, 500, 0, 0);
 
-          return "Trim servo " + servo_type + " diatur menjadi " +
-                 std::to_string(trim_value) + " derajat dan sudah disimpan permanen";
+          return "舵机 " + servo_type + " 微调设置为 " +
+                 std::to_string(trim_value) + " 度，已永久保存";
         });
 
     mcp_server.AddTool(
-        "self.dog.get_trims", "Mengambil pengaturan trim servo saat ini", PropertyList(),
+        "self.dog.get_trims", "获取当前的舵机微调设置", PropertyList(),
         [this](const PropertyList &properties) -> ReturnValue {
           Settings settings("dog_trims", false);
 
@@ -363,17 +367,17 @@ public:
               ",\"right_front_leg\":" + std::to_string(right_front_leg) +
               ",\"right_rear_leg\":" + std::to_string(right_rear_leg) + "}";
 
-          ESP_LOGI(TAG, "Mengambil pengaturan trim: %s", result.c_str());
+          ESP_LOGI(TAG, "获取微调设置: %s", result.c_str());
           return result;
         });
 
     mcp_server.AddTool("self.dog.get_status",
-                       "Mengambil status anjing robot, mengembalikan moving atau idle", PropertyList(),
+                       "获取机器狗状态，返回 moving 或 idle", PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue {
                          return is_action_in_progress_ ? "moving" : "idle";
                        });
 
-    ESP_LOGI(TAG, "Pendaftaran alat MCP selesai");
+    ESP_LOGI(TAG, "MCP工具注册完成");
   }
 
   ~EDARobotDogController() {
@@ -390,6 +394,6 @@ static EDARobotDogController *g_dog_controller = nullptr;
 void InitializeEDARobotDogController() {
   if (g_dog_controller == nullptr) {
     g_dog_controller = new EDARobotDogController();
-    ESP_LOGI(TAG, "Pengendali anjing robot EDA sudah diinisialisasi dan alat MCP telah didaftarkan");
+    ESP_LOGI(TAG, "EDA机器狗控制器已初始化并注册MCP工具");
   }
 }

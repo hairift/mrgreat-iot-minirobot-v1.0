@@ -74,22 +74,22 @@ class Pmic : public Axp2101 {
             WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
             WriteReg(0x27, 0x10);  // hold 4s to power off
     
-            // Nonaktifkan semua DC kecuali DC1
+            // Disable All DCs but DC1
             WriteReg(0x80, 0x01);
-            // Nonaktifkan semua LDO
+            // Disable All LDOs
             WriteReg(0x90, 0x00);
             WriteReg(0x91, 0x00);
     
-            // Atur DC1 ke 3,3 V
+            // Set DC1 to 3.3V
             WriteReg(0x82, (3300 - 1500) / 100);
     
-            // Atur ALDO1 ke 3,3 V
+            // Set ALDO1 to 3.3V
             WriteReg(0x92, (3300 - 500) / 100);
 
             WriteReg(0x96, (1500 - 500) / 100);
             WriteReg(0x97, (2800 - 500) / 100);
     
-            // Aktifkan ALDO1, BLDO1, dan BLDO2
+            // Enable ALDO1 BLDO1 BLDO2 
             WriteReg(0x90, 0x31);
         
             WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
@@ -127,7 +127,7 @@ private:
     }
 
     void InitializeI2c() {
-        // Inisialisasi periferal I2C
+        // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = (i2c_port_t)I2C_NUM_0,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
@@ -195,8 +195,8 @@ private:
         };
 
         esp_video_init_sccb_config_t sccb_config = {
-            .init_sccb = false,  // Jangan inisialisasi SCCB baru; pakai bus I2C yang sudah ada
-            .i2c_handle = i2c_bus_,  // Gunakan handle bus I2C yang sudah ada
+            .init_sccb = false,  // 不初始化新的 SCCB，使用现有的 I2C 总线
+            .i2c_handle = i2c_bus_,  // 使用现有的 I2C 总线句柄
             .freq = 100000,  // 100kHz
         };
 
@@ -219,7 +219,7 @@ private:
     void InitializeLcdDisplay() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        // Inisialisasi IO pengendali layar LCD
+        // 液晶屏控制IO初始化
         ESP_LOGI(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = AXS15231B_PANEL_IO_QSPI_CONFIG(
             DISPLAY_CS_PIN,
@@ -227,10 +227,10 @@ private:
             NULL);
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &panel_io));
 
-        // Inisialisasi chip pengendali layar LCD
+        // 初始化液晶屏驱动芯片
         ESP_LOGI(TAG, "Install LCD driver");
         const axs15231b_vendor_config_t vendor_config = {
-            .init_cmds = lcd_init_cmds, // Hapus komentar pada baris ini jika ingin memakai perintah inisialisasi kustom
+            .init_cmds = lcd_init_cmds, // Uncomment these line if use custom initialization commands
             .init_cmds_size = sizeof(lcd_init_cmds) / sizeof(lcd_init_cmds[0]),
             .flags = {
                 .use_qspi_interface = 1,

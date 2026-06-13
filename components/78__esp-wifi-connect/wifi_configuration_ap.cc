@@ -73,6 +73,11 @@ void WifiConfigurationAp::SetSsidPrefix(const std::string &ssid_prefix)
     ssid_prefix_ = ssid_prefix;
 }
 
+void WifiConfigurationAp::SetAppendMacSuffix(bool append_mac_suffix)
+{
+    append_mac_suffix_ = append_mac_suffix;
+}
+
 void WifiConfigurationAp::Start()
 {
     // Daftarkan penangan peristiwa
@@ -110,6 +115,10 @@ void WifiConfigurationAp::Start()
 
 std::string WifiConfigurationAp::GetSsid()
 {
+    if (!append_mac_suffix_) {
+        return ssid_prefix_;
+    }
+
     // Ambil alamat MAC untuk membuat SSID yang unik
     uint8_t mac[6];
 #if CONFIG_IDF_TARGET_ESP32P4

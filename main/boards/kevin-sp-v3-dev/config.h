@@ -41,7 +41,7 @@
 
 #define ML307_RX_PIN GPIO_NUM_12
 #define ML307_TX_PIN GPIO_NUM_13
-/* Pin kamera */
+/* Camera pins */
 #define CAMERA_PIN_PWDN -1
 #define CAMERA_PIN_RESET -1
 #define CAMERA_PIN_XCLK 15

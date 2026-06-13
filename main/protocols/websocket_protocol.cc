@@ -8,7 +8,6 @@
 #include <cJSON.h>
 #include <esp_log.h>
 #include <arpa/inet.h>
-#include <algorithm>
 #include "assets/lang_config.h"
 
 #define TAG "WS"
@@ -22,7 +21,7 @@ WebsocketProtocol::~WebsocketProtocol() {
 }
 
 bool WebsocketProtocol::Start() {
-    // Hanya terhubung ke peladen saat kanal audio diperlukan
+    // Only connect to server when audio channel is needed
     return true;
 }
 
@@ -77,7 +76,7 @@ bool WebsocketProtocol::IsAudioChannelOpened() const {
 }
 
 void WebsocketProtocol::CloseAudioChannel(bool send_goodbye) {
-    (void)send_goodbye;  // WebSocket tidak perlu mengirim pesan perpisahan
+    (void)send_goodbye;  // Websocket doesn't need to send goodbye message
     websocket_.reset();
 }
 
@@ -91,15 +90,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
     }
 
     error_occurred_ = false;
-    session_id_.clear();
-    last_incoming_time_ = std::chrono::steady_clock::now();
-    xEventGroupClearBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT);
 
     auto network = Board::GetInstance().GetNetwork();
-    if (network == nullptr) {
-        ESP_LOGE(TAG, "Network interface tidak tersedia");
-        return false;
-    }
     websocket_ = network->CreateWebSocket(1);
     if (websocket_ == nullptr) {
         ESP_LOGE(TAG, "Failed to create websocket");
@@ -107,7 +99,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     }
 
     if (!token.empty()) {
-        // Jika token tidak memiliki spasi, tambahkan awalan "Bearer "
+        // If token not has a space, add "Bearer " prefix
         if (token.find(" ") == std::string::npos) {
             token = "Bearer " + token;
         }
@@ -121,74 +113,41 @@ bool WebsocketProtocol::OpenAudioChannel() {
         if (binary) {
             if (on_incoming_audio_ != nullptr) {
                 if (version_ == 2) {
-                    if (len < sizeof(BinaryProtocol2)) {
-                        ESP_LOGE(TAG, "Invalid WS binary v2 packet size: %u", static_cast<unsigned>(len));
-                        return;
-                    }
-
-                    BinaryProtocol2 header;
-                    memcpy(&header, data, sizeof(header));
-                    uint16_t packet_type = ntohs(header.type);
-                    uint32_t timestamp = ntohl(header.timestamp);
-                    uint32_t payload_size = ntohl(header.payload_size);
-                    if (packet_type != 0) {
-                        ESP_LOGW(TAG, "Ignoring unsupported WS binary v2 packet type: %u", packet_type);
-                        return;
-                    }
-                    if (len < sizeof(BinaryProtocol2) + payload_size) {
-                        ESP_LOGE(TAG, "Invalid WS binary v2 payload size: %u > %u", payload_size, static_cast<unsigned>(len - sizeof(BinaryProtocol2)));
-                        return;
-                    }
-
-                    auto payload = reinterpret_cast<const uint8_t*>(data) + sizeof(BinaryProtocol2);
+                    BinaryProtocol2* bp2 = (BinaryProtocol2*)data;
+                    bp2->version = ntohs(bp2->version);
+                    bp2->type = ntohs(bp2->type);
+                    bp2->timestamp = ntohl(bp2->timestamp);
+                    bp2->payload_size = ntohl(bp2->payload_size);
+                    auto payload = (uint8_t*)bp2->payload;
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
-                        .timestamp = timestamp,
-                        .payload = std::vector<uint8_t>(payload, payload + payload_size)
+                        .timestamp = bp2->timestamp,
+                        .payload = std::vector<uint8_t>(payload, payload + bp2->payload_size)
                     }));
                 } else if (version_ == 3) {
-                    if (len < sizeof(BinaryProtocol3)) {
-                        ESP_LOGE(TAG, "Invalid WS binary v3 packet size: %u", static_cast<unsigned>(len));
-                        return;
-                    }
-
-                    BinaryProtocol3 header;
-                    memcpy(&header, data, sizeof(header));
-                    uint16_t payload_size = ntohs(header.payload_size);
-                    if (header.type != 0) {
-                        ESP_LOGW(TAG, "Ignoring unsupported WS binary v3 packet type: %u", header.type);
-                        return;
-                    }
-                    if (len < sizeof(BinaryProtocol3) + payload_size) {
-                        ESP_LOGE(TAG, "Invalid WS binary v3 payload size: %u > %u", payload_size, static_cast<unsigned>(len - sizeof(BinaryProtocol3)));
-                        return;
-                    }
-
-                    auto payload = reinterpret_cast<const uint8_t*>(data) + sizeof(BinaryProtocol3);
+                    BinaryProtocol3* bp3 = (BinaryProtocol3*)data;
+                    bp3->type = bp3->type;
+                    bp3->payload_size = ntohs(bp3->payload_size);
+                    auto payload = (uint8_t*)bp3->payload;
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = 0,
-                        .payload = std::vector<uint8_t>(payload, payload + payload_size)
+                        .payload = std::vector<uint8_t>(payload, payload + bp3->payload_size)
                     }));
                 } else {
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = 0,
-                        .payload = std::vector<uint8_t>(reinterpret_cast<const uint8_t*>(data), reinterpret_cast<const uint8_t*>(data) + len)
+                        .payload = std::vector<uint8_t>((uint8_t*)data, (uint8_t*)data + len)
                     }));
                 }
             }
         } else {
-            std::string message(data, len);
-            auto root = cJSON_ParseWithLength(message.c_str(), message.size());
-            if (root == nullptr) {
-                ESP_LOGE(TAG, "Failed to parse WS JSON (%u bytes)", static_cast<unsigned>(len));
-                return;
-            }
-
+            // Parse JSON data
+            auto root = cJSON_ParseWithLength(data, len);
             auto type = cJSON_GetObjectItem(root, "type");
             if (cJSON_IsString(type)) {
                 if (strcmp(type->valuestring, "hello") == 0) {
@@ -199,8 +158,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                     }
                 }
             } else {
-                size_t preview_len = std::min<size_t>(message.size(), 160);
-                ESP_LOGE(TAG, "WS message type missing, preview: %.*s", static_cast<int>(preview_len), message.c_str());
+                ESP_LOGE(TAG, "Missing message type, data: %s", std::string(data, len).c_str());
             }
             cJSON_Delete(root);
         }
@@ -208,32 +166,29 @@ bool WebsocketProtocol::OpenAudioChannel() {
     });
 
     websocket_->OnDisconnected([this]() {
-        ESP_LOGI(TAG, "Websocket terputus");
+        ESP_LOGI(TAG, "Websocket disconnected");
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
         }
     });
 
-    ESP_LOGI(TAG, "Menghubungkan ke server websocket: %s dengan versi: %d", url.c_str(), version_);
+    ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", url.c_str(), version_);
     if (!websocket_->Connect(url.c_str())) {
-        ESP_LOGE(TAG, "Gagal terhubung ke server websocket, code=%d", websocket_->GetLastError());
-        websocket_.reset();
+        ESP_LOGE(TAG, "Failed to connect to websocket server, code=%d", websocket_->GetLastError());
         SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
 
-    // Kirim pesan hello untuk mendeskripsikan klien
+    // Send hello message to describe the client
     auto message = GetHelloMessage();
     if (!SendText(message)) {
-        websocket_.reset();
         return false;
     }
 
-    // Tunggu hello dari peladen
+    // Wait for server hello
     EventBits_t bits = xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
     if (!(bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT)) {
-        ESP_LOGE(TAG, "Gagal menerima server hello");
-        websocket_.reset();
+        ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);
         return false;
     }
@@ -246,7 +201,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
 }
 
 std::string WebsocketProtocol::GetHelloMessage() {
-    // Kunci yang dipakai: tipe pesan, versi, dan audio_params (format, sample_rate, channels)
+    // keys: message type, version, audio_params (format, sample_rate, channels)
     cJSON* root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "hello");
     cJSON_AddNumberToObject(root, "version", version_);
@@ -272,15 +227,15 @@ std::string WebsocketProtocol::GetHelloMessage() {
 
 void WebsocketProtocol::ParseServerHello(const cJSON* root) {
     auto transport = cJSON_GetObjectItem(root, "transport");
-    if (!cJSON_IsString(transport) || strcmp(transport->valuestring, "websocket") != 0) {
-        ESP_LOGE(TAG, "Transport tidak didukung: %s", cJSON_IsString(transport) ? transport->valuestring : "(invalid)");
+    if (transport == nullptr || strcmp(transport->valuestring, "websocket") != 0) {
+        ESP_LOGE(TAG, "Unsupported transport: %s", transport->valuestring);
         return;
     }
 
     auto session_id = cJSON_GetObjectItem(root, "session_id");
     if (cJSON_IsString(session_id)) {
         session_id_ = session_id->valuestring;
-        ESP_LOGI(TAG, "ID Sesi: %s", session_id_.c_str());
+        ESP_LOGI(TAG, "Session ID: %s", session_id_.c_str());
     }
 
     auto audio_params = cJSON_GetObjectItem(root, "audio_params");

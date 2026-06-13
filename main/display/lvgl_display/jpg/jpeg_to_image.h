@@ -8,48 +8,47 @@ extern "C" {
 #endif
 
 /**
- * @brief Dekode gambar JPEG dari memori menjadi data piksel RGB565 mentah.
+ * @brief Decodes a JPEG image from memory to raw RGB565 pixel data
  *
- * Fungsi ini mencoba mendekode gambar JPEG dengan akselerasi perangkat keras terlebih dahulu
- * jika tersedia, lalu beralih ke dekoder perangkat lunak bila dekode perangkat keras gagal
- * atau tidak tersedia.
+ * This function attempts to decode a JPEG image using hardware acceleration first (if enabled),
+ * falling back to a software decoder if hardware decoding fails or is unavailable.
  *
- * @param[in] src Penunjuk ke bitstream JPEG di memori.
- * @param[in] src_len Panjang bitstream JPEG dalam byte.
- * @param[out] out Penunjuk ke penunjuk buffer yang akan diisi dengan data gambar hasil dekode.
- *             Buffer ini dialokasikan secara internal dan WAJIB dibebaskan pemanggil dengan heap_caps_free().
- * @param[out] out_len Penunjuk ke variabel yang akan menerima ukuran data gambar hasil dekode dalam byte.
- * @param[out] width Penunjuk ke variabel yang akan menerima lebar gambar dalam piksel.
- * @param[out] height Penunjuk ke variabel yang akan menerima tinggi gambar dalam piksel.
- * @param[out] stride Penunjuk ke variabel yang akan menerima nilai stride gambar dalam byte.
+ * @param[in] src Pointer to the JPEG bitstream in memory
+ * @param[in] src_len Length of the JPEG bitstream in bytes
+ * @param[out] out Pointer to a buffer pointer that will be set to the decoded image data.
+ *             This buffer is allocated internally and MUST be freed by the caller using heap_caps_free().
+ * @param[out] out_len Pointer to a variable that will receive the size of the decoded image data in bytes
+ * @param[out] width Pointer to a variable that will receive the image width in pixels
+ * @param[out] height Pointer to a variable that will receive the image height in pixels
+ * @param[out] stride Pointer to a variable that will receive the image stride in bytes
  *
- * @return ESP_OK bila dekode berhasil.
- * @return ESP_ERR_INVALID_ARG bila parameter tidak valid.
- * @return ESP_ERR_NO_MEM bila alokasi memori gagal.
- * @return ESP_FAIL bila dekode gagal.
+ * @return ESP_OK on successful decoding
+ * @return ESP_ERR_INVALID_ARG on invalid parameters
+ * @return ESP_ERR_NO_MEM on memory allocation failure
+ * @return ESP_FAIL on failure
  *
- * @attention Pengelolaan memori untuk `*out`:
- *            - Fungsi mengalokasikan memori untuk gambar hasil dekode secara internal.
- *            - Jika berhasil, kepemilikan memori berpindah ke pemanggil dan SEBAIKNYA dibebaskan dengan heap_caps_free().
- *            - Jika gagal, `*out` dijamin bernilai NULL dan tidak perlu dibebaskan.
- *            - Contoh penggunaan:
+ * @attention Memory Management for `*out`:
+ *            - The function allocates memory for the decoded image internally
+ *            - On success, the caller takes ownership of this memory and SHOULD free it using heap_caps_free()
+ *            - On failure, `*out` is guaranteed to be NULL and no freeing is required
+ *            - Example usage:
  *              @code{.c}
  *              uint8_t *image = NULL;
  *              size_t len, width, height;
  *              if (jpeg_to_image(jpeg_data, jpeg_len, &image, &len, &width, &height)) {
- *                  // Gunakan data gambar...
- *                  heap_caps_free(image);  // Penting: gunakan heap_caps_free
+ *                  // Use image data...
+ *                  heap_caps_free(image);  // Critical: use heap_caps_free
  *              }
  *              @endcode
  *
- * @note Ketergantungan konfigurasi:
- *       - Saat CONFIG_XIAOZHI_ENABLE_HARDWARE_JPEG_DECODER aktif, akselerasi perangkat keras dicoba lebih dahulu.
- *       - Jalur perangkat keras dan perangkat lunak sama-sama mengalokasikan memori yang harus dibebaskan dengan heap_caps_free().
- *       - Format gambar hasil dekode selalu RGB565, yaitu 2 byte per piksel.
+ * @note Configuration dependency:
+ *       - When CONFIG_XIAOZHI_ENABLE_HARDWARE_JPEG_DECODER is enabled, hardware acceleration is attempted first
+ *       - Both hardware and software paths allocate memory that requires heap_caps_free() for deallocation
+ *       - The decoded image format is always RGB565 (2 bytes per pixel)
  *
- * @note Saat memakai dekoder perangkat keras, dimensi gambar hasil dekode dapat disejajarkan ke batas 16 byte.
- *       Untuk gambar terkompresi YUV420 atau YUV422, lebar dan tinggi akan dibulatkan ke atas ke kelipatan 16 terdekat.
- *       Rincian ada di
+ * @note When using hardware decoder, the decoded image dimensions might be aligned up to 16-byte boundaries.
+ *       For YUV420 or YUV422 compressed images, both width and height will be rounded up to the nearest multiple of 16.
+ *       See details at
  *       <https://docs.espressif.com/projects/esp-idf/en/stable/esp32p4/api-reference/peripherals/jpeg.html#jpeg-decoder-engine>
  *
  */

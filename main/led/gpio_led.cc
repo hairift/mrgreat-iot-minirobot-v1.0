@@ -34,12 +34,12 @@ GpioLed::GpioLed(gpio_num_t gpio, int output_invert)
 }
 
 GpioLed::GpioLed(gpio_num_t gpio, int output_invert, ledc_timer_t timer_num, ledc_channel_t channel) {
-    // Jika GPIO tidak terhubung, sebaiknya gunakan kelas NoLed
+    // If the gpio is not connected, you should use NoLed class
     assert(gpio != GPIO_NUM_NC);
 
     /*
-     * Siapkan dan atur konfigurasi pewaktu
-     * yang akan dipakai oleh pengendali LED
+     * Prepare and set configuration of timers
+     * that will be used by LED Controller
      */
     ledc_timer_config_t ledc_timer = {};
     ledc_timer.duty_resolution = LEDC_TIMER_13_BIT;  // resolution of PWM duty
@@ -58,13 +58,13 @@ GpioLed::GpioLed(gpio_num_t gpio, int output_invert, ledc_timer_t timer_num, led
     ledc_channel_.timer_sel  = timer_num,
     ledc_channel_.flags.output_invert = output_invert & 0x01,
 
-    // Atur pengendali LED menggunakan konfigurasi yang sudah disiapkan
+    // Set LED Controller with previously prepared configuration
     ledc_channel_config(&ledc_channel_);
 
-    // Inisialisasi layanan efek pudar.
+    // Initialize fade service.
     ledc_fade_func_install(0);
 
-    // Saat fungsi panggil balik yang didaftarkan oleh ledc_cb_degister dipanggil, jalankan led->OnFadeEnd()
+    // When the callback registered by ledc_cb_degister is called, run led ->OnFadeEnd()
     ledc_cbs_t ledc_callbacks = {
         .fade_cb = FadeCallback
     };
