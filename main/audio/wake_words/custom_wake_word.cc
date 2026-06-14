@@ -187,6 +187,20 @@ void CustomWakeWord::Feed(const std::vector<int16_t>& data) {
     }
 
     int chunksize = multinet_->get_samp_chunksize(multinet_model_data_);
+    if (chunksize <= 0) {
+        ESP_LOGW(TAG, "Ukuran chunk wake word tidak valid: %d", chunksize);
+        input_buffer_.clear();
+        return;
+    }
+
+    const size_t max_buffered_samples = static_cast<size_t>(chunksize) * 10;
+    if (input_buffer_.size() > max_buffered_samples) {
+        size_t drop_count = input_buffer_.size() - max_buffered_samples;
+        ESP_LOGW(TAG, "Buffer wake word terlalu besar, membuang %u sampel lama",
+            static_cast<unsigned>(drop_count));
+        input_buffer_.erase(input_buffer_.begin(), input_buffer_.begin() + drop_count);
+    }
+
     while (input_buffer_.size() >= chunksize) {
         std::vector<int16_t> chunk(input_buffer_.begin(), input_buffer_.begin() + chunksize);
         StoreWakeWordData(chunk);

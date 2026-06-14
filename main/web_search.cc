@@ -12,6 +12,8 @@
 
 #define TAG "WebSearch"
 
+static constexpr int kWebSearchHttpConnectId = 8;
+
 static void url_encode(const char* src, char* dst, int dst_size) {
     int j = 0;
     for (int i = 0; src[i] && j < dst_size - 4; i++) {
@@ -491,7 +493,7 @@ static std::string HttpGet(const char* url, int timeout_ms = 4000) {
     auto& board = Board::GetInstance();
     auto network = board.GetNetwork();
     if (!network) return "";
-    auto http = network->CreateHttp(0);
+    auto http = network->CreateHttp(kWebSearchHttpConnectId);
     if (!http) return "";
     http->SetTimeout(timeout_ms);
     http->SetKeepAlive(false);
@@ -521,7 +523,7 @@ static std::string HttpGetPartial(const char* url, int max_bytes, int timeout_ms
     auto& board = Board::GetInstance();
     auto network = board.GetNetwork();
     if (!network) return "";
-    auto http = network->CreateHttp(0);
+    auto http = network->CreateHttp(kWebSearchHttpConnectId);
     if (!http) return "";
     http->SetTimeout(timeout_ms);
     http->SetKeepAlive(false);

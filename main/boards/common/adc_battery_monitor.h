@@ -13,6 +13,7 @@ public:
 
     bool IsCharging();
     bool IsDischarging();
+    bool IsValid() const;
     uint8_t GetBatteryLevel();
 
     void OnChargingStatusChanged(std::function<void(bool)> callback);

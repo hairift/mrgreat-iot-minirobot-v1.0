@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <chrono>
 #include <mutex>
+#include <string>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -169,6 +170,7 @@ private:
     std::deque<std::unique_ptr<AudioStreamPacket>> audio_testing_queue_;
     std::deque<std::unique_ptr<AudioTask>> audio_encode_queue_;
     std::deque<std::unique_ptr<AudioTask>> audio_playback_queue_;
+    std::deque<std::string> audio_sound_queue_;
     // Untuk AEC dari server
     std::deque<uint32_t> timestamp_queue_;
     uint32_t decoder_generation_ = 0;

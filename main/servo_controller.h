@@ -23,12 +23,12 @@ enum class ServoMove {
     WAVE_RIGHT_ARM,      // lambaikan tangan kanan (animasi, auto-return)
     RAISE_RIGHT_ARM,     // tangan kanan keatas (HOLD - paling tinggi)
     STRAIGHT_RIGHT_ARM,  // tangan kanan lurus (HOLD - sedang)
-    LOWER_RIGHT_ARM,     // tangan kanan kebawah (HOLD)
+    LOWER_RIGHT_ARM,     // tangan kanan kebawah (animasi, auto-return)
     // Tangan kiri
     WAVE_LEFT_ARM,       // lambaikan tangan kiri (animasi, auto-return)
     RAISE_LEFT_ARM,      // tangan kiri keatas (HOLD)
     STRAIGHT_LEFT_ARM,   // tangan kiri lurus (HOLD)
-    LOWER_LEFT_ARM,      // tangan kiri kebawah (HOLD)
+    LOWER_LEFT_ARM,      // tangan kiri kebawah (animasi, auto-return)
     // Kedua tangan
     WAVE_BOTH_ARMS,      // lambaikan kedua tangan (animasi)
     RAISE_BOTH_ARMS,     // angkat kedua tangan (HOLD)
@@ -73,9 +73,12 @@ public:
     void Enable();
     void Disable();
     bool IsEnabled() const { return enabled_; }
+    bool IsMotionActive() const;
 
     void SetEmotion(const char* emotion);
     void SetSpeaking(bool speaking);
+    void SetTtsStreamActive(bool active);
+    void NotifyTtsSentence();
     void SetKnowledgeSearchActive(bool active);
     void WakeGreeting();
     void ExecuteMove(ServoMove move);
@@ -123,8 +126,10 @@ private:
     bool invert_larm_ = true;
     std::atomic<TickType_t> manual_override_until_ticks_{0};
     std::atomic<bool> speaking_{false};
+    std::atomic<bool> tts_stream_active_{false};
     std::atomic<bool> knowledge_search_active_{false};
     std::atomic<bool> manual_pose_active_{false};
+    std::atomic<TickType_t> last_sentence_gesture_ticks_{0};
     ServoMove last_manual_move_ = ServoMove::NONE;
     TickType_t last_manual_move_ticks_ = 0;
     std::atomic<TickType_t> next_speaking_motion_ticks_{0};

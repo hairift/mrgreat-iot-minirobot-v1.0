@@ -1,9 +1,71 @@
 #include "afe_audio_processor.h"
 #include <esp_log.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+
 #define PROCESSOR_RUNNING 0x01
 
 #define TAG "AfeAudioProcessor"
+
+namespace {
+
+constexpr float kTargetSpeechRms = 4500.0f;
+constexpr float kQuietSpeechTargetRms = 3200.0f;
+constexpr float kMaximumSpeechPostNsGain = 1.90f;
+constexpr float kMaximumQuietPostNsGain = 1.45f;
+constexpr float kPostNsGainSmoothing = 0.08f;
+constexpr int kQuietSpeechRmsThreshold = 256;
+
+float ComputeRms(const int16_t* data, size_t samples) {
+    if (data == nullptr || samples == 0) {
+        return 0.0f;
+    }
+
+    double sum = 0.0;
+    for (size_t i = 0; i < samples; ++i) {
+        double sample = static_cast<double>(data[i]);
+        sum += sample * sample;
+    }
+    return static_cast<float>(std::sqrt(sum / static_cast<double>(samples)));
+}
+
+void ApplySmoothedGain(std::vector<int16_t>& data, float target_rms, float max_gain, const char* reason) {
+    static float smoothed_gain = 1.0f;
+    if (data.empty()) {
+        return;
+    }
+
+    float rms = ComputeRms(data.data(), data.size());
+    float requested_gain = 1.0f;
+    if (rms > 1.0f && rms < target_rms) {
+        requested_gain = std::min(max_gain, target_rms / rms);
+    }
+
+    smoothed_gain = (smoothed_gain * (1.0f - kPostNsGainSmoothing)) +
+                    (requested_gain * kPostNsGainSmoothing);
+    smoothed_gain = std::max(1.0f, std::min(max_gain, smoothed_gain));
+
+    if (smoothed_gain <= 1.02f) {
+        return;
+    }
+
+    for (auto& sample : data) {
+        int32_t boosted = static_cast<int32_t>(sample * smoothed_gain);
+        boosted = std::max<int32_t>(INT16_MIN, std::min<int32_t>(INT16_MAX, boosted));
+        sample = static_cast<int16_t>(boosted);
+    }
+
+#ifdef CONFIG_AUDIO_DIAGNOSTIC
+    static uint32_t log_counter = 0;
+    if ((++log_counter % 50) == 0) {
+        ESP_LOGI(TAG, "Post-NS gain %.2fx (%s), rms=%.0f", smoothed_gain, reason, rms);
+    }
+#endif
+}
+
+}  // namespace
 
 AfeAudioProcessor::AfeAudioProcessor()
     : afe_data_(nullptr) {
@@ -203,12 +265,25 @@ void AfeAudioProcessor::AudioProcessorTask() {
             while (output_buffer_.size() >= frame_samples_) {
                 if (output_buffer_.size() == frame_samples_) {
                     // Jika ukuran penyangga sama dengan satu bingkai, pindahkan seluruh penyangga.
+                    if (res->vad_state == VAD_SPEECH) {
+                        ApplySmoothedGain(output_buffer_, kTargetSpeechRms, kMaximumSpeechPostNsGain, "speech");
+                    } else if (res->vad_state == VAD_SILENCE &&
+                               ComputeRms(output_buffer_.data(), output_buffer_.size()) >= kQuietSpeechRmsThreshold) {
+                        ApplySmoothedGain(output_buffer_, kQuietSpeechTargetRms, kMaximumQuietPostNsGain, "quiet");
+                    }
                     output_callback_(std::move(output_buffer_));
                     output_buffer_.clear();
                     output_buffer_.reserve(frame_samples_);
                 } else {
                     // Jika penyangga melebihi satu bingkai, salin satu bingkai lalu hapus dari penyangga.
-                    output_callback_(std::vector<int16_t>(output_buffer_.begin(), output_buffer_.begin() + frame_samples_));
+                    std::vector<int16_t> frame(output_buffer_.begin(), output_buffer_.begin() + frame_samples_);
+                    if (res->vad_state == VAD_SPEECH) {
+                        ApplySmoothedGain(frame, kTargetSpeechRms, kMaximumSpeechPostNsGain, "speech");
+                    } else if (res->vad_state == VAD_SILENCE &&
+                               ComputeRms(frame.data(), frame.size()) >= kQuietSpeechRmsThreshold) {
+                        ApplySmoothedGain(frame, kQuietSpeechTargetRms, kMaximumQuietPostNsGain, "quiet");
+                    }
+                    output_callback_(std::move(frame));
                     output_buffer_.erase(output_buffer_.begin(), output_buffer_.begin() + frame_samples_);
                 }
             }

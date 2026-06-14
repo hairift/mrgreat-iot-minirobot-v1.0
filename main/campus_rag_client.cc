@@ -24,7 +24,7 @@
 #endif
 
 #ifndef CONFIG_CAMPUS_RAG_TIMEOUT_MS
-#define CONFIG_CAMPUS_RAG_TIMEOUT_MS 1800
+#define CONFIG_CAMPUS_RAG_TIMEOUT_MS 2500
 #endif
 
 #define TAG "CampusRAG"
@@ -33,7 +33,7 @@ namespace {
 
 constexpr int kCampusRagHttpConnectId = 3;
 constexpr int kCampusRagMaxResponseBytes = 12288;
-constexpr int64_t kCampusRagFailureCooldownUs = 60LL * 1000LL * 1000LL;
+constexpr int64_t kCampusRagFailureCooldownUs = 15LL * 1000LL * 1000LL;
 int64_t s_campus_rag_disabled_until_us = 0;
 
 bool CampusRagInCooldown() {

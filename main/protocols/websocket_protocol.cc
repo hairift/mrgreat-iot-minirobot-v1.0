@@ -14,10 +14,47 @@
 
 WebsocketProtocol::WebsocketProtocol() {
     event_group_handle_ = xEventGroupCreate();
+
+    esp_timer_create_args_t reconnect_timer_args = {
+        .callback = [](void* arg) {
+            WebsocketProtocol* protocol = static_cast<WebsocketProtocol*>(arg);
+            auto alive = protocol->alive_;
+            Application::GetInstance().Schedule([protocol, alive]() {
+                if (!*alive || protocol->IsAudioChannelOpened()) {
+                    return;
+                }
+
+                auto state = Application::GetInstance().GetDeviceState();
+                if (state == kDeviceStateConnecting ||
+                    state == kDeviceStateListening ||
+                    state == kDeviceStateSpeaking) {
+                    ESP_LOGI(TAG, "Menjadwalkan pemulihan websocket");
+                    if (protocol->on_disconnected_ != nullptr) {
+                        protocol->on_disconnected_();
+                    }
+                }
+            });
+        },
+        .arg = this,
+        .name = "ws_reconnect",
+    };
+    esp_timer_create(&reconnect_timer_args, &reconnect_timer_);
 }
 
 WebsocketProtocol::~WebsocketProtocol() {
-    vEventGroupDelete(event_group_handle_);
+    *alive_ = false;
+
+    if (reconnect_timer_ != nullptr) {
+        esp_timer_stop(reconnect_timer_);
+        esp_timer_delete(reconnect_timer_);
+        reconnect_timer_ = nullptr;
+    }
+
+    websocket_.reset();
+
+    if (event_group_handle_ != nullptr) {
+        vEventGroupDelete(event_group_handle_);
+    }
 }
 
 bool WebsocketProtocol::Start() {
@@ -76,8 +113,21 @@ bool WebsocketProtocol::IsAudioChannelOpened() const {
 }
 
 void WebsocketProtocol::CloseAudioChannel(bool send_goodbye) {
-    (void)send_goodbye;  // Websocket doesn't need to send goodbye message
+    if (send_goodbye && reconnect_timer_ != nullptr && esp_timer_is_active(reconnect_timer_)) {
+        esp_timer_stop(reconnect_timer_);
+    }
     websocket_.reset();
+}
+
+void WebsocketProtocol::ScheduleReconnect() {
+    if (reconnect_timer_ == nullptr || !*alive_) {
+        return;
+    }
+
+    if (esp_timer_is_active(reconnect_timer_)) {
+        esp_timer_stop(reconnect_timer_);
+    }
+    esp_timer_start_once(reconnect_timer_, WEBSOCKET_RECONNECT_INTERVAL_MS * 1000);
 }
 
 bool WebsocketProtocol::OpenAudioChannel() {
@@ -148,6 +198,11 @@ bool WebsocketProtocol::OpenAudioChannel() {
         } else {
             // Parse JSON data
             auto root = cJSON_ParseWithLength(data, len);
+            if (root == nullptr) {
+                ESP_LOGW(TAG, "Menerima JSON websocket tidak valid");
+                last_incoming_time_ = std::chrono::steady_clock::now();
+                return;
+            }
             auto type = cJSON_GetObjectItem(root, "type");
             if (cJSON_IsString(type)) {
                 if (strcmp(type->valuestring, "hello") == 0) {
@@ -167,17 +222,28 @@ bool WebsocketProtocol::OpenAudioChannel() {
 
     websocket_->OnDisconnected([this]() {
         ESP_LOGI(TAG, "Websocket disconnected");
+        if (on_disconnected_ != nullptr) {
+            on_disconnected_();
+        }
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
         }
+        ScheduleReconnect();
     });
 
     ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", url.c_str(), version_);
     if (!websocket_->Connect(url.c_str())) {
         ESP_LOGE(TAG, "Failed to connect to websocket server, code=%d", websocket_->GetLastError());
         SetError(Lang::Strings::SERVER_NOT_CONNECTED);
+        ScheduleReconnect();
         return false;
     }
+
+    if (reconnect_timer_ != nullptr && esp_timer_is_active(reconnect_timer_)) {
+        esp_timer_stop(reconnect_timer_);
+    }
+
+    xEventGroupClearBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT);
 
     // Send hello message to describe the client
     auto message = GetHelloMessage();
@@ -190,9 +256,13 @@ bool WebsocketProtocol::OpenAudioChannel() {
     if (!(bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT)) {
         ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);
+        ScheduleReconnect();
         return false;
     }
 
+    if (on_connected_ != nullptr) {
+        on_connected_();
+    }
     if (on_audio_channel_opened_ != nullptr) {
         on_audio_channel_opened_();
     }
@@ -227,8 +297,10 @@ std::string WebsocketProtocol::GetHelloMessage() {
 
 void WebsocketProtocol::ParseServerHello(const cJSON* root) {
     auto transport = cJSON_GetObjectItem(root, "transport");
-    if (transport == nullptr || strcmp(transport->valuestring, "websocket") != 0) {
-        ESP_LOGE(TAG, "Unsupported transport: %s", transport->valuestring);
+    if (!cJSON_IsString(transport) || transport->valuestring == nullptr ||
+        strcmp(transport->valuestring, "websocket") != 0) {
+        ESP_LOGE(TAG, "Unsupported transport: %s",
+            cJSON_IsString(transport) && transport->valuestring ? transport->valuestring : "null");
         return;
     }
 

@@ -1,6 +1,8 @@
 #include "adc_battery_monitor.h"
 #include "settings.h"
 
+#include <esp_log.h>
+
 namespace {
 
 constexpr uint16_t kStartupHoldSamples = 6;
@@ -61,6 +63,10 @@ AdcBatteryMonitor::AdcBatteryMonitor(adc_unit_t adc_unit, adc_channel_t adc_chan
     }
 
     adc_battery_estimation_handle_ = adc_battery_estimation_create(&adc_cfg);
+    if (adc_battery_estimation_handle_ == nullptr) {
+        ESP_LOGE("AdcBatteryMonitor", "Gagal membuat pembaca baterai ADC");
+        return;
+    }
 
     Settings settings("battery", false);
     int saved_level = settings.GetInt("level", -1);
@@ -117,9 +123,13 @@ bool AdcBatteryMonitor::IsDischarging() {
     return !IsCharging();
 }
 
+bool AdcBatteryMonitor::IsValid() const {
+    return adc_battery_estimation_handle_ != nullptr;
+}
+
 uint8_t AdcBatteryMonitor::GetBatteryLevel() {
     if (adc_battery_estimation_handle_ == nullptr) {
-        return displayed_level_;
+        return 0;
     }
 
     float capacity = 0.0f;

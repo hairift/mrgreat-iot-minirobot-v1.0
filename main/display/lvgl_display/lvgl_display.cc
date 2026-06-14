@@ -178,7 +178,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         snprintf(percent_text, sizeof(percent_text), "%d%%", battery_level);
 
         DisplayLockGuard lock(this);
-        if (battery_label_ != nullptr && battery_icon_ != icon) {
+        if (battery_label_ != nullptr && (battery_icon_ == nullptr || strcmp(battery_icon_, icon) != 0)) {
             battery_icon_ = icon;
             lv_label_set_text(battery_label_, battery_icon_);
         }
@@ -202,6 +202,20 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
                 }
             }
+        }
+    } else {
+        DisplayLockGuard lock(this);
+        icon = FONT_AWESOME_BATTERY_EMPTY;
+        if (battery_label_ != nullptr && (battery_icon_ == nullptr || strcmp(battery_icon_, icon) != 0)) {
+            battery_icon_ = icon;
+            lv_label_set_text(battery_label_, battery_icon_);
+        }
+        if (battery_percent_label_ != nullptr && battery_text_ != "--%") {
+            battery_text_ = "--%";
+            lv_label_set_text(battery_percent_label_, battery_text_.c_str());
+        }
+        if (low_battery_popup_ != nullptr && !lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
         }
     }
 

@@ -146,7 +146,15 @@ private:
     bool play_popup_on_listening_ = false;  // Penanda untuk memutar suara penanda setelah status berubah ke mode mendengarkan
     std::atomic<bool> tts_stream_active_{false};
     std::atomic<bool> tts_stop_pending_{false};
+    std::atomic<bool> last_stt_had_servo_command_{false};
     std::atomic<int64_t> last_tts_audio_us_{0};
+    std::atomic<uint32_t> tts_packets_dropped_{0};
+    std::atomic<bool> network_connected_{false};
+    std::atomic<bool> protocol_reopen_pending_{false};
+    std::atomic<bool> audio_channel_opening_{false};
+    std::atomic<bool> protocol_reset_pending_{false};
+    std::atomic<int> recovery_listening_mode_{kListeningModeAutoStop};
+    std::atomic<int64_t> next_protocol_recovery_us_{0};
     int clock_ticks_ = 0;
     int speaking_idle_ticks_ = 0;
     TaskHandle_t activation_task_handle_ = nullptr;
@@ -163,6 +171,9 @@ private:
     void HandleWakeWordDetectedEvent();
     void ContinueOpenAudioChannel(ListeningMode mode);
     void ContinueWakeWordInvoke(const std::string& wake_word);
+    void OpenAudioChannelAsync(ListeningMode mode, const std::string& wake_word = "");
+    void MarkProtocolForRecovery();
+    void TryRecoverProtocol();
 
     // Tugas aktivasi yang berjalan di latar belakang
     void ActivationTask();

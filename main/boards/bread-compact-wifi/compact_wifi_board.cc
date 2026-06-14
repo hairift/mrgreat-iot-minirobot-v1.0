@@ -206,12 +206,34 @@ public:
     }
 
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
-        if (adc_battery_monitor_ == nullptr) {
+        static bool has_cached_level = false;
+        static int cached_level = 0;
+        static bool cached_charging = false;
+        static bool cached_discharging = false;
+
+        if (adc_battery_monitor_ == nullptr || !adc_battery_monitor_->IsValid()) {
             return false;
         }
+
+        // Hindari pembacaan ADC saat servo aktif karena step-up dan SG90 dapat
+        // menimbulkan noise sesaat pada pembagi tegangan baterai.
+        if (ServoController::GetInstance().IsMotionActive()) {
+            if (!has_cached_level) {
+                return false;
+            }
+            level = cached_level;
+            charging = cached_charging;
+            discharging = cached_discharging;
+            return true;
+        }
+
         charging = adc_battery_monitor_->IsCharging();
         discharging = adc_battery_monitor_->IsDischarging();
         level = adc_battery_monitor_->GetBatteryLevel();
+        cached_level = level;
+        cached_charging = charging;
+        cached_discharging = discharging;
+        has_cached_level = true;
         return true;
     }
 };

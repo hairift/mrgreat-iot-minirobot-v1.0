@@ -31,6 +31,7 @@ const char* GetJsonString(const cJSON* root, const char* key) {
 constexpr int kSpeakingIdleRecoverySeconds = 25;
 constexpr int kListeningIdleCloseSeconds = 120;
 constexpr int64_t kTtsDrainGraceUs = 1200 * 1000;
+constexpr int64_t kProtocolRecoveryIntervalUs = 5 * 1000 * 1000;
 
 void LogMessagePreview(const char* prefix, const char* text) {
     if (text == nullptr) {
@@ -297,6 +298,7 @@ void Application::Run() {
                     ESP_LOGI(TAG, "Seluruh audio TTS selesai diputar");
                     tts_stream_active_ = false;
                     tts_stop_pending_ = false;
+                    ServoController::GetInstance().SetTtsStreamActive(false);
                     if (listening_mode_ == kListeningModeManualStop) {
                         SetDeviceState(kDeviceStateIdle);
                     } else {
@@ -326,6 +328,11 @@ void Application::Run() {
                 speaking_idle_ticks_ = 0;
             }
 
+            if (protocol_reopen_pending_.load() &&
+                esp_timer_get_time() >= next_protocol_recovery_us_.load()) {
+                TryRecoverProtocol();
+            }
+
             if (state == kDeviceStateListening &&
                 clock_ticks_ >= kListeningIdleCloseSeconds &&
                 !audio_service_.IsVoiceDetected()) {
@@ -347,6 +354,7 @@ void Application::Run() {
 
 void Application::HandleNetworkConnectedEvent() {
     ESP_LOGI(TAG, "Network connected");
+    network_connected_ = true;
     auto state = GetDeviceState();
 
     if (state == kDeviceStateStarting || state == kDeviceStateWifiConfiguring) {
@@ -365,19 +373,27 @@ void Application::HandleNetworkConnectedEvent() {
         }, "activation", 4096 * 2, this, 2, &activation_task_handle_);
     }
 
+    if (protocol_reopen_pending_.load()) {
+        next_protocol_recovery_us_ = esp_timer_get_time();
+        TryRecoverProtocol();
+    }
+
     // Perbarui bilah status segera untuk menampilkan status jaringan
     auto display = Board::GetInstance().GetDisplay();
     display->UpdateStatusBar(true);
 }
 
 void Application::HandleNetworkDisconnectedEvent() {
+    network_connected_ = false;
     tts_stream_active_ = false;
     tts_stop_pending_ = false;
     last_tts_audio_us_ = 0;
+    ServoController::GetInstance().SetTtsStreamActive(false);
 
     // Tutup percakapan saat ini saat jaringan terputus
     auto state = GetDeviceState();
     if (protocol_ && (state == kDeviceStateConnecting || state == kDeviceStateListening || state == kDeviceStateSpeaking)) {
+        MarkProtocolForRecovery();
         ESP_LOGI(TAG, "Closing audio channel due to network disconnection");
         protocol_->CloseAudioChannel(false);
     }
@@ -403,7 +419,7 @@ void Application::HandleActivationDoneEvent() {
     // Lepaskan objek OTA setelah aktivasi selesai
     ota_.reset();
     auto& board = Board::GetInstance();
-    board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
+    board.SetPowerSaveLevel(PowerSaveLevel::BALANCED);
 
     Schedule([this]() {
         // Mainkan suara sukses untuk menunjukkan perangkat siap
@@ -469,7 +485,7 @@ void Application::CheckAssetsVersion() {
             });
         });
 
-        board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
+        board.SetPowerSaveLevel(PowerSaveLevel::BALANCED);
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         if (!success) {
@@ -578,10 +594,17 @@ void Application::InitializeProtocol() {
     }
 
     protocol_->OnConnected([this]() {
-        DismissAlert();
+        Schedule([this]() {
+            DismissAlert();
+            if (protocol_reopen_pending_.load()) {
+                next_protocol_recovery_us_ = esp_timer_get_time();
+                TryRecoverProtocol();
+            }
+        });
     });
 
     protocol_->OnDisconnected([this]() {
+        MarkProtocolForRecovery();
         Schedule([this]() {
             if (!protocol_) {
                 return;
@@ -606,7 +629,11 @@ void Application::InitializeProtocol() {
         if (tts_stream_active_.load() || GetDeviceState() == kDeviceStateSpeaking) {
             last_tts_audio_us_ = esp_timer_get_time();
             if (!audio_service_.PushPacketToDecodeQueue(std::move(packet))) {
-                ESP_LOGW(TAG, "Antrian decode audio penuh, paket TTS dilewati untuk mencegah macet");
+                uint32_t dropped = tts_packets_dropped_.fetch_add(1) + 1;
+                if (dropped == 1 || dropped % 10 == 0) {
+                    ESP_LOGW(TAG, "Antrian decode audio penuh, paket TTS dilewati (%lu total)",
+                        static_cast<unsigned long>(dropped));
+                }
             }
         }
     });
@@ -620,11 +647,15 @@ void Application::InitializeProtocol() {
     });
     
     protocol_->OnAudioChannelClosed([this, &board]() {
-        board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
+        board.SetPowerSaveLevel(PowerSaveLevel::BALANCED);
         Schedule([this]() {
             auto display = Board::GetInstance().GetDisplay();
             display->SetChatMessage("system", "");
-            SetDeviceState(kDeviceStateIdle);
+            if (protocol_reopen_pending_.load() && network_connected_.load()) {
+                SetDeviceState(kDeviceStateConnecting);
+            } else {
+                SetDeviceState(kDeviceStateIdle);
+            }
         });
     });
     
@@ -645,12 +676,17 @@ void Application::InitializeProtocol() {
                 last_tts_audio_us_ = esp_timer_get_time();
                 tts_stop_pending_ = false;
                 tts_stream_active_ = true;
+                tts_packets_dropped_ = 0;
+                ServoController::GetInstance().SetTtsStreamActive(true);
+                ServoController::GetInstance().SetSpeaking(true);
                 Schedule([this]() {
                     aborted_ = false;
                     SetDeviceState(kDeviceStateSpeaking);
                 });
             } else if (strcmp(state, "stop") == 0) {
                 tts_stop_pending_ = true;
+                ServoController::GetInstance().SetTtsStreamActive(false);
+                ServoController::GetInstance().SetSpeaking(false);
                 if (last_tts_audio_us_.load() == 0) {
                     last_tts_audio_us_ = esp_timer_get_time();
                 }
@@ -658,6 +694,7 @@ void Application::InitializeProtocol() {
                 const char* text = GetJsonString(root, "text");
                 if (text != nullptr) {
                     LogMessagePreview("<<", text);
+                    ServoController::GetInstance().NotifyTtsSentence();
                     Schedule([display, message = std::string(text)]() {
                         display->SetChatMessage("assistant", message.c_str());
                     });
@@ -670,14 +707,19 @@ void Application::InitializeProtocol() {
                 // Setiap pertanyaan baru kembali ke gestur umum sampai tool pencarian benar-benar dipakai.
                 ServoController::GetInstance().SetKnowledgeSearchActive(false);
                 ServoMove servo_cmd = ServoController::DetectCommand(text);
+                bool handled_servo_command = false;
                 if (servo_cmd == ServoMove::ENABLE_SERVO) {
                     ServoController::GetInstance().Enable();
+                    handled_servo_command = true;
                 } else if (servo_cmd == ServoMove::DISABLE_SERVO) {
                     ServoController::GetInstance().Disable();
+                    handled_servo_command = true;
                 } else if (servo_cmd != ServoMove::NONE) {
                     // Gerakan tunggal waktu nyata dieksekusi langsung
                     ServoController::GetInstance().ExecuteMove(servo_cmd);
+                    handled_servo_command = true;
                 }
+                last_stt_had_servo_command_ = handled_servo_command;
                 Schedule([display, message = std::string(text)]() {
                     display->SetChatMessage("user", message.c_str());
                 });
@@ -685,10 +727,14 @@ void Application::InitializeProtocol() {
         } else if (strcmp(type, "llm") == 0) {
             const char* emotion = GetJsonString(root, "emotion");
             if (emotion != nullptr) {
-                ServoController::GetInstance().SetEmotion(emotion);
-                Schedule([display, emotion_str = std::string(emotion)]() {
-                    display->SetEmotion(emotion_str.c_str());
-                });
+                if (last_stt_had_servo_command_.load()) {
+                    ESP_LOGI(TAG, "Lewati gestur emosi '%s' karena turn ini berisi perintah servo", emotion);
+                } else {
+                    ServoController::GetInstance().SetEmotion(emotion);
+                    Schedule([display, emotion_str = std::string(emotion)]() {
+                        display->SetEmotion(emotion_str.c_str());
+                    });
+                }
             }
         } else if (strcmp(type, "mcp") == 0) {
             auto payload = cJSON_GetObjectItem(root, "payload");
@@ -855,6 +901,73 @@ void Application::ContinueOpenAudioChannel(ListeningMode mode) {
     SetListeningMode(mode);
 }
 
+void Application::OpenAudioChannelAsync(ListeningMode mode, const std::string& wake_word) {
+    if (audio_channel_opening_.exchange(true)) {
+        ESP_LOGW(TAG, "Pembukaan kanal audio masih berjalan, permintaan baru diabaikan");
+        return;
+    }
+
+    struct OpenRequest {
+        Application* app;
+        ListeningMode mode;
+        std::string wake_word;
+    };
+
+    auto request = new OpenRequest{this, mode, wake_word};
+    BaseType_t created = xTaskCreate([](void* arg) {
+        auto request = static_cast<OpenRequest*>(arg);
+        Application* app = request->app;
+        ListeningMode mode = request->mode;
+        std::string wake_word = std::move(request->wake_word);
+        delete request;
+
+        app->Schedule([app, mode, wake_word = std::move(wake_word)]() {
+            app->audio_channel_opening_ = false;
+            if (!wake_word.empty()) {
+                app->ContinueWakeWordInvoke(wake_word);
+            } else {
+                app->ContinueOpenAudioChannel(mode);
+            }
+        });
+        vTaskDelete(nullptr);
+    }, "audio_channel_open", 4096, request, 3, nullptr);
+
+    if (created != pdPASS) {
+        delete request;
+        audio_channel_opening_ = false;
+        SetDeviceState(kDeviceStateIdle);
+        ESP_LOGE(TAG, "Gagal membuat tugas pembukaan kanal audio");
+    }
+}
+
+void Application::MarkProtocolForRecovery() {
+    auto state = GetDeviceState();
+    if (state != kDeviceStateConnecting &&
+        state != kDeviceStateListening &&
+        state != kDeviceStateSpeaking) {
+        return;
+    }
+    recovery_listening_mode_ = static_cast<int>(listening_mode_);
+    protocol_reopen_pending_ = true;
+    next_protocol_recovery_us_ = esp_timer_get_time() + kProtocolRecoveryIntervalUs;
+}
+
+void Application::TryRecoverProtocol() {
+    if (!protocol_reopen_pending_.load() || !network_connected_.load() ||
+        protocol_ == nullptr || audio_channel_opening_.load()) {
+        return;
+    }
+    next_protocol_recovery_us_ = esp_timer_get_time() + kProtocolRecoveryIntervalUs;
+    if (protocol_->IsAudioChannelOpened()) {
+        protocol_reopen_pending_ = false;
+        SetListeningMode(static_cast<ListeningMode>(recovery_listening_mode_.load()));
+        return;
+    }
+    SetDeviceState(kDeviceStateConnecting);
+    ContinueOpenAudioChannel(
+        static_cast<ListeningMode>(recovery_listening_mode_.load()));
+}
+
 void Application::HandleStartListeningEvent() {
     auto state = GetDeviceState();
     
@@ -1004,20 +1117,27 @@ void Application::HandleStateChangedEvent() {
             tts_stream_active_ = false;
             tts_stop_pending_ = false;
             last_tts_audio_us_ = 0;
+            ServoController::GetInstance().SetTtsStreamActive(false);
+            last_stt_had_servo_command_ = false;
             display->SetStatus(Lang::Strings::STANDBY);
             display->ClearChatMessages();  // Bersihkan pesan lebih dulu
             display->SetEmotion("neutral"); // Lalu atur emosi, karena mode WeChat memeriksa jumlah anak
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
+            board.SetPowerSaveLevel(PowerSaveLevel::BALANCED);
             break;
         case kDeviceStateConnecting:
+            board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
             display->SetStatus(Lang::Strings::CONNECTING);
             display->SetEmotion("neutral");
             display->SetChatMessage("system", "");
             break;
         case kDeviceStateListening:
+            board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
             tts_stream_active_ = false;
             tts_stop_pending_ = false;
+            ServoController::GetInstance().SetTtsStreamActive(false);
+            last_stt_had_servo_command_ = false;
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
 
@@ -1142,7 +1262,7 @@ bool Application::UpgradeFirmware(const std::string& url, const std::string& ver
         // Jika upgrade gagal, hidupkan ulang layanan audio lalu lanjutkan
         ESP_LOGE(TAG, "Firmware upgrade failed, restarting audio service and continuing operation...");
         audio_service_.Start(); // Nyalakan ulang layanan audio
-        board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER); // Pulihkan tingkat hemat daya
+        board.SetPowerSaveLevel(PowerSaveLevel::BALANCED); // Pulihkan tingkat hemat daya
         Alert(Lang::Strings::ERROR, Lang::Strings::UPGRADE_FAILED, "circle_xmark", Lang::Sounds::OGG_EXCLAMATION);
         vTaskDelay(pdMS_TO_TICKS(3000));
         SetDeviceState(kDeviceStateIdle);

@@ -255,6 +255,7 @@ void AudioService::Stop() {
         audio_decode_queue_.clear();
         audio_send_queue_.clear();
         audio_playback_queue_.clear();
+        audio_sound_queue_.clear();
         audio_testing_queue_.clear();
         timestamp_queue_.clear();
         audio_output_busy_ = false;
@@ -264,6 +265,11 @@ void AudioService::Stop() {
     WaitForTaskStop(audio_input_task_handle_, "audio_input");
     WaitForTaskStop(audio_output_task_handle_, "audio_output");
     WaitForTaskStop(opus_codec_task_handle_, "opus_codec");
+    if (audio_input_task_handle_ != nullptr || audio_output_task_handle_ != nullptr ||
+        opus_codec_task_handle_ != nullptr) {
+        ESP_LOGE(TAG, "Stop audio belum bersih; start berikutnya akan dibatalkan sampai task lama berhenti");
+        return;
+    }
 
     xEventGroupClearBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING |
         AS_EVENT_WAKE_WORD_RUNNING |
@@ -435,11 +441,45 @@ void AudioService::OpusCodecTask() {
         std::unique_lock<std::mutex> lock(audio_queue_mutex_);
         audio_queue_cv_.wait(lock, [this]() {
             return service_stopped_ ||
+                !audio_sound_queue_.empty() ||
                 (!audio_encode_queue_.empty() && audio_send_queue_.size() < MAX_SEND_PACKETS_IN_QUEUE) ||
                 (!audio_decode_queue_.empty() && audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE);
         });
         if (service_stopped_) {
             break;
+        }
+
+        /* Demux suara lokal dari antrean khusus agar pemanggil PlaySound tidak tertahan. */
+        if (!audio_sound_queue_.empty()) {
+            std::string ogg = std::move(audio_sound_queue_.front());
+            audio_sound_queue_.pop_front();
+            audio_queue_cv_.notify_all();
+            lock.unlock();
+
+            bool enqueue_failed = false;
+            auto demuxer = std::make_unique<OggDemuxer>();
+            demuxer->OnDemuxerFinished([this, &enqueue_failed](
+                const uint8_t* data, int sample_rate, size_t size) {
+                if (enqueue_failed) {
+                    return;
+                }
+                auto packet = std::make_unique<AudioStreamPacket>();
+                packet->sample_rate = sample_rate;
+                packet->frame_duration = 60;
+                packet->boost_volume = true;
+                packet->payload.resize(size);
+                std::memcpy(packet->payload.data(), data, size);
+                if (!PushPacketToDecodeQueue(std::move(packet), false)) {
+                    enqueue_failed = true;
+                }
+            });
+            demuxer->Reset();
+            demuxer->Process(reinterpret_cast<const uint8_t*>(ogg.data()), ogg.size());
+            if (enqueue_failed) {
+                ESP_LOGW(TAG, "Suara lokal dilewati karena antrean audio penuh");
+            }
+            lock.lock();
+            continue;
         }
 
         /* Decode audio dari antrean decode. */
@@ -624,8 +664,13 @@ void AudioService::PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t
 
 bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> packet, bool wait) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
-    if (service_stopped_) {
+    if (service_stopped_ || packet == nullptr) {
         return false;
+    }
+    constexpr size_t kDecodeQueueHighWatermark =
+        MAX_DECODE_PACKETS_IN_QUEUE * 80 / 100;
+    if (!wait && audio_decode_queue_.size() >= kDecodeQueueHighWatermark) {
+        audio_decode_queue_.pop_front();
     }
     if (audio_decode_queue_.size() >= MAX_DECODE_PACKETS_IN_QUEUE) {
         if (wait) {
@@ -769,40 +814,33 @@ void AudioService::PlaySound(const std::string_view& ogg) {
         return;
     }
 
-    std::lock_guard<std::mutex> sound_lock(sound_play_mutex_);
-    if (!codec_->output_enabled()) {
-        esp_timer_stop(audio_power_timer_);
-        esp_timer_start_periodic(audio_power_timer_, AUDIO_POWER_CHECK_INTERVAL_MS * 1000);
-        codec_->EnableOutput(true);
+    constexpr size_t kMaxQueuedLocalSounds = 4;
+    {
+        std::lock_guard<std::mutex> lock(audio_queue_mutex_);
+        if (service_stopped_) {
+            ESP_LOGW(TAG, "Suara lokal diabaikan karena layanan audio berhenti");
+            return;
+        }
+        if (audio_sound_queue_.size() >= kMaxQueuedLocalSounds) {
+            ESP_LOGW(TAG, "Antrean suara lokal penuh, membuang suara tertua");
+            audio_sound_queue_.pop_front();
+        }
+        audio_sound_queue_.emplace_back(ogg.data(), ogg.size());
     }
-
-    const auto* buf = reinterpret_cast<const uint8_t*>(ogg.data());
-    size_t size = ogg.size();
-
-    auto demuxer = std::make_unique<OggDemuxer>();
-    demuxer->OnDemuxerFinished([this](const uint8_t* data, int sample_rate, size_t size){
-        auto packet = std::make_unique<AudioStreamPacket>();
-        packet->sample_rate = sample_rate;
-        packet->frame_duration = 60;
-        packet->boost_volume = true;
-        packet->payload.resize(size);
-        std::memcpy(packet->payload.data(), data, size);
-        PushPacketToDecodeQueue(std::move(packet), true);
-    });
-    demuxer->Reset();
-    demuxer->Process(buf, size);
+    audio_queue_cv_.notify_all();
 }
 
 bool AudioService::IsIdle() {
     std::lock_guard<std::mutex> lock(audio_queue_mutex_);
     return audio_encode_queue_.empty() && audio_decode_queue_.empty() && audio_playback_queue_.empty()
-        && audio_testing_queue_.empty() && !audio_output_busy_;
+        && audio_testing_queue_.empty() && audio_sound_queue_.empty() && !audio_output_busy_;
 }
 
 bool AudioService::WaitForPlaybackQueueEmpty(int timeout_ms) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
     auto done = [this]() {
-        return service_stopped_ || (audio_decode_queue_.empty() && audio_playback_queue_.empty() && !audio_output_busy_);
+        return service_stopped_ || (audio_sound_queue_.empty() && audio_decode_queue_.empty() &&
+            audio_playback_queue_.empty() && !audio_output_busy_);
     };
     if (timeout_ms < 0) {
         audio_queue_cv_.wait(lock, done);
@@ -882,7 +920,7 @@ bool AudioService::IsAfeWakeWord() {
 }
 
 void AudioService::WaitForTaskStop(TaskHandle_t& task_handle, const char* task_name) {
-    const int kMaxWaitMs = 3000;
+    const int kMaxWaitMs = 10000;
     int waited_ms = 0;
     while (task_handle != nullptr && waited_ms < kMaxWaitMs) {
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -890,6 +928,8 @@ void AudioService::WaitForTaskStop(TaskHandle_t& task_handle, const char* task_n
     }
 
     if (task_handle != nullptr) {
-        ESP_LOGW(TAG, "Batas tunggu task %s berhenti terlewati", task_name);
+        ESP_LOGW(TAG, "Paksa hentikan task %s setelah timeout", task_name);
+        vTaskDelete(task_handle);
+        task_handle = nullptr;
     }
 }

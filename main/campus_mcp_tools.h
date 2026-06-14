@@ -94,7 +94,11 @@ public:
                 // Data lokal menjadi sumber utama agar jawaban tetap tersedia tanpa server RAG.
                 const char* result = SearchCampusData(keyword.c_str(), result_buf.data(), static_cast<int>(result_buf.size()));
                 if (!CampusResultLooksUsable(result)) {
+                    std::string local_fallback = result ? result : "";
                     result = QueryCampusRagServer(keyword.c_str(), result_buf.data(), static_cast<int>(result_buf.size()));
+                    if (!result && !local_fallback.empty()) {
+                        return ClampCampusToolResult(local_fallback.c_str());
+                    }
                 }
                 if (result) return ClampCampusToolResult(result);
                 return std::string("Data tidak ditemukan untuk: " + keyword);
@@ -151,7 +155,7 @@ public:
                 std::vector<char> search_buf(6144, '\0');
                 const char* result = WebSearchDuckDuckGo(query.c_str(), search_buf.data(), static_cast<int>(search_buf.size()));
                 if (result) return std::string(result);
-                return std::string("Tidak dapat mencari di internet saat ini.");
+                return std::string("ERROR_NETWORK: Tidak dapat mencari di internet saat ini. Jika pertanyaan membutuhkan data terbaru, minta pengguna mencoba lagi saat jaringan stabil.");
             });
         web_search->set_run_on_main_thread(false);
         mcp.AddTool(web_search);

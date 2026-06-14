@@ -22,6 +22,7 @@
 #define SERVO_FRAME_MS  20
 #define SERVO_REST_RELEASE_MS 350
 #define SPEAKING_MOTION_INTERVAL_MS 850
+#define SPEAKING_SENTENCE_FALLBACK_MS 3000
 
 // Kepala tanpa inversi, ditukar agar sesuai dengan posisi fisik
 #define H_C   90
@@ -273,7 +274,7 @@ static const ServoController::ServoStep MOVE_RAISE_RIGHT[] = {
 static const ServoController::ServoStep MOVE_STRAIGHT_RIGHT[] = {
     {KEEP, A_STR, KEEP, 400}};
 
-// Tangan kanan ke bawah dengan posisi dipertahankan
+// Tangan kanan ke bawah sebagai animasi singkat, lalu boleh kembali otomatis
 static const ServoController::ServoStep MOVE_LOWER_RIGHT[] = {
     {KEEP, A_DN, KEEP, 300}};
 
@@ -293,7 +294,7 @@ static const ServoController::ServoStep MOVE_RAISE_LEFT[] = {
 static const ServoController::ServoStep MOVE_STRAIGHT_LEFT[] = {
     {KEEP, KEEP, A_STR, 400}};
 
-// Tangan kiri ke bawah dengan posisi dipertahankan
+// Tangan kiri ke bawah sebagai animasi singkat, lalu boleh kembali otomatis
 static const ServoController::ServoStep MOVE_LOWER_LEFT[] = {
     {KEEP, KEEP, A_DN, 300}};
 
@@ -521,6 +522,8 @@ void ServoController::Disable() {
     enabled_ = false;
     manual_override_until_ticks_ = 0;
     speaking_ = false;
+    tts_stream_active_ = false;
+    last_sentence_gesture_ticks_ = 0;
     knowledge_search_active_ = false;
     manual_pose_active_ = false;
     last_manual_move_ = ServoMove::NONE;
@@ -551,11 +554,37 @@ void ServoController::SetSpeaking(bool speaking) {
     if (speaking) {
         next_speaking_motion_ticks_ =
             xTaskGetTickCount() + pdMS_TO_TICKS(SPEAKING_MOTION_INTERVAL_MS);
+    } else {
+        next_speaking_motion_ticks_ = 0;
+        last_sentence_gesture_ticks_ = 0;
     }
+}
+
+void ServoController::SetTtsStreamActive(bool active) {
+    tts_stream_active_ = active;
+}
+
+void ServoController::NotifyTtsSentence() {
+    if (!initialized_ || !enabled_ || !tts_stream_active_.load() ||
+        IsManualOverrideActive() || manual_pose_active_.load()) {
+        return;
+    }
+    last_sentence_gesture_ticks_ = xTaskGetTickCount();
+    CmdPacket pkt = {};
+    pkt.type = 3;
+    if (!uxQueueSpacesAvailable(cmd_queue_)) {
+        CmdPacket dropped;
+        xQueueReceive(cmd_queue_, &dropped, 0);
+    }
+    xQueueSend(cmd_queue_, &pkt, 0);
 }
 
 void ServoController::SetKnowledgeSearchActive(bool active) {
     knowledge_search_active_ = active;
+}
+
+bool ServoController::IsMotionActive() const {
+    return IsManualOverrideActive() || speaking_.load() || tts_stream_active_.load();
 }
 
 void ServoController::WakeGreeting() {
@@ -623,10 +652,8 @@ bool ServoController::IsHoldMove(ServoMove move) const {
         case ServoMove::HEAD_CENTER:
         case ServoMove::RAISE_RIGHT_ARM:
         case ServoMove::STRAIGHT_RIGHT_ARM:
-        case ServoMove::LOWER_RIGHT_ARM:
         case ServoMove::RAISE_LEFT_ARM:
         case ServoMove::STRAIGHT_LEFT_ARM:
-        case ServoMove::LOWER_LEFT_ARM:
         case ServoMove::RAISE_BOTH_ARMS:
         case ServoMove::STRAIGHT_BOTH_ARMS:
         case ServoMove::HORMAT:
@@ -746,6 +773,14 @@ void ServoController::ServoTask(void* arg) {
             TickType_t next_motion = self->next_speaking_motion_ticks_.load();
             if (self->speaking_.load() && next_motion != 0 &&
                 static_cast<int32_t>(now - next_motion) >= 0) {
+                TickType_t last_sentence = self->last_sentence_gesture_ticks_.load();
+                if (last_sentence != 0 &&
+                    static_cast<int32_t>(now - last_sentence) <
+                        static_cast<int32_t>(pdMS_TO_TICKS(SPEAKING_SENTENCE_FALLBACK_MS))) {
+                    self->next_speaking_motion_ticks_ =
+                        last_sentence + pdMS_TO_TICKS(SPEAKING_SENTENCE_FALLBACK_MS);
+                    continue;
+                }
                 self->PlaySpeakingMotion();
             }
             continue;
@@ -767,6 +802,8 @@ void ServoController::ServoTask(void* arg) {
             }
             ESP_LOGI(TAG, "Sapaan wake word");
             self->PlaySteps(SEQ(MOVE_WAKE_GREETING));
+        } else if (pkt.type == 3) {
+            self->PlaySpeakingMotion();
         } else {
             if (!self->enabled_) continue;
             auto mv = (ServoMove)pkt.data[0];

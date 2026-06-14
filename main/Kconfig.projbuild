@@ -24,7 +24,7 @@ config CAMPUS_RAG_SERVER_URL
 
 config CAMPUS_RAG_TIMEOUT_MS
     int "Timeout Campus RAG Server dalam milidetik"
-    default 900
+    default 2500
     range 500 8000
     help
         Timeout pendek menjaga jawaban tetap cepat jika server eksternal mati.
@@ -797,6 +797,12 @@ config USE_AUDIO_DEBUGGER
     default n
     help
         Enable audio debugger, send audio data through UDP to the host machine
+
+config AUDIO_DIAGNOSTIC
+    bool "Aktifkan log diagnostik level audio"
+    default n
+    help
+        Mencetak log ringkas penguatan audio mikrofon untuk audit lapangan.
 
 menu "WiFi Configuration Method"
     help
