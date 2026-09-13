@@ -4,13 +4,24 @@ Firmware ini adalah versi kustom dari XiaoZhi ESP32 untuk robot mini Mr Great be
 
 ## Pratinjau Perangkat
 
-![Tampilan robot Mr Great](<docs/v0/mrgreatrobot (1).jpeg>)
-![Tampilan robot Mr Great 2](<docs/v0/mrgreatrobot (2).jpeg>)
-![Tampilan robot Mr Great 3](<docs/v0/mrgreatrobot (3).jpeg>)
-![Tampilan robot Mr Great 4](<docs/v0/mrgreatrobot (4).jpeg>)
-![Tampilan robot Mr Great 5](<docs/v0/mrgreatrobot (5).jpeg>)
-![Tampilan robot Mr Great 6](<docs/v0/mrgreatrobot (6).jpeg>)
-![Tampilan robot Mr Great 7](<docs/v0/mrgreatrobot (7).jpeg>)
+Berikut tampilan robot Mr Great V1.0 dari berbagai sudut.
+
+| Gambar | Keterangan |
+|:---:|---|
+| <img src="docs/v0/mrgreat-tampak-depan.jpeg" width="220" alt="Tampak depan robot Mr Great"> | **Tampak depan** — wajah ramah dengan mata besar, layar OLED di bagian dada, dan kedua tangan berada di sisi tubuh. |
+| <img src="docs/v0/mrgreat-tampak-samping.jpeg" width="220" alt="Tampak samping robot Mr Great"> | **Tampak samping** — profil tubuh robot dan ransel belakang berlogo UCIC. |
+| <img src="docs/v0/mrgreat-tampak-belakang.jpeg" width="220" alt="Tampak belakang robot Mr Great"> | **Tampak belakang** — punggung robot, headphone, dan antena di kepala. |
+| <img src="docs/v0/mrgreat-tampak-3-4-depan.jpeg" width="220" alt="Tampak tiga per empat depan robot Mr Great"> | **Tampak 3/4 depan** — sudut tiga per empat yang memperlihatkan proporsi tubuh robot secara keseluruhan. |
+| <img src="docs/v0/mrgreat-detail-wajah.jpeg" width="220" alt="Detail wajah dan layar OLED robot Mr Great"> | **Detail wajah dan layar OLED** — ekspresi wajah, headphone, dan layar status OLED di dada. |
+| <img src="docs/v0/mrgreat-detail-punggung.jpeg" width="220" alt="Detail punggung dan logo UCIC robot Mr Great"> | **Detail punggung** — modul belakang robot beserta logo UCIC. |
+| <img src="docs/v0/mrgreat-detail-sepatu.jpeg" width="220" alt="Detail sepatu dan kaki robot Mr Great"> | **Detail sepatu dan kaki** — boot biru dengan ujung kuning sebagai penopang robot. |
+
+## Poster dan Dokumentasi Fitur
+
+| Poster Fitur | Dokumentasi Fitur |
+|:---:|:---:|
+| <img src="docs/v0/mrgreat-poster-fitur-v1.png" width="400" alt="Poster fitur Mr Great V1.0"> | <img src="docs/v0/mrgreat-dokumentasi-fitur-v1.png" width="400" alt="Dokumentasi fitur Mr Great V1.0"> |
+| Poster ringkasan fitur Mr Great V1.0 | Dokumentasi visual fitur, data kampus, dan komponen utama |
 
 ## Prioritas Jawaban AI
 
@@ -101,6 +112,10 @@ idf.py -p COM3 -b 115200 flash
 - [Protokol MQTT dan UDP](docs/mqtt-udp.md)
 - [Daftar validasi perangkat keras](docs/production-hardware-checklist.md)
 - [Protokol WebSocket](docs/websocket.md)
+
+## Kontributor
+
+- **hairift** — pengembang dan pemelihara proyek Mr Great IoT Mini Robot V1.0.
 
 ## Catatan Rilis
 
