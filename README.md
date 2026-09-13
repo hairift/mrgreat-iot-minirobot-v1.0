@@ -1,6 +1,6 @@
 # Firmware Mr Great ESP32
 
-Firmware ini adalah versi kustom dari XiaoZhi ESP32 untuk robot mini Mr Great berbasis ESP32-S3. Fokus proyek ini adalah asisten suara bahasa Indonesia, pengetahuan kampus UCIC, pencarian web, audio dua arah, layar OLED, servo kepala dan tangan, serta tombol manual untuk membangunkan asisten.
+Firmware ini adalah firmware kustom untuk robot mini Mr Great berbasis ESP32-S3. Fokus proyek ini adalah asisten suara bahasa Indonesia, pengetahuan kampus UCIC, pencarian web, audio dua arah, layar OLED, servo kepala dan tangan, serta tombol manual untuk membangunkan asisten.
 
 ## Pratinjau Perangkat
 
@@ -16,12 +16,11 @@ Berikut tampilan robot Mr Great V1.0 dari berbagai sudut.
 | <img src="docs/v0/mrgreat-detail-punggung.jpeg" width="220" alt="Detail punggung dan logo UCIC robot Mr Great"> | **Detail punggung** — modul belakang robot beserta logo UCIC. |
 | <img src="docs/v0/mrgreat-detail-sepatu.jpeg" width="220" alt="Detail sepatu dan kaki robot Mr Great"> | **Detail sepatu dan kaki** — boot biru dengan ujung kuning sebagai penopang robot. |
 
-## Poster dan Dokumentasi Fitur
+## Poster Fitur
 
-| Poster Fitur | Dokumentasi Fitur |
-|:---:|:---:|
-| <img src="docs/v0/mrgreat-poster-fitur-v1.png" width="400" alt="Poster fitur Mr Great V1.0"> | <img src="docs/v0/mrgreat-dokumentasi-fitur-v1.png" width="400" alt="Dokumentasi fitur Mr Great V1.0"> |
-| Poster ringkasan fitur Mr Great V1.0 | Dokumentasi visual fitur, data kampus, dan komponen utama |
+<img src="docs/v0/MrGreat_Poster.png" width="480" alt="Poster fitur Mr Great V1.0">
+
+Poster ringkasan fitur, data kampus, dan komponen utama Mr Great V1.0.
 
 ## Prioritas Jawaban AI
 

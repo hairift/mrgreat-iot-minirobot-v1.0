@@ -1,6 +1,6 @@
 # Panduan Gaya Kode
 
-Panduan ini dipakai agar perubahan firmware Mr Great tetap aman, mudah diaudit, dan tidak merusak perilaku bawaan XiaoZhi.
+Panduan ini dipakai agar perubahan firmware Mr Great tetap aman, mudah diaudit, dan tidak merusak perilaku bawaan firmware asal.
 
 ## Prinsip
 
